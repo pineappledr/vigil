@@ -1,4 +1,4 @@
-name: Build Vigil Agent
+name: Build Vigil
 
 on:
   push:

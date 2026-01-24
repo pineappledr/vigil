@@ -1,57 +1,95 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"os/exec"
 	"log"
+	"net/http"
+	"os"
+	"os/exec"
 )
 
-// Device represents a drive found by smartctl
-type Device struct {
-	Name     string `json:"name"`
-	Protocol string `json:"protocol"`
-	Type     string `json:"type"`
+// Config holds command line arguments
+type Config struct {
+	ServerURL string
 }
 
-// ScanResult matches the JSON output of "smartctl --scan --json"
+// DriveReport is the payload we send to the server
+type DriveReport struct {
+	Hostname string                 `json:"hostname"`
+	Drives   []map[string]interface{} `json:"drives"`
+}
+
+// ScanResult matches "smartctl --scan --json"
 type ScanResult struct {
-	Devices []Device `json:"devices"`
+	Devices []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	} `json:"devices"`
 }
 
 func main() {
-	fmt.Println("Starting Vigil Agent...")
-	fmt.Println("1. Scanning for devices...")
+	// 1. Parse Flags (Allow user to set server URL)
+	serverURL := flag.String("server", "http://localhost:8090", "The URL of the Vigil Server")
+	flag.Parse()
 
-	// Run "smartctl --scan --json"
-	cmd := exec.Command("smartctl", "--scan", "--json")
-	output, err := cmd.Output()
+	log.Println("👁️  Vigil Agent Starting...")
+	log.Printf("   Target Server: %s\n", *serverURL)
+
+	// 2. Get Hostname
+	hostname, _ := os.Hostname()
+	report := DriveReport{
+		Hostname: hostname,
+		Drives:   []map[string]interface{}{},
+	}
+
+	// 3. Scan for Devices
+	log.Println("   Scanning for drives...")
+	scanCmd := exec.Command("smartctl", "--scan", "--json")
+	scanOut, err := scanCmd.Output()
 	if err != nil {
-		log.Fatalf("Error running smartctl scan: %v. (Do you have smartmontools installed?)", err)
+		log.Fatalf("❌ Error scanning drives: %v", err)
 	}
 
-	// Parse the JSON list of devices
 	var scan ScanResult
-	if err := json.Unmarshal(output, &scan); err != nil {
-		log.Fatalf("Error parsing scan json: %v", err)
+	if err := json.Unmarshal(scanOut, &scan); err != nil {
+		log.Fatalf("❌ Error parsing scan: %v", err)
 	}
 
-	fmt.Printf("   Found %d devices.\n", len(scan.Devices))
-
-	// Loop through each device and get its health
+	// 4. Get Health for each drive
 	for _, dev := range scan.Devices {
-		fmt.Printf("2. Checking health for %s (%s)...\n", dev.Name, dev.Type)
+		log.Printf("   -> Reading SMART data for %s...", dev.Name)
 		
-		// Run "smartctl -x --json /dev/sdX"
-		healthCmd := exec.Command("smartctl", "-x", "--json", "--device", dev.Type, dev.Name)
-		healthOut, err := healthCmd.Output()
+		// Run smartctl -x (Extended info)
+		cmd := exec.Command("smartctl", "-x", "--json", "--device", dev.Type, dev.Name)
+		out, err := cmd.Output()
 		if err != nil {
-			log.Printf("   Failed to check %s: %v\n", dev.Name, err)
+			log.Printf("      ⚠️ Failed to read %s: %v", dev.Name, err)
 			continue
 		}
 
-		fmt.Printf("   -> Success! Retrieved %d bytes of SMART data.\n", len(healthOut))
+		// Decode the raw JSON so we can add it to our report list
+		var driveData map[string]interface{}
+		if err := json.Unmarshal(out, &driveData); err == nil {
+			report.Drives = append(report.Drives, driveData)
+		}
 	}
+
+	// 5. Send Data to Server
+	log.Printf("   Sending report for %d drives to %s...", len(report.Drives), *serverURL)
+	payload, _ := json.Marshal(report)
 	
-	fmt.Println("Done.")
+	resp, err := http.Post(*serverURL+"/api/report", "application/json", bytes.NewBuffer(payload))
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to server: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		log.Println("✅ Success! Server acknowledged receipt.")
+	} else {
+		log.Printf("⚠️  Server returned status: %s", resp.Status)
+	}
 }
