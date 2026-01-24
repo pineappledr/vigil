@@ -1,4 +1,4 @@
-# Vigil 👁️
+# Vigil
 
 > **Proactive, lightweight server monitoring.**
 
