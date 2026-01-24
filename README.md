@@ -1,4 +1,4 @@
-# Vigil
+# Vigil 👁️
 
 > **Proactive, lightweight server monitoring.**
 
@@ -7,6 +7,8 @@
 ![Go Version](https://img.shields.io/github/go-mod/go-version/pineappledr/vigil)
 
 **Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a mobile-first design and predictive health analysis, ensuring you never miss a critical hardware failure.
+
+Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.).
 
 ---
 
@@ -20,21 +22,25 @@
 
 ---
 
-## 🛠️ Architecture
+## 📋 Requirements
 
-Vigil follows a clean **Hub & Spoke** model:
+Vigil is lightweight, but it relies on standard system tools to talk to your hardware.
 
-1.  **Vigil Agent (Go):** A lightweight binary that runs on your servers (Proxmox, Ubuntu, Unraid). It wraps `smartctl` to read raw disk health.
-2.  **Vigil Server (Go):** The central hub that receives data, stores it in SQLite, and serves the API.
-3.  **Vigil UI (Flutter):** A beautiful, responsive interface that runs as a Web App *and* a Native Mobile App.
+**Essential:**
+- **Linux OS:** (64-bit recommended)
+- **Root/Sudo Access:** Required to read physical disk health.
+- **smartmontools:** The core engine for reading HDD, SSD, and NVMe health data.
 
----
+**Recommended:**
+- **nvme-cli:** Provides enhanced detail for NVMe drives.
 
-## 📦 Installation
-
-### 1. The Agent (Proxmox / Linux)
-The agent is a single static binary. You can download it from the [Releases](https://github.com/pineappledr/vigil/releases) page.
-
-**One-Liner Install (Coming Soon):**
+**Install Requirements:**
 ```bash
-curl -sL [https://vigil.sh/install-agent](https://vigil.sh/install-agent) | sudo bash
+# Ubuntu / Debian / Proxmox
+sudo apt update && sudo apt install smartmontools nvme-cli -y
+
+# Fedora / CentOS / RHEL
+sudo dnf install smartmontools nvme-cli
+
+# Arch Linux
+sudo pacman -S smartmontools nvme-cli
