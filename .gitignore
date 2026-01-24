@@ -1,5 +1,32 @@
+# --- General ---
 .DS_Store
+.vscode/
+.idea/
+*.log
+
+# --- Go ---
+# Binaries
 vigil-agent
 vigil-server
-*.log
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Vendor & Build
+vendor/
+go.sum
+
+# --- Flutter/Dart ---
+/ui/.dart_tool/
+/ui/.packages
+/ui/.pub/
 /ui/build/
+/ui/ios/Flutter/App.framework
+/ui/ios/Flutter/Flutter.framework
+/ui/linux/flutter/ephemeral/
+/ui/macos/Flutter/ephemeral/
+/ui/windows/flutter/ephemeral/
+
+# Pubspec lock (Optional: Keep it if you want strict versioning, ignore if you want flexibility)
+# /ui/pubspec.lock
