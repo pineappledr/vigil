@@ -5,26 +5,21 @@ WORKDIR /src
 # Install build tools
 RUN apk add --no-cache gcc musl-dev
 
-# --- FIX START ---
-# Only copy go.mod first (ignore missing go.sum)
-COPY go.mod ./
-
-# Generate go.sum automatically inside the cloud builder
-RUN go mod tidy
+# Copy dependency locks
+COPY go.mod go.sum ./
 RUN go mod download
-# --- FIX END ---
 
-# Copy the rest of the code
+# Copy source code
 COPY . .
 
-# Build the Server
+# Build the Server (Static binary)
 RUN CGO_ENABLED=0 GOOS=linux go build -o vigil-server ./cmd/server
 
 # Stage 2: Runtime
 FROM alpine:latest
 WORKDIR /app
 
-# Copy binary
+# Copy binary from builder
 COPY --from=builder /src/vigil-server .
 
 # Setup Data Directory
