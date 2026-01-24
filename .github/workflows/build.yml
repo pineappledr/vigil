@@ -18,7 +18,7 @@ jobs:
       with:
         go-version: '1.25'
 
-    - name: Build Binary
+    - name: Build Agent (Linux)
       env:
         GOOS: linux
         GOARCH: amd64
@@ -27,8 +27,18 @@ jobs:
         go mod tidy
         go build -o vigil-agent ./cmd/agent
 
-    - name: Upload Binary
+    - name: Build Server (Linux)
+      env:
+        GOOS: linux
+        GOARCH: amd64
+        CGO_ENABLED: 0
+      run: |
+        go build -o vigil-server ./cmd/server
+
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: vigil-agent
-        path: vigil-agent
+        name: vigil-release
+        path: |
+          vigil-agent
+          vigil-server
