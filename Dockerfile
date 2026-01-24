@@ -5,12 +5,14 @@ WORKDIR /src
 # Install build tools
 RUN apk add --no-cache gcc musl-dev
 
-# Copy ONLY go.mod (since go.sum doesn't exist yet)
+# --- FIX START ---
+# Only copy go.mod first (ignore missing go.sum)
 COPY go.mod ./
 
-# Generate go.sum and download dependencies
+# Generate go.sum automatically inside the cloud builder
 RUN go mod tidy
 RUN go mod download
+# --- FIX END ---
 
 # Copy the rest of the code
 COPY . .
