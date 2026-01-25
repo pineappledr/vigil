@@ -27,7 +27,7 @@ func main() {
 	serverURL := flag.String("server", "http://localhost:8090", "Vigil Server URL")
 	flag.Parse()
 
-	log.Println("👁️  Vigil Agent Starting...")
+	log.Println("Vigil Agent Starting...")
 
 	// 1. Check for smartctl
 	if _, err := exec.LookPath("smartctl"); err != nil {
