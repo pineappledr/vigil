@@ -2,9 +2,13 @@
 FROM golang:1.25 AS builder
 WORKDIR /app
 
-# Copy go mod files first for better caching
-COPY go.mod go.sum ./
-RUN go mod download
+# Copy go mod files first
+COPY go.mod ./
+COPY go.sum* ./
+
+# Download dependencies and tidy
+RUN go mod download || true
+RUN go mod tidy
 
 # Copy source code
 COPY . .
