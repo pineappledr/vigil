@@ -11,6 +11,7 @@ RUN go mod download || true
 RUN go mod tidy
 
 # Copy source code
+# Copy source code
 COPY . .
 
 # Build the server binary
@@ -34,6 +35,10 @@ COPY --from=builder /app/vigil-server .
 
 # Copy the web folder
 COPY --from=builder /app/web ./web
+
+# Change ownership
+RUN chown -R vigil:vigil /app
+USER vigil
 
 # Change ownership
 RUN chown -R vigil:vigil /app

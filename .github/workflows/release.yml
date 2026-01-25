@@ -20,6 +20,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          go-version: '1.25'
 
       - name: Download dependencies
         run: go mod download
@@ -69,6 +70,7 @@ jobs:
           file: Dockerfile
           push: true
           platforms: linux/amd64
+          platforms: linux/amd64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
@@ -104,6 +106,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          go-version: '1.25'
 
       - name: Extract version
         id: version
@@ -113,6 +116,7 @@ jobs:
 
       - name: Build binaries
         run: |
+          mkdir -p dist
           mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
           
