@@ -1,5 +1,6 @@
 const API_URL = '/api/history';
-let globalData = []; // Store data locally to switch views instantly
+let globalData = [];
+let activeServerIndex = null; // Track if we are viewing a specific server
 
 // Formatters
 const formatSize = (b) => {
@@ -10,12 +11,46 @@ const formatSize = (b) => {
 };
 const formatAge = (h) => h ? `${(h / 8760).toFixed(1)} years` : 'N/A';
 
-// --- Navigation ---
-function showDetails(serverIdx, driveIdx) {
+// --- Navigation Logic ---
+
+// 1. Show All Servers (Home)
+function resetDashboard() {
+    activeServerIndex = null;
+    document.getElementById('breadcrumbs').classList.add('hidden');
+    document.getElementById('details-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    renderDashboard(globalData); // Render ALL
+}
+
+// 2. Show Single Server (Filtered)
+function showServer(serverIdx) {
+    activeServerIndex = serverIdx;
+    const server = globalData[serverIdx];
+    
+    // Update Breadcrumbs
+    document.getElementById('crumb-server').innerText = server.hostname;
+    document.getElementById('breadcrumbs').classList.remove('hidden');
+
+    // Show Dashboard View, but render ONLY this server
+    document.getElementById('details-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    
+    renderDashboard([server], true); // true = "filtered mode"
+}
+
+// 3. Show Drive Details
+function showDriveDetails(serverIdx, driveIdx) {
     const server = globalData[serverIdx];
     const drive = server.details.drives[driveIdx];
     
-    // 1. Populate Sidebar
+    // If we are in "Single Server Mode", we need to map the passed driveIdx correctly
+    // But since we pass global indices, it's fine.
+
+    // Populate Sidebar
+    let rotation = drive.rotation_rate || 'N/A';
+    if (rotation === 0) rotation = 'SSD';
+    if (typeof rotation === 'number') rotation += ' RPM';
+
     const sb = document.getElementById('detail-sidebar');
     sb.innerHTML = `
         <div class="sidebar-group">
@@ -24,41 +59,33 @@ function showDetails(serverIdx, driveIdx) {
             <div class="spec-row"><span class="spec-label">Serial</span><span class="spec-val">${drive.serial_number || 'N/A'}</span></div>
             <div class="spec-row"><span class="spec-label">Capacity</span><span class="spec-val">${formatSize(drive.user_capacity?.bytes)}</span></div>
             <div class="spec-row"><span class="spec-label">Firmware</span><span class="spec-val">${drive.firmware_version || 'N/A'}</span></div>
+            <div class="spec-row"><span class="spec-label">Rotation</span><span class="spec-val">${rotation}</span></div>
         </div>
         <div class="sidebar-group">
             <h3>Status</h3>
             <div class="spec-row"><span class="spec-label">Health</span><span class="spec-val" style="color:${drive.smart_status?.passed ? '#10B981':'#EF4444'}">${drive.smart_status?.passed ? 'PASSED':'FAILED'}</span></div>
             <div class="spec-row"><span class="spec-label">Temp</span><span class="spec-val">${drive.temperature?.current ?? 'N/A'}°C</span></div>
             <div class="spec-row"><span class="spec-label">Power On</span><span class="spec-val">${formatAge(drive.power_on_time?.hours)}</span></div>
-            <div class="spec-row"><span class="spec-label">Cycles</span><span class="spec-val">${drive.power_cycle_count || 'N/A'}</span></div>
-        </div>
-        <div class="sidebar-group">
-            <h3>System</h3>
-            <div class="spec-row"><span class="spec-label">Host</span><span class="spec-val">${server.hostname}</span></div>
-            <div class="spec-row"><span class="spec-label">Updated</span><span class="spec-val">${new Date(server.timestamp).toLocaleTimeString()}</span></div>
         </div>
     `;
 
-    // 2. Populate Table
+    // Populate Table
     const tbody = document.getElementById('detail-table');
     const attributes = drive.ata_smart_attributes?.table || [];
     
     if (attributes.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6">No standard ATA attributes found (NVMe drives use different logs)</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:20px; text-align:center; color:#666">No standard ATA attributes found (NVMe drives use different logs)</td></tr>';
     } else {
         tbody.innerHTML = `
             <thead><tr><th>Status</th><th>ID</th><th>Name</th><th>Value</th><th>Thresh</th><th>Raw</th></tr></thead>
             <tbody>
             ${attributes.map(attr => {
-                // Determine status logic (simplified)
                 const isCrit = [5, 187, 197, 198].includes(attr.id);
                 const isFail = (attr.raw?.value > 0 && isCrit) || (attr.thresh > 0 && attr.value <= attr.thresh);
                 const pillClass = isFail ? 'bad' : 'ok';
-                const pillText = isFail ? 'FAIL' : 'OK';
-
                 return `
                 <tr>
-                    <td><span class="pill ${pillClass}">${pillText}</span></td>
+                    <td><span class="pill ${pillClass}">${isFail ? 'FAIL':'OK'}</span></td>
                     <td>${attr.id}</td>
                     <td>${attr.name}</td>
                     <td>${attr.value}</td>
@@ -69,23 +96,32 @@ function showDetails(serverIdx, driveIdx) {
             </tbody>`;
     }
 
-    // 3. Switch Views
     document.getElementById('dashboard-view').classList.add('hidden');
     document.getElementById('details-view').classList.remove('hidden');
 }
 
-function showDashboard() {
-    document.getElementById('details-view').classList.add('hidden');
-    document.getElementById('dashboard-view').classList.remove('hidden');
+// "Smart" Back Button
+function goBackToContext() {
+    if (activeServerIndex !== null) {
+        showServer(activeServerIndex); // Go back to the single server view
+    } else {
+        resetDashboard(); // Go back to main home
+    }
 }
 
-// --- Data Fetching ---
+// --- Data & Rendering ---
 async function fetchData() {
     try {
         const res = await fetch(API_URL);
-        globalData = await res.json(); // Store globally
-        renderDashboard(globalData);
+        globalData = await res.json();
         
+        // If we are viewing a specific server, re-render just that server to update data
+        if (activeServerIndex !== null && !document.getElementById('dashboard-view').classList.contains('hidden')) {
+            renderDashboard([globalData[activeServerIndex]], true);
+        } else if (activeServerIndex === null) {
+            renderDashboard(globalData);
+        }
+
         const ind = document.getElementById('status-indicator');
         ind.className = 'status-badge online';
         ind.innerText = '🟢 System Online';
@@ -94,19 +130,22 @@ async function fetchData() {
     }
 }
 
-function renderDashboard(servers) {
-    // Only re-render if we are currently looking at the dashboard
+function renderDashboard(serversToRender, isFiltered = false) {
     if (document.getElementById('dashboard-view').classList.contains('hidden')) return;
 
     const list = document.getElementById('server-list');
-    if (!servers.length) { list.innerHTML = 'Waiting...'; return; }
+    if (!serversToRender.length) { list.innerHTML = '<div style="color:#666">Waiting for agents...</div>'; return; }
 
-    list.innerHTML = servers.map((server, sIdx) => {
+    list.innerHTML = serversToRender.map((server) => {
+        // Find the REAL index of this server in the global array
+        // This ensures clicking it works even if we are in a filtered list
+        const realIndex = globalData.findIndex(s => s.hostname === server.hostname);
+
         const drivesHtml = (server.details.drives || []).map((d, dIdx) => {
             const passed = d.smart_status?.passed;
             return `
             <div class="drive-row" style="border-left: 4px solid ${passed ? '#10B981':'#EF4444'}">
-                <div class="drive-link" onclick="showDetails(${sIdx}, ${dIdx})">
+                <div class="drive-link" onclick="showDriveDetails(${realIndex}, ${dIdx})">
                     ${d.model_name || 'Unknown Drive'}
                 </div>
                 <div class="metrics">
@@ -119,11 +158,17 @@ function renderDashboard(servers) {
         }).join('');
 
         return `
-            <div class="card">
-                <div class="card-header"><span class="hostname">${server.hostname}</span><span class="timestamp">${new Date(server.timestamp).toLocaleTimeString()}</span></div>
+            <div class="card" style="${isFiltered ? 'max-width: 800px; margin: 0 auto;' : ''}">
+                <div class="card-header">
+                    <span class="hostname-link" onclick="showServer(${realIndex})">${server.hostname}</span>
+                    <span class="timestamp">${new Date(server.timestamp).toLocaleTimeString()}</span>
+                </div>
                 ${drivesHtml || '<div class="drive-row">No drives detected</div>'}
             </div>`;
     }).join('');
+    
+    // Adjust grid for filtered view
+    list.style.display = isFiltered ? 'block' : 'grid';
 }
 
 setInterval(fetchData, 2000);

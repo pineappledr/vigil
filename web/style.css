@@ -1,4 +1,4 @@
-/* --- Keep existing Root & Body styles --- */
+/* --- Keep existing styles --- */
 :root {
     --bg-color: #111827;
     --card-bg: #1F2937;
@@ -20,10 +20,9 @@ body {
 
 .container { max-width: 1400px; margin: 0 auto; }
 
-/* Header */
 header {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+    margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
 }
 h1 { font-size: 1.8rem; font-weight: 800; margin: 0; }
 
@@ -31,18 +30,31 @@ h1 { font-size: 1.8rem; font-weight: 800; margin: 0; }
 .status-badge.online { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
 .status-badge.offline { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
 
-/* --- Dashboard View --- */
+/* --- Breadcrumbs (New) --- */
+.breadcrumb-bar { margin-bottom: 20px; font-size: 0.9rem; color: var(--text-muted); }
+.crumb-link { color: var(--text-main); cursor: pointer; font-weight: 600; }
+.crumb-link:hover { text-decoration: underline; color: #60A5FA; }
+.crumb-separator { margin: 0 8px; color: var(--border); }
+.crumb-active { color: var(--text-muted); }
+
+/* --- Dashboard --- */
 #server-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 24px; }
 
 .card { background-color: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.card-header { background: rgba(0,0,0,0.2); padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
-.hostname { font-weight: 700; } 
+.card-header { background: rgba(0,0,0,0.2); padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;}
+
 .timestamp { font-size: 0.8rem; color: var(--text-muted); font-family: monospace; }
+
+/* Clickable Hostname */
+.hostname-link { 
+    font-weight: 700; font-size: 1.1rem; color: var(--text-main); cursor: pointer; 
+    transition: color 0.2s;
+}
+.hostname-link:hover { color: #60A5FA; text-decoration: underline; }
 
 .drive-row { padding: 15px 20px; border-bottom: 1px solid var(--border); }
 .drive-row:last-child { border-bottom: none; }
 
-/* Clickable Drive Name */
 .drive-link {
     font-size: 1.1rem; font-weight: 600; color: var(--text-main);
     cursor: pointer; text-decoration: none; display: inline-block; margin-bottom: 10px;
@@ -56,7 +68,7 @@ h1 { font-size: 1.8rem; font-weight: 800; margin: 0; }
 .value.passed { color: var(--success); }
 .value.failed { color: var(--danger); }
 
-/* --- Details View (New) --- */
+/* --- Details View --- */
 .hidden { display: none !important; }
 
 .btn-back {
@@ -66,23 +78,17 @@ h1 { font-size: 1.8rem; font-weight: 800; margin: 0; }
 }
 .btn-back:hover { background: var(--border); color: var(--text-main); }
 
-.details-layout {
-    display: grid; grid-template-columns: 300px 1fr; gap: 24px;
-}
+.details-layout { display: grid; grid-template-columns: 300px 1fr; gap: 24px; }
 @media (max-width: 800px) { .details-layout { grid-template-columns: 1fr; } }
 
-.sidebar-card, .content-card {
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px;
-}
+.sidebar-card, .content-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
 
-/* Sidebar Styling */
 .sidebar-group { margin-bottom: 24px; }
 .sidebar-group h3 { margin: 0 0 12px 0; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 .spec-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; }
 .spec-label { color: var(--text-muted); }
 .spec-val { font-weight: 500; font-family: monospace; }
 
-/* Table Styling */
 h2 { margin-top: 0; font-size: 1.2rem; margin-bottom: 20px; }
 .table-wrapper { overflow-x: auto; }
 .smart-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -93,4 +99,3 @@ h2 { margin-top: 0; font-size: 1.2rem; margin-bottom: 20px; }
 .pill { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
 .pill.ok { background: rgba(16, 185, 129, 0.15); color: var(--success); }
 .pill.bad { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-.pill.warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); }

@@ -10,26 +10,30 @@
 <body>
     <div class="container">
         <header>
-            <h1 onclick="showDashboard()" style="cursor:pointer">Vigil</h1>
+            <h1 onclick="resetDashboard()" style="cursor:pointer">Vigil</h1>
             <div id="status-indicator" class="status-badge offline">Connecting...</div>
         </header>
+
+        <nav id="breadcrumbs" class="breadcrumb-bar hidden">
+            <span onclick="resetDashboard()" class="crumb-link">Home</span>
+            <span class="crumb-separator">/</span>
+            <span id="crumb-server" class="crumb-active">Server Name</span>
+        </nav>
 
         <main id="dashboard-view">
             <div id="server-list"></div>
         </main>
 
         <div id="details-view" class="hidden">
-            <button class="btn-back" onclick="showDashboard()">← Back to Dashboard</button>
+            <button class="btn-back" onclick="goBackToContext()">← Back</button>
             
             <div class="details-layout">
-                <aside id="detail-sidebar" class="sidebar-card">
-                    </aside>
+                <aside id="detail-sidebar" class="sidebar-card"></aside>
 
                 <section id="detail-content" class="content-card">
                     <h2>S.M.A.R.T. Attributes</h2>
                     <div class="table-wrapper">
-                        <table class="smart-table" id="detail-table">
-                            </table>
+                        <table class="smart-table" id="detail-table"></table>
                     </div>
                 </section>
             </div>
