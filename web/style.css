@@ -1,10 +1,10 @@
+/* ... Keep existing Root variables ... */
 :root {
-    /* Updated Palette: "Midnight" instead of "Void Black" */
-    --bg-app-dark: #020617;   /* Deepest Navy/Black */
-    --bg-app-light: #0f172a;  /* Slate 900 */
+    --bg-app-dark: #020617;
+    --bg-app-light: #0f172a;
     
-    --bg-card: #111827;       /* Gray 900 */
-    --bg-module: #1f2937;     /* Gray 800 */
+    --bg-card: #111827;
+    --bg-module: #1f2937;
     --bg-module-hover: #374151;
     
     --border: #1f2937;
@@ -23,7 +23,6 @@
 
 body {
     background-color: var(--bg-app-dark);
-    /* Subtle Gradient Background */
     background-image: radial-gradient(circle at 50% 0%, var(--bg-app-light), var(--bg-app-dark) 80%);
     background-attachment: fixed;
     color: var(--text-main);
@@ -33,51 +32,116 @@ body {
     overflow: hidden;
 }
 
-/* --- Top Bar --- */
+/* --- Top Bar (Box 1 Alignment) --- */
 .top-bar {
     display: flex; align-items: center; height: 70px;
-    padding: 0 32px; border-bottom: 1px solid var(--border);
-    /* Glassmorphism effect */
-    background: rgba(15, 23, 42, 0.7); 
-    backdrop-filter: blur(12px);
+    /* Alineación con el contenido principal */
+    padding: 0 40px; 
+    border-bottom: 1px solid var(--border);
+    background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px);
+}
+/* Contenedor interno para limitar el ancho del header también */
+.top-bar-inner {
+    width: 100%;
+    max-width: 1800px; /* Igual que el content-area */
+    margin: 0 auto;
+    display: flex; align-items: center;
 }
 
-.logo-group {
-    display: flex; align-items: center; gap: 12px; cursor: pointer;
-    color: var(--text-main); transition: opacity 0.2s;
-}
+.logo-group { display: flex; align-items: center; gap: 12px; cursor: pointer; color: var(--text-main); transition: opacity 0.2s; }
 .logo-group:hover { opacity: 0.8; }
 .logo-svg { color: var(--accent-green); filter: drop-shadow(0 0 8px rgba(16,185,129,0.3)); } 
-.brand-name { font-weight: 800; font-size: 1.1rem; letter-spacing: 0.05em; }
+.brand-name { font-family: var(--font-mono); font-weight: 800; font-size: 1.2rem; letter-spacing: -0.06em; }
 
 .breadcrumbs { display: flex; align-items: center; margin-left: 20px; font-size: 0.9rem; color: var(--text-muted); }
 .crumb-divider { margin: 0 12px; color: var(--text-dim); }
 .crumb-text { color: var(--text-main); font-weight: 500; }
 .hidden { display: none !important; }
-
 .spacer { flex: 1; }
 
-/* New Top Actions */
 .top-actions { display: flex; align-items: center; gap: 16px; }
-
 .version-pill {
     font-size: 0.75rem; font-weight: 600; color: var(--text-dim);
     background: rgba(255,255,255,0.03); padding: 4px 10px; border-radius: 6px;
     border: 1px solid transparent; transition: all 0.3s;
 }
-/* We will use JS to toggle this class if offline */
 .version-pill.disconnected { color: var(--accent-red); border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.1); }
-
-.github-btn {
-    color: var(--text-muted); transition: color 0.2s;
-    display: flex; align-items: center;
-}
+.github-btn { color: var(--text-muted); transition: color 0.2s; display: flex; align-items: center; }
 .github-btn:hover { color: var(--text-main); }
 
 
-/* --- Dashboard --- */
-.content-area { padding: 32px; overflow-y: auto; height: calc(100vh - 70px); }
-.grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 24px; }
+/* --- MAIN LAYOUT (Fixing Margins like Beszel) --- */
+.content-area { 
+    padding: 40px; /* Más espacio alrededor */
+    overflow-y: auto; 
+    height: calc(100vh - 70px); 
+}
+
+/* Este div envuelve todo el contenido para centrarlo (Box 2 & 3 Alignment) */
+.view-section {
+    max-width: 1800px;
+    margin: 0 auto;
+}
+
+
+/* --- ALERT SECTION (Box 2) --- */
+.alert-container { margin-bottom: 40px; animation: slideDown 0.3s ease-out; }
+@keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.alert-header { margin: 0 0 16px 0; font-size: 1.2rem; font-weight: 700; color: var(--text-main); letter-spacing: -0.02em; }
+
+/* LA CAJA GRANDE QUE AGRUPA (Como Beszel) */
+.alert-group-container {
+    background: var(--bg-card); /* Fondo oscuro general */
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    display: grid; 
+    gap: 16px; /* Espacio entre alertas si hay varias */
+}
+
+/* LA ALERTA INDIVIDUAL (Con tus colores originales) */
+.alert-card {
+    background: rgba(239, 68, 68, 0.05); /* Fondo rojizo muy sutil */
+    border: 1px solid rgba(239, 68, 68, 0.2); /* Borde rojo */
+    border-radius: 8px;
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Hover Effect */
+.alert-card:hover {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Red accent line on the left (Tu estilo favorito) */
+.alert-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--accent-red);
+}
+
+.alert-icon-box {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.15); /* Fondo icono rojo */
+    color: var(--accent-red); /* Icono rojo */
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+
+.alert-info { display: flex; flex-direction: column; gap: 4px; }
+.alert-title { font-size: 1rem; font-weight: 700; color: var(--text-main); }
+.alert-desc { font-size: 0.9rem; color: var(--text-muted); }
+
+
+/* --- Dashboard Grid (Box 3) --- */
+.grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(450px, 1fr)); gap: 24px; }
 
 /* Server Card */
 .server-card {
@@ -86,51 +150,42 @@ body {
     border-radius: 12px;
     padding: 24px;
     display: flex; flex-direction: column; gap: 20px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.card-header {
-    display: flex; justify-content: space-between; align-items: center;
-    cursor: pointer;
-}
-.server-title {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 1.1rem; font-weight: 600; color: var(--text-main);
-}
+.card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.server-title { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
 .status-indicator-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-highlight); }
 .server-active .status-indicator-dot { background: var(--accent-green); box-shadow: 0 0 8px rgba(34,197,94,0.4); }
-
 .server-meta { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-dim); }
 
 /* Drive Modules */
-.drive-grid { display: flex; flex-direction: column; gap: 10px; }
+.drive-grid { display: flex; flex-direction: column; gap: 12px; }
 
 .drive-module {
     background: var(--bg-module);
     border: 1px solid transparent;
     border-radius: 8px;
-    padding: 16px;
-    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
-.drive-module:hover {
-    background: var(--bg-module-hover);
-    border-color: var(--border-highlight);
-    transform: translateY(-1px);
-}
+.drive-module:hover { background: var(--bg-module-hover); border-color: var(--border-highlight); transform: translateY(-1px); }
 
-.drive-info { display: flex; flex-direction: column; gap: 4px; }
-.drive-model { font-size: 0.9rem; font-weight: 500; color: var(--text-main); }
-.drive-details { font-size: 0.75rem; color: var(--text-muted); display: flex; gap: 10px; }
-.drive-details span { background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; }
-
-.health-badge {
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-    padding: 4px 8px; border-radius: 4px; letter-spacing: 0.05em;
-}
+.drive-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.drive-model { font-size: 0.95rem; font-weight: 600; color: var(--text-main); }
+.health-badge { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 4px 8px; border-radius: 4px; letter-spacing: 0.05em; }
 .hb-pass { background: rgba(16, 185, 129, 0.1); color: var(--accent-green); }
 .hb-fail { background: rgba(239, 68, 68, 0.1); color: var(--accent-red); }
+
+.drive-stats-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;
+}
+.stat-block { display: flex; flex-direction: column; gap: 4px; }
+.stat-label { font-size: 0.65rem; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-value { font-size: 0.9rem; color: var(--text-main); font-weight: 500; font-family: var(--font-main); }
+
 
 /* --- Details View --- */
 .btn-back {
@@ -146,14 +201,12 @@ body {
 .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .panel-header h2 { margin: 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-
 .badge-subtle { font-size: 0.7rem; font-weight: 700; background: var(--bg-module); padding: 2px 6px; border-radius: 4px; color: var(--text-dim); }
 
 .spec-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 0.9rem; }
 .spec-key { color: var(--text-dim); }
 .spec-val { color: var(--text-main); font-family: var(--font-mono); }
 
-/* Table */
 .smart-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .smart-table th { text-align: left; padding: 12px; color: var(--text-dim); font-weight: 500; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
 .smart-table td { padding: 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono); }
