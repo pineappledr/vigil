@@ -5,17 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vigil Dashboard</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Vigil</h1>
+            <h1 onclick="showDashboard()" style="cursor:pointer">Vigil</h1>
             <div id="status-indicator" class="status-badge offline">Connecting...</div>
         </header>
 
-        <main id="server-list">
-            </main>
+        <main id="dashboard-view">
+            <div id="server-list"></div>
+        </main>
+
+        <div id="details-view" class="hidden">
+            <button class="btn-back" onclick="showDashboard()">← Back to Dashboard</button>
+            
+            <div class="details-layout">
+                <aside id="detail-sidebar" class="sidebar-card">
+                    </aside>
+
+                <section id="detail-content" class="content-card">
+                    <h2>S.M.A.R.T. Attributes</h2>
+                    <div class="table-wrapper">
+                        <table class="smart-table" id="detail-table">
+                            </table>
+                    </div>
+                </section>
+            </div>
+        </div>
     </div>
     <script src="app.js"></script>
 </body>

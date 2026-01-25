@@ -1,10 +1,12 @@
+/* --- Keep existing Root & Body styles --- */
 :root {
-    --bg-color: #111827; /* Darker background like Scrutiny */
+    --bg-color: #111827;
     --card-bg: #1F2937;
     --text-main: #F9FAFB;
     --text-muted: #9CA3AF;
     --success: #10B981;
     --danger: #EF4444;
+    --warning: #F59E0B;
     --border: #374151;
 }
 
@@ -13,89 +15,82 @@ body {
     color: var(--text-main);
     font-family: 'Inter', system-ui, sans-serif;
     margin: 0;
-    padding: 40px;
+    padding: 20px;
 }
 
 .container { max-width: 1400px; margin: 0 auto; }
 
 /* Header */
 header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 40px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
 }
+h1 { font-size: 1.8rem; font-weight: 800; margin: 0; }
 
-h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.025em; margin: 0; }
-
-.status-badge {
-    font-size: 0.85rem;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 99px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
+.status-badge { padding: 6px 12px; border-radius: 99px; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .status-badge.online { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
 .status-badge.offline { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
 
-/* Grid Layout */
-#server-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); /* Wider cards */
-    gap: 24px;
-}
+/* --- Dashboard View --- */
+#server-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 24px; }
 
-/* The Professional Card */
-.card {
-    background-color: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-.card-header {
-    background: rgba(0,0,0,0.2);
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.hostname { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
+.card { background-color: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.card-header { background: rgba(0,0,0,0.2); padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+.hostname { font-weight: 700; } 
 .timestamp { font-size: 0.8rem; color: var(--text-muted); font-family: monospace; }
 
-/* Drive Rows */
-.drive-row {
-    padding: 20px;
-    border-bottom: 1px solid var(--border);
-}
+.drive-row { padding: 15px 20px; border-bottom: 1px solid var(--border); }
 .drive-row:last-child { border-bottom: none; }
 
-.drive-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
+/* Clickable Drive Name */
+.drive-link {
+    font-size: 1.1rem; font-weight: 600; color: var(--text-main);
+    cursor: pointer; text-decoration: none; display: inline-block; margin-bottom: 10px;
 }
-.drive-model { font-weight: 600; font-size: 1rem; color: var(--text-main); }
-.drive-model span { color: var(--text-muted); font-weight: 400; font-size: 0.9em; margin-left: 8px; }
+.drive-link:hover { color: #60A5FA; text-decoration: underline; }
 
-/* The Metrics Grid (Like Scrutiny) */
-.metrics {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-}
-
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .metric { display: flex; flex-direction: column; }
-.label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; }
-.value { font-size: 1.1rem; font-weight: 600; }
-
+.label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+.value { font-size: 1rem; font-weight: 600; }
 .value.passed { color: var(--success); }
 .value.failed { color: var(--danger); }
+
+/* --- Details View (New) --- */
+.hidden { display: none !important; }
+
+.btn-back {
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+    padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-bottom: 20px;
+    font-size: 0.9rem; transition: all 0.2s;
+}
+.btn-back:hover { background: var(--border); color: var(--text-main); }
+
+.details-layout {
+    display: grid; grid-template-columns: 300px 1fr; gap: 24px;
+}
+@media (max-width: 800px) { .details-layout { grid-template-columns: 1fr; } }
+
+.sidebar-card, .content-card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px;
+}
+
+/* Sidebar Styling */
+.sidebar-group { margin-bottom: 24px; }
+.sidebar-group h3 { margin: 0 0 12px 0; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.spec-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; }
+.spec-label { color: var(--text-muted); }
+.spec-val { font-weight: 500; font-family: monospace; }
+
+/* Table Styling */
+h2 { margin-top: 0; font-size: 1.2rem; margin-bottom: 20px; }
+.table-wrapper { overflow-x: auto; }
+.smart-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.smart-table th { text-align: left; padding: 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; }
+.smart-table td { padding: 12px; border-bottom: 1px solid var(--border); font-family: monospace; }
+.smart-table tr:hover { background: rgba(255,255,255,0.02); }
+
+.pill { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+.pill.ok { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+.pill.bad { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+.pill.warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
