@@ -84,21 +84,16 @@ volumes:
 ## Deployment: Agent
 The agent runs on your managed nodes (NAS, Servers, VMs). You can run it as a binary (recommended) or via Docker.
 
-Option A: Binary (One-Line Install)
-
-Download and run the agent directly from GitHub.
+### Option A: Binary (One-Line Install)
+Download the latest agent directly from GitHub.
 
 ```bash
-# 1. Download and Install (Replace v1.0.0 with your latest version)
-sudo curl -L [https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil-agent-linux-amd64](https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil-agent-linux-amd64) -o /usr/local/bin/vigil-agent
-```
-```
+# 1. Download "latest"
+sudo curl -L [https://github.com/pineappledr/vigil/releases/download/latest/vigil-agent-linux-amd64](https://github.com/pineappledr/vigil/releases/download/latest/vigil-agent-linux-amd64) -o /usr/local/bin/vigil-agent
 sudo chmod +x /usr/local/bin/vigil-agent
-```
-```
-# 2. Run (Replace with your Server IP)
+
+# 2. Run
 sudo vigil-agent --server http://YOUR_SERVER_IP:8090
-```
 
 **Option B: Docker Agent**
 
