@@ -78,7 +78,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
@@ -126,15 +126,15 @@ jobs:
 
       - name: Build binaries
         run: |
+          mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
           
-          # Server binaries
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-amd64 ./cmd/server
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-arm64 ./cmd/server
+          # Agent binaries (no CGO needed)
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
           
-          # Agent binaries
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
+          # Server binary (amd64 only due to CGO)
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-amd64 ./cmd/server
           
           # Create checksums
           cd dist
@@ -143,7 +143,6 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          # Get the previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
@@ -175,19 +174,18 @@ jobs:
             **Agent (Binary):**
             ```bash
             # AMD64
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-amd64 -o /usr/local/bin/vigil-agent
-            chmod +x /usr/local/bin/vigil-agent
+            sudo curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-amd64 -o /usr/local/bin/vigil-agent
+            sudo chmod +x /usr/local/bin/vigil-agent
             
             # ARM64
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o /usr/local/bin/vigil-agent
-            chmod +x /usr/local/bin/vigil-agent
+            sudo curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o /usr/local/bin/vigil-agent
+            sudo chmod +x /usr/local/bin/vigil-agent
             ```
             
             ### Checksums
             See `checksums.txt` for SHA256 checksums of all binaries.
           files: |
             dist/vigil-server-linux-amd64
-            dist/vigil-server-linux-arm64
             dist/vigil-agent-linux-amd64
             dist/vigil-agent-linux-arm64
             dist/checksums.txt
