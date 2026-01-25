@@ -1,73 +1,122 @@
-name: Build and Release (Latest)
+name: Build and Push
 
 on:
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [ "published" ]
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # JOB 1: Build Docker Images (Server & Agent)
-  docker:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: |
+          go build -v ./cmd/server
+          go build -v ./cmd/agent
+
+      - name: Test
+        run: go test -v ./...
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Log in to Registry
-        uses: docker/login-action@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Build Server
-        uses: docker/build-push-action@v4
+
+      - name: Build and push Server
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Build Agent
-        uses: docker/build-push-action@v4
+      - name: Build and push Agent
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # JOB 2: Compile Binaries & Update "Latest" Release
-  release:
-    needs: docker
+  release-binaries:
+    needs: test
     runs-on: ubuntu-latest
+    if: github.event_name == 'release'
     permissions:
-      contents: write # Needed to upload files to the release
+      contents: write
+
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Go
-        uses: actions/setup-go@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.23'
 
-      - name: Build Binaries
+      - name: Build binaries
         run: |
-          mkdir dist
-          GOOS=linux GOARCH=amd64 go build -o dist/vigil-agent-linux-amd64 ./cmd/agent
-          GOOS=linux GOARCH=arm64 go build -o dist/vigil-agent-linux-arm64 ./cmd/agent
-          GOOS=darwin GOARCH=arm64 go build -o dist/vigil-agent-darwin-arm64 ./cmd/agent
-          GOOS=windows GOARCH=amd64 go build -o dist/vigil-agent-windows-amd64.exe ./cmd/agent
+          # Server binaries
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o vigil-server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o vigil-server-linux-arm64 ./cmd/server
+          
+          # Agent binaries
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o vigil-agent-linux-arm64 ./cmd/agent
 
-      - name: Update "Latest" Release
+      - name: Upload release assets
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: latest
-          name: Latest Build
-          body: "Automated build from the main branch."
-          files: dist/*
-          draft: false
-          prerelease: false
+          files: |
+            vigil-server-linux-amd64
+            vigil-server-linux-arm64
+            vigil-agent-linux-amd64
+            vigil-agent-linux-arm64

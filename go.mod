@@ -1,6 +1,6 @@
 module vigil
 
-go 1.25
+go 1.23
 
 require modernc.org/sqlite v1.44.3
 

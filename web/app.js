@@ -1,205 +1,504 @@
+/**
+ * Vigil Dashboard - Infrastructure Monitor
+ * Modern, real-time server monitoring interface
+ */
+
 const API_URL = '/api/history';
+const REFRESH_INTERVAL = 5000;
+
+// Application State
 let globalData = [];
 let activeServerIndex = null;
+let refreshTimer = null;
 
-// --- Formatters ---
-const formatSize = (b) => {
-    if (!b) return '-';
-    const s = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(b) / Math.log(1024));
-    return `${(b / Math.pow(1024, i)).toFixed(2)} ${s[i]}`;
+// ============================================
+// UTILITIES
+// ============================================
+
+const formatSize = (bytes) => {
+    if (!bytes) return 'N/A';
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`;
 };
 
-const formatAge = (h) => {
-    if (!h) return '-';
-    const y = (h / 8760).toFixed(1);
-    return `${y} years`;
+const formatAge = (hours) => {
+    if (!hours) return 'N/A';
+    const years = hours / 8760;
+    if (years >= 1) return `${years.toFixed(1)}y`;
+    const months = hours / 730;
+    if (months >= 1) return `${months.toFixed(1)}mo`;
+    const days = hours / 24;
+    if (days >= 1) return `${days.toFixed(0)}d`;
+    return `${hours}h`;
 };
 
-// --- Alert System (Beszel Style Box) ---
-function checkAlerts(servers) {
-    const alertList = document.getElementById('alert-list');
-    const alertSection = document.getElementById('alert-section');
-    let alertsHTML = '';
-    let hasAlerts = false;
+const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
-    servers.forEach((server, serverIdx) => {
-        (server.details.drives || []).forEach((d, driveIdx) => {
-            const isFailing = d.smart_status?.passed === false;
-            const temp = d.temperature?.current || 0;
-            const isHot = temp > 50; // Umbral de alerta
-
-            if (isFailing || isHot) {
-                hasAlerts = true;
-                const type = isFailing ? 'Drive Failure' : 'High Temperature';
-                const msg = isFailing ? 'S.M.A.R.T. check failed' : `Temperature at ${temp}°C`;
-                
-                // Genera la tarjeta roja (.alert-card) que irá dentro de la caja oscura
-                alertsHTML += `
-                <div class="alert-card" onclick="showDriveDetails(${serverIdx}, ${driveIdx})">
-                    <div class="alert-icon-box">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    </div>
-                    <div class="alert-info">
-                        <span class="alert-title">${server.hostname}: ${d.model_name}</span>
-                        <span class="alert-desc">${type} • ${msg}</span>
-                    </div>
-                </div>`;
-            }
-        });
-    });
-
-    if (hasAlerts) {
-        alertList.innerHTML = alertsHTML;
-        alertSection.classList.remove('hidden');
-    } else {
-        alertSection.classList.add('hidden');
+const getHealthStatus = (drive) => {
+    if (!drive.smart_status?.passed) return 'critical';
+    
+    // Check critical SMART attributes
+    const attrs = drive.ata_smart_attributes?.table || [];
+    const criticalIds = [5, 187, 197, 198]; // Reallocated, Uncorrectable, Pending, Offline
+    
+    for (const attr of attrs) {
+        if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
+            return 'warning';
+        }
     }
-}
+    
+    return 'healthy';
+};
 
-// --- Navigation Logic ---
+const getRotationType = (rate) => {
+    if (rate === 0) return 'SSD';
+    if (rate === undefined || rate === null) return 'N/A';
+    return `${rate} RPM`;
+};
+
+// ============================================
+// NAVIGATION
+// ============================================
+
 function resetDashboard() {
     activeServerIndex = null;
+    
     document.getElementById('breadcrumbs').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
+    document.getElementById('page-title').textContent = 'Infrastructure Overview';
+    
+    // Reset nav active states
+    document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelector('.nav-item')?.classList.add('active');
+    
     renderDashboard(globalData);
 }
 
 function showServer(serverIdx) {
     activeServerIndex = serverIdx;
     const server = globalData[serverIdx];
-    document.getElementById('crumb-current').innerText = server.hostname;
+    
+    if (!server) {
+        resetDashboard();
+        return;
+    }
+    
+    // Update navigation
+    document.getElementById('crumb-server').textContent = server.hostname;
     document.getElementById('breadcrumbs').classList.remove('hidden');
+    document.getElementById('page-title').textContent = server.hostname;
+    
+    // Update sidebar nav
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.server-nav-item').forEach((el, idx) => {
+        el.classList.toggle('active', idx === serverIdx);
+    });
+    
+    // Show filtered view
     document.getElementById('details-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
+    
     renderDashboard([server], true);
-}
-
-function goBackToContext() {
-    if (activeServerIndex !== null) showServer(activeServerIndex);
-    else resetDashboard();
 }
 
 function showDriveDetails(serverIdx, driveIdx) {
     const server = globalData[serverIdx];
-    const drive = server.details.drives[driveIdx];
+    const drive = server?.details?.drives?.[driveIdx];
     
-    let rot = drive.rotation_rate || 'N/A';
-    if (rot === 0) rot = 'SSD';
-    if (typeof rot === 'number') rot += ' RPM';
-
-    // Rellenar Sidebar
-    const sb = document.getElementById('detail-sidebar');
-    sb.innerHTML = `
-        <div class="panel-header"><h2>Specs</h2></div>
-        <div class="spec-row"><span class="spec-key">Model</span><span class="spec-val">${drive.model_name || 'N/A'}</span></div>
-        <div class="spec-row"><span class="spec-key">Serial</span><span class="spec-val">${drive.serial_number || 'N/A'}</span></div>
-        <div class="spec-row"><span class="spec-key">Capacity</span><span class="spec-val">${formatSize(drive.user_capacity?.bytes)}</span></div>
-        <div class="spec-row"><span class="spec-key">Rotation</span><span class="spec-val">${rot}</span></div>
-        <br>
-        <div class="panel-header"><h2>Status</h2></div>
-        <div class="spec-row"><span class="spec-key">Health</span><span class="spec-val" style="color:${drive.smart_status?.passed?'#10b981':'#ef4444'}">${drive.smart_status?.passed?'PASSED':'FAILED'}</span></div>
-        <div class="spec-row"><span class="spec-key">Temp</span><span class="spec-val">${drive.temperature?.current ?? '-'}°C</span></div>
-        <div class="spec-row"><span class="spec-key">Power On</span><span class="spec-val">${formatAge(drive.power_on_time?.hours)}</span></div>
+    if (!drive) return;
+    
+    const status = getHealthStatus(drive);
+    const rotation = getRotationType(drive.rotation_rate);
+    
+    // Render sidebar
+    const sidebar = document.getElementById('detail-sidebar');
+    sidebar.innerHTML = `
+        <div class="drive-header">
+            <div class="icon ${status}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <circle cx="8" cy="12" r="2"/>
+                    <line x1="14" y1="9" x2="18" y2="9"/>
+                    <line x1="14" y1="12" x2="18" y2="12"/>
+                    <line x1="14" y1="15" x2="18" y2="15"/>
+                </svg>
+            </div>
+            <h3>${drive.model_name || 'Unknown Drive'}</h3>
+            <span class="serial">${drive.serial_number || 'N/A'}</span>
+        </div>
+        
+        <div class="info-group">
+            <div class="info-group-label">Device Information</div>
+            <div class="info-row">
+                <span class="label">Capacity</span>
+                <span class="value">${formatSize(drive.user_capacity?.bytes)}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Firmware</span>
+                <span class="value">${drive.firmware_version || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Type</span>
+                <span class="value">${rotation}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Interface</span>
+                <span class="value">${drive.device?.protocol || 'ATA'}</span>
+            </div>
+        </div>
+        
+        <div class="info-group">
+            <div class="info-group-label">Health Status</div>
+            <div class="info-row">
+                <span class="label">SMART Status</span>
+                <span class="value ${drive.smart_status?.passed ? 'success' : 'danger'}">
+                    ${drive.smart_status?.passed ? 'PASSED' : 'FAILED'}
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="label">Temperature</span>
+                <span class="value ${(drive.temperature?.current > 50) ? 'warning' : ''}">${drive.temperature?.current ?? 'N/A'}°C</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Power On Time</span>
+                <span class="value">${formatAge(drive.power_on_time?.hours)}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Power Cycles</span>
+                <span class="value">${drive.power_cycle_count ?? 'N/A'}</span>
+            </div>
+        </div>
     `;
-
-    // Rellenar Tabla SMART
-    const tbody = document.getElementById('detail-table');
-    const attr = drive.ata_smart_attributes?.table || [];
-    if (!attr.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px">No Legacy Attributes (NVMe)</td></tr>';
+    
+    // Render SMART attributes table
+    const table = document.getElementById('detail-table');
+    const attributes = drive.ata_smart_attributes?.table || [];
+    
+    if (attributes.length === 0) {
+        table.innerHTML = `
+            <div class="nvme-notice">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p>No standard ATA SMART attributes available</p>
+                <span>NVMe drives use different health reporting</span>
+            </div>
+        `;
     } else {
-        tbody.innerHTML = `<thead><tr><th>ID</th><th>Attribute</th><th>Value</th><th>Thresh</th><th>Raw</th></tr></thead><tbody>` + 
-        attr.map(a => {
-            const fail = (a.raw?.value > 0 && [5,187,197,198].includes(a.id)) || (a.thresh > 0 && a.value <= a.thresh);
-            return `<tr style="${fail?'color:#ef4444':''}"><td>${a.id}</td><td>${a.name}</td><td>${a.value}</td><td>${a.thresh}</td><td>${a.raw?.value}</td></tr>`;
-        }).join('') + `</tbody>`;
+        const criticalIds = [5, 187, 197, 198];
+        
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th class="status-cell">Status</th>
+                    <th>ID</th>
+                    <th>Attribute</th>
+                    <th>Value</th>
+                    <th>Worst</th>
+                    <th>Thresh</th>
+                    <th>Raw</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${attributes.map(attr => {
+                    const isCritical = criticalIds.includes(attr.id);
+                    const isFailing = (isCritical && attr.raw?.value > 0) || 
+                                     (attr.thresh > 0 && attr.value <= attr.thresh);
+                    
+                    return `
+                        <tr>
+                            <td class="status-cell">
+                                <span class="attr-pill ${isFailing ? 'fail' : 'ok'}">
+                                    ${isFailing ? 'FAIL' : 'OK'}
+                                </span>
+                            </td>
+                            <td>${attr.id}</td>
+                            <td style="font-family: var(--font-sans)">${attr.name}</td>
+                            <td>${attr.value}</td>
+                            <td>${attr.worst ?? '-'}</td>
+                            <td>${attr.thresh}</td>
+                            <td>${attr.raw?.value ?? '-'}</td>
+                        </tr>
+                    `;
+                }).join('')}
+            </tbody>
+        `;
     }
-
+    
+    // Show details view
     document.getElementById('dashboard-view').classList.add('hidden');
     document.getElementById('details-view').classList.remove('hidden');
 }
 
-// --- Data Fetching ---
+function goBackToContext() {
+    if (activeServerIndex !== null) {
+        showServer(activeServerIndex);
+    } else {
+        resetDashboard();
+    }
+}
+
+// ============================================
+// DATA FETCHING & RENDERING
+// ============================================
+
 async function fetchData() {
     try {
-        const res = await fetch(API_URL);
-        globalData = await res.json();
+        const response = await fetch(API_URL);
         
-        checkAlerts(globalData); // Comprobar alertas en cada actualización
-
-        // Refrescar vista actual si es necesario
-        if (activeServerIndex !== null && !document.getElementById('dashboard-view').classList.contains('hidden')) {
-            renderDashboard([globalData[activeServerIndex]], true);
-        } else if (activeServerIndex === null) {
-            renderDashboard(globalData);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
-
-        document.getElementById('connection-status').classList.remove('disconnected');
-    } catch (e) {
-        document.getElementById('connection-status').classList.add('disconnected');
-    }
-}
-
-function renderDashboard(servers, isFiltered) {
-    if (document.getElementById('dashboard-view').classList.contains('hidden')) return;
-    const list = document.getElementById('server-list');
-
-    if (!servers.length) { 
-        list.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:#52525b; margin-top:40px">Waiting for data...</div>';
-        return; 
-    }
-
-    list.innerHTML = servers.map((server) => {
-        const realIdx = globalData.findIndex(s => s.hostname === server.hostname);
         
-        const drivesHtml = (server.details.drives || []).map((d, dIdx) => {
-            const passed = d.smart_status?.passed;
-            return `
-            <div class="drive-module" onclick="showDriveDetails(${realIdx}, ${dIdx})">
-                <div class="drive-header-row">
-                    <span class="drive-model">${d.model_name || 'Unknown Drive'}</span>
-                    <div class="health-badge ${passed ? 'hb-pass':'hb-fail'}">${passed ? 'Healthy' : 'Failing'}</div>
-                </div>
-                
-                <div class="drive-stats-row">
-                    <div class="stat-block">
-                        <span class="stat-label">Temperature</span>
-                        <span class="stat-value">${d.temperature?.current ?? '-'}°C</span>
-                    </div>
-                    <div class="stat-block">
-                        <span class="stat-label">Capacity</span>
-                        <span class="stat-value">${formatSize(d.user_capacity?.bytes)}</span>
-                    </div>
-                    <div class="stat-block">
-                        <span class="stat-label">Powered On</span>
-                        <span class="stat-value">${formatAge(d.power_on_time?.hours)}</span>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-
-        return `
-            <div class="server-card">
-                <div class="card-header server-active" onclick="showServer(${realIdx})">
-                    <div class="server-title">
-                        <span class="status-indicator-dot"></span>
-                        ${server.hostname}
-                    </div>
-                    <span class="server-meta">${new Date(server.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
-                </div>
-                <div class="drive-grid">
-                    ${drivesHtml || '<div style="color:#52525b; font-size:0.9rem">No drives detected</div>'}
-                </div>
-            </div>`;
-    }).join('');
-
-    // Ajustar grid si estamos viendo un solo servidor
-    list.style.display = isFiltered ? 'block' : 'grid';
-    if(isFiltered) list.children[0].style.maxWidth = '600px';
+        globalData = await response.json() || [];
+        
+        // Update UI based on current view
+        if (!document.getElementById('dashboard-view').classList.contains('hidden')) {
+            if (activeServerIndex !== null && globalData[activeServerIndex]) {
+                renderDashboard([globalData[activeServerIndex]], true);
+            } else {
+                renderDashboard(globalData);
+            }
+        }
+        
+        updateSidebar();
+        updateStats();
+        setOnlineStatus(true);
+        
+        // Update last refresh time
+        document.getElementById('last-update-time').textContent = 
+            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+    } catch (error) {
+        console.error('Fetch error:', error);
+        setOnlineStatus(false);
+    }
 }
 
-// Iniciar ciclo
-setInterval(fetchData, 2000);
-fetchData();
+function setOnlineStatus(online) {
+    const indicator = document.getElementById('status-indicator');
+    indicator.classList.toggle('online', online);
+    indicator.classList.toggle('offline', !online);
+    indicator.title = online ? 'Connected' : 'Connection Lost';
+}
+
+function updateSidebar() {
+    const serverNav = document.getElementById('server-nav-list');
+    const serverCount = document.getElementById('server-count');
+    
+    serverCount.textContent = globalData.length;
+    
+    serverNav.innerHTML = globalData.map((server, idx) => {
+        const drives = server.details?.drives || [];
+        const hasWarning = drives.some(d => getHealthStatus(d) === 'warning');
+        const hasCritical = drives.some(d => getHealthStatus(d) === 'critical');
+        
+        let statusClass = '';
+        if (hasCritical) statusClass = 'critical';
+        else if (hasWarning) statusClass = 'warning';
+        
+        return `
+            <div class="server-nav-item ${activeServerIndex === idx ? 'active' : ''}" 
+                 onclick="showServer(${idx})">
+                <span class="status-indicator ${statusClass}"></span>
+                ${server.hostname}
+            </div>
+        `;
+    }).join('');
+}
+
+function updateStats() {
+    let totalDrives = 0;
+    let healthyDrives = 0;
+    let warningDrives = 0;
+    
+    globalData.forEach(server => {
+        const drives = server.details?.drives || [];
+        totalDrives += drives.length;
+        
+        drives.forEach(drive => {
+            const status = getHealthStatus(drive);
+            if (status === 'healthy') healthyDrives++;
+            else if (status === 'warning') warningDrives++;
+        });
+    });
+    
+    document.getElementById('total-drives').textContent = totalDrives;
+    document.getElementById('healthy-count').textContent = healthyDrives;
+    document.getElementById('warning-count').textContent = totalDrives - healthyDrives;
+}
+
+function renderDashboard(servers, isFiltered = false) {
+    const container = document.getElementById('server-list');
+    const summaryContainer = document.getElementById('summary-cards');
+    
+    // Calculate summary stats
+    let totalServers = globalData.length;
+    let totalDrives = 0;
+    let healthyDrives = 0;
+    let criticalDrives = 0;
+    
+    globalData.forEach(server => {
+        const drives = server.details?.drives || [];
+        totalDrives += drives.length;
+        drives.forEach(drive => {
+            const status = getHealthStatus(drive);
+            if (status === 'healthy') healthyDrives++;
+            else if (status === 'critical') criticalDrives++;
+        });
+    });
+    
+    // Render summary cards
+    summaryContainer.innerHTML = `
+        <div class="summary-card">
+            <div class="icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="8" rx="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2"/>
+                    <circle cx="6" cy="6" r="1"/>
+                    <circle cx="6" cy="18" r="1"/>
+                </svg>
+            </div>
+            <div class="value">${totalServers}</div>
+            <div class="label">Servers</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <circle cx="8" cy="12" r="2"/>
+                </svg>
+            </div>
+            <div class="value">${totalDrives}</div>
+            <div class="label">Total Drives</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <div class="value">${healthyDrives}</div>
+            <div class="label">Healthy</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon ${criticalDrives > 0 ? 'red' : 'yellow'}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </div>
+            <div class="value">${totalDrives - healthyDrives}</div>
+            <div class="label">Needs Attention</div>
+        </div>
+    `;
+    
+    // Render server cards
+    if (!servers || servers.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="2" width="20" height="8" rx="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2"/>
+                    <circle cx="6" cy="6" r="1"/>
+                    <circle cx="6" cy="18" r="1"/>
+                </svg>
+                <p>Waiting for agents to connect...</p>
+                <span class="hint">Run vigil-agent on your servers to begin monitoring</span>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = servers.map(server => {
+        const realIndex = globalData.findIndex(s => s.hostname === server.hostname);
+        const drives = server.details?.drives || [];
+        
+        const drivesHtml = drives.map((drive, dIdx) => {
+            const status = getHealthStatus(drive);
+            
+            return `
+                <div class="drive-item ${status}" onclick="showDriveDetails(${realIndex}, ${dIdx})">
+                    <div class="drive-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="4" width="20" height="16" rx="2"/>
+                            <circle cx="8" cy="12" r="2"/>
+                            <line x1="14" y1="9" x2="18" y2="9"/>
+                            <line x1="14" y1="12" x2="18" y2="12"/>
+                        </svg>
+                    </div>
+                    <div class="drive-info">
+                        <div class="drive-model">${drive.model_name || 'Unknown Drive'}</div>
+                        <div class="drive-stats">
+                            <span class="drive-stat">
+                                Temp: <span class="value">${drive.temperature?.current ?? '--'}°C</span>
+                            </span>
+                            <span class="drive-stat">
+                                Size: <span class="value">${formatSize(drive.user_capacity?.bytes)}</span>
+                            </span>
+                            <span class="drive-stat">
+                                Age: <span class="value">${formatAge(drive.power_on_time?.hours)}</span>
+                            </span>
+                        </div>
+                    </div>
+                    <span class="status-badge ${drive.smart_status?.passed ? 'passed' : 'failed'}">
+                        ${drive.smart_status?.passed ? 'Passed' : 'Failed'}
+                    </span>
+                </div>
+            `;
+        }).join('');
+        
+        return `
+            <div class="server-card" ${isFiltered ? 'style="max-width: 600px; margin: 0 auto;"' : ''}>
+                <div class="server-card-header">
+                    <div class="server-info">
+                        <div class="server-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="2" width="20" height="8" rx="2"/>
+                                <rect x="2" y="14" width="20" height="8" rx="2"/>
+                                <circle cx="6" cy="6" r="1"/>
+                                <circle cx="6" cy="18" r="1"/>
+                            </svg>
+                        </div>
+                        <span class="server-name" onclick="showServer(${realIndex})">${server.hostname}</span>
+                    </div>
+                    <div class="server-meta">
+                        <span class="drive-count">${drives.length} drive${drives.length !== 1 ? 's' : ''}</span>
+                        <span class="timestamp">${formatTime(server.timestamp)}</span>
+                    </div>
+                </div>
+                <div class="drive-list">
+                    ${drivesHtml || '<div class="empty-state" style="padding: 20px"><p>No drives detected</p></div>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Adjust grid layout for filtered view
+    container.style.display = isFiltered ? 'block' : 'grid';
+}
+
+// ============================================
+// INITIALIZATION
+// ============================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    fetchData();
+    refreshTimer = setInterval(fetchData, REFRESH_INTERVAL);
+});
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    if (refreshTimer) {
+        clearInterval(refreshTimer);
+    }
+});

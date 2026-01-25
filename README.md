@@ -2,12 +2,20 @@
 
 > **Proactive, lightweight server monitoring.**
 
-![Build Status](https://github.com/pineappledr/vigil/actions/workflows/build.yml/badge.svg)
-![License](https://img.shields.io/github/license/pineappledr/vigil)
-![Go Version](https://img.shields.io/github/go-mod/go-version/pineappledr/vigil)
-![SQLite Version](https://img.shields.io/badge/SQLite-v1.44.3-003B57?logo=sqlite&logoColor=white)
+<p align="left">
+  <img src="https://github.com/pineappledr/vigil/actions/workflows/build.yml/badge.svg" alt="Build Status">
+  <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
+  <img src="https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white" alt="Go Version">
+  <img src="https://img.shields.io/badge/SQLite-v1.44.3-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
+</p>
 
-**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern, dark-mode web dashboard and predictive health analysis, ensuring you never miss a critical hardware failure.
+<p align="right">
+  <a href="https://github.com/pineappledr/vigil">
+    <img src="https://img.shields.io/badge/GitHub-Repository-181717?logo=github&logoColor=white" alt="GitHub">
+  </a>
+</p>
+
+**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard and predictive health analysis, ensuring you never miss a critical hardware failure.
 
 Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.).
 
@@ -17,9 +25,10 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.).
 
 - **🔥 Lightweight Agent:** Single Go binary with zero dependencies. Deploy it on any server in seconds.
 - **🐳 Docker Server:** The central hub is containerized for easy deployment via Docker or Compose.
-- **⚡ Fast Web Dashboard:** No heavy frameworks. A pure HTML5/JS interface that loads instantly and filters by server.
-- **🔍 Deep Analysis:** View raw S.M.A.R.T. attributes, temperature history, and drive rotation rates.
-- **🤖 Predictive Checks:** Advanced analysis to determine if a drive is *actually* dying or just old.
+- **⚡ Fast Web Dashboard:** Modern HTML5/JS interface that loads instantly with real-time updates.
+- **🔍 Deep Analysis:** View raw S.M.A.R.T. attributes, temperature history, and drive details.
+- **🤖 Predictive Checks:** Advanced analysis to determine if a drive is failing or just aging.
+- **📊 Continuous Monitoring:** Configurable reporting intervals with automatic reconnection.
 
 ---
 
@@ -31,6 +40,7 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.).
 - **smartmontools:** The core engine for reading HDD/SSD health data.
 
 **Install Requirements:**
+
 ```bash
 # Ubuntu / Debian / Proxmox
 sudo apt update && sudo apt install smartmontools nvme-cli -y
@@ -40,16 +50,19 @@ sudo apt update && sudo apt install smartmontools nvme-cli -y
 # Fedora / CentOS / RHEL
 sudo dnf install smartmontools nvme-cli
 ```
+
 ```bash
 # Arch Linux
 sudo pacman -S smartmontools nvme-cli
 ```
+
 ---
 
 ## Deployment: Server
+
 The central server runs in a container. It collects data from all your agents.
 
-Option A: Docker Run (Quick)
+### Option A: Docker Run (Quick)
 
 ```bash
 docker run -d \
@@ -60,9 +73,9 @@ docker run -d \
   ghcr.io/pineappledr/vigil:latest
 ```
 
-**Option B: Docker Compose**
+### Option B: Docker Compose
 
-```
+```yaml
 services:
   server:
     container_name: vigil-server
@@ -79,30 +92,60 @@ services:
 volumes:
   vigil_data:
 ```
+
 ---
 
 ## Deployment: Agent
+
 The agent runs on your managed nodes (NAS, Servers, VMs). You can run it as a binary (recommended) or via Docker.
 
 ### Option A: Binary (One-Line Install)
-Download the latest agent directly from GitHub.
+
+Download and run the agent directly from GitHub.
 
 ```bash
-# 1. Download "latest"
-sudo curl -L [https://github.com/pineappledr/vigil/releases/download/latest/vigil-agent-linux-amd64](https://github.com/pineappledr/vigil/releases/download/latest/vigil-agent-linux-amd64) -o /usr/local/bin/vigil-agent
+# 1. Download and Install (Replace v1.0.0 with your latest version)
+sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil-agent-linux-amd64 \
+  -o /usr/local/bin/vigil-agent
+
 sudo chmod +x /usr/local/bin/vigil-agent
 
-# 2. Run
-sudo vigil-agent --server http://YOUR_SERVER_IP:8090
+# 2. Run (Replace with your Server IP)
+sudo vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
+```
 
-**Option B: Docker Agent**
-
-Note: The agent requires privileged access to read physical disk stats.
-
-Docker Run:
+### Option B: Systemd Service (Recommended for Production)
 
 ```bash
+# Create service file
+sudo tee /etc/systemd/system/vigil-agent.service > /dev/null <<EOF
+[Unit]
+Description=Vigil Monitoring Agent
+After=network.target
 
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable vigil-agent
+sudo systemctl start vigil-agent
+```
+
+### Option C: Docker Agent
+
+> **Note:** The agent requires privileged access to read physical disk stats.
+
+**Docker Run:**
+
+```bash
 docker run -d \
   --name vigil-agent \
   --net=host \
@@ -110,13 +153,13 @@ docker run -d \
   -v /dev:/dev \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:8090
-
+  --server http://YOUR_SERVER_IP:8090 \
+  --interval 60
 ```
 
 **Docker Compose:**
 
-````
+```yaml
 services:
   agent:
     image: ghcr.io/pineappledr/vigil-agent:latest
@@ -126,17 +169,62 @@ services:
     volumes:
       - /dev:/dev
     restart: unless-stopped
-    command: ["--server", "http://YOUR_SERVER_IP:8090"]
-````
+    command: ["--server", "http://YOUR_SERVER_IP:8090", "--interval", "60"]
+```
 
 ---
-## Build from Source (Advanced)
+
+## Configuration
+
+### Agent Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--server` | `http://localhost:8090` | Vigil server URL |
+| `--interval` | `60` | Reporting interval in seconds (0 = single run) |
+| `--hostname` | (auto-detected) | Override hostname |
+
+### Server Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8090` | HTTP server port |
+| `DB_PATH` | `vigil.db` | SQLite database path |
+
+---
+
+## Build from Source
 
 ```bash
+# Clone the repository
+git clone https://github.com/pineappledr/vigil.git
+cd vigil
 
-# 1. Build the binary for Linux (amd64) on your local machine
-GOOS=linux GOARCH=amd64 go build -o vigil-agent ./cmd/agent
+# Build the server
+go build -o vigil-server ./cmd/server
 
-# 2. Upload it to your server
-scp vigil-agent user@YOUR_SERVER_IP:~
+# Build the agent
+go build -o vigil-agent ./cmd/agent
+
+# Cross-compile for Linux (from macOS/Windows)
+GOOS=linux GOARCH=amd64 go build -o vigil-agent-linux-amd64 ./cmd/agent
+GOOS=linux GOARCH=arm64 go build -o vigil-agent-linux-arm64 ./cmd/agent
 ```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/report` | Receive agent reports |
+| `GET` | `/api/history` | Get latest reports per host |
+| `GET` | `/api/hosts` | List all known hosts |
+| `DELETE` | `/api/hosts/{hostname}` | Remove a host and its data |
+
+---
+
+## License
+
+MIT License - See [LICENSE](LICENSE) for details.
