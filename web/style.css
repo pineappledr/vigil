@@ -1,51 +1,101 @@
 :root {
-    --bg-color: #0F172A;
-    --card-bg: #1E293B;
-    --text-primary: #F8FAFC;
-    --text-secondary: #94A3B8;
-    --accent-green: #10B981;
-    --accent-red: #EF4444;
+    --bg-color: #111827; /* Darker background like Scrutiny */
+    --card-bg: #1F2937;
+    --text-main: #F9FAFB;
+    --text-muted: #9CA3AF;
+    --success: #10B981;
+    --danger: #EF4444;
+    --border: #374151;
 }
 
 body {
     background-color: var(--bg-color);
-    color: var(--text-primary);
-    font-family: 'Inter', sans-serif;
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, sans-serif;
     margin: 0;
-    padding: 20px;
+    padding: 40px;
 }
 
-.container { max-width: 1000px; margin: 0 auto; }
+.container { max-width: 1400px; margin: 0 auto; }
 
+/* Header */
 header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 40px;
-    border-bottom: 1px solid #334155;
     padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
 }
 
-h1 { margin: 0; font-size: 2rem; }
+h1 { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.025em; margin: 0; }
 
-.status { padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; }
-.status.online { background-color: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
-.status.offline { background-color: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+.status-badge {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 99px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.status-badge.online { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
+.status-badge.offline { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
 
-#server-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+/* Grid Layout */
+#server-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); /* Wider cards */
+    gap: 24px;
+}
 
+/* The Professional Card */
 .card {
     background-color: var(--card-bg);
-    border-radius: 12px;
-    padding: 20px;
-    border: 1px solid #334155;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-.card-header { display: flex; justify-content: space-between; margin-bottom: 15px; }
-.hostname { font-size: 1.25rem; font-weight: 700; }
-.time { font-size: 0.8rem; color: var(--text-secondary); }
+.card-header {
+    background: rgba(0,0,0,0.2);
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
-.drive-list { list-style: none; padding: 0; margin: 0; }
-.drive-item { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid #334155; font-size: 0.9rem; }
-.drive-status.passed { color: var(--accent-green); }
-.drive-status.failed { color: var(--accent-red); }
+.hostname { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
+.timestamp { font-size: 0.8rem; color: var(--text-muted); font-family: monospace; }
+
+/* Drive Rows */
+.drive-row {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+}
+.drive-row:last-child { border-bottom: none; }
+
+.drive-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.drive-model { font-weight: 600; font-size: 1rem; color: var(--text-main); }
+.drive-model span { color: var(--text-muted); font-weight: 400; font-size: 0.9em; margin-left: 8px; }
+
+/* The Metrics Grid (Like Scrutiny) */
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.metric { display: flex; flex-direction: column; }
+.label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; }
+.value { font-size: 1.1rem; font-weight: 600; }
+
+.value.passed { color: var(--success); }
+.value.failed { color: var(--danger); }

@@ -1,46 +1,87 @@
 const API_URL = '/api/history';
-const statusEl = document.getElementById('status-indicator');
-const listEl = document.getElementById('server-list');
+
+// Helper: Format Bytes to TB/GB
+function formatSize(bytes) {
+    if (!bytes) return 'N/A';
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return '0 Byte';
+    const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+    return Math.round(bytes / Math.pow(1024, i), 2) + ' ' + sizes[i];
+}
+
+// Helper: Format Hours to Years
+function formatAge(hours) {
+    if (!hours) return 'N/A';
+    const years = (hours / 8760).toFixed(1);
+    return `${years} years`;
+}
 
 async function fetchData() {
     try {
-        const response = await fetch(API_URL);
-        if (!response.ok) throw new Error("Network error");
-        const data = await response.json();
+        const res = await fetch(API_URL);
+        const data = await res.json();
         render(data);
-        statusEl.textContent = "System Online";
-        statusEl.className = "status online";
-    } catch (error) {
-        statusEl.textContent = "Connection Lost";
-        statusEl.className = "status offline";
+        document.getElementById('status-indicator').className = 'status-badge online';
+        document.getElementById('status-indicator').innerHTML = '🟢 System Online';
+    } catch (e) {
+        document.getElementById('status-indicator').className = 'status-badge offline';
+        document.getElementById('status-indicator').innerHTML = '🔴 Disconnected';
     }
 }
 
 function render(servers) {
-    if (!servers || servers.length === 0) {
-        listEl.innerHTML = '<div class="loading">No agents reporting yet...</div>';
+    const list = document.getElementById('server-list');
+    if (!servers || !servers.length) {
+        list.innerHTML = '<div style="color:#aaa">Waiting for agents...</div>';
         return;
     }
-    listEl.innerHTML = servers.map(server => {
+
+    list.innerHTML = servers.map(server => {
         const drives = server.details.drives || [];
-        const driveHtml = drives.map(d => `
-            <li class="drive-item">
-                <span class="drive-name">${d.model_name || 'Unknown Drive'}</span>
-                <span class="drive-status ${d.smart_status?.passed ? 'passed' : 'failed'}">
-                    ${d.smart_status?.passed ? 'HEALTHY' : 'FAILING'}
-                </span>
-            </li>
-        `).join('');
+        
+        // Build the HTML for each drive in this server
+        const drivesHtml = drives.map(d => {
+            // Safe access to nested properties
+            const model = d.model_name || 'Unknown Device';
+            const serial = d.serial_number || '';
+            const capacity = formatSize(d.user_capacity?.bytes);
+            const temp = d.temperature?.current ? `${d.temperature.current}°C` : 'N/A';
+            const age = formatAge(d.power_on_time?.hours);
+            const passed = d.smart_status?.passed;
+            
+            return `
+            <div class="drive-row" style="border-left: 4px solid ${passed ? '#10B981' : '#EF4444'}">
+                <div class="drive-header">
+                    <div class="drive-model">${model} <span>${serial}</span></div>
+                    </div>
+                <div class="metrics">
+                    <div class="metric">
+                        <span class="label">Status</span>
+                        <span class="value ${passed ? 'passed' : 'failed'}">${passed ? 'Passed' : 'Failed'}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="label">Temp</span>
+                        <span class="value">${temp}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="label">Capacity</span>
+                        <span class="value">${capacity}</span>
+                    </div>
+                    <div class="metric">
+                        <span class="label">Powered On</span>
+                        <span class="value">${age}</span>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
 
         return `
             <div class="card">
                 <div class="card-header">
                     <span class="hostname">${server.hostname}</span>
-                    <span class="time">${new Date(server.timestamp).toLocaleTimeString()}</span>
+                    <span class="timestamp">Updated: ${new Date(server.timestamp).toLocaleTimeString()}</span>
                 </div>
-                <ul class="drive-list">
-                    ${driveHtml || '<li class="drive-item">No drives detected</li>'}
-                </ul>
+                ${drivesHtml || '<div class="drive-row">No drives detected</div>'}
             </div>
         `;
     }).join('');
