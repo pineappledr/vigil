@@ -5,7 +5,7 @@
 <p align="left">
   <img src="https://github.com/pineappledr/vigil/actions/workflows/build.yml/badge.svg" alt="Build Status">
   <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
-  <img src="https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white" alt="Go Version">
+  <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go Version">
   <img src="https://img.shields.io/badge/SQLite-v1.44.3-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
 </p>
 
