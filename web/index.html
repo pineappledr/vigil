@@ -3,41 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vigil Dashboard</title>
+    <title>Vigil Monitor</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1 onclick="resetDashboard()" style="cursor:pointer">Vigil</h1>
-            <div id="status-indicator" class="status-badge offline">Connecting...</div>
-        </header>
+    <div class="app-shell">
+        <nav class="top-bar">
+            <div class="logo-group" onclick="resetDashboard()">
+                <div class="logo-icon">
+                    <div class="logo-inner"></div>
+                </div>
+                <h1 class="brand-name">Vigil</h1>
+            </div>
+            
+            <div id="breadcrumbs" class="breadcrumbs hidden">
+                <span class="crumb-divider">/</span>
+                <span id="crumb-current" class="crumb-text">Server Name</span>
+            </div>
 
-        <nav id="breadcrumbs" class="breadcrumb-bar hidden">
-            <span onclick="resetDashboard()" class="crumb-link">Home</span>
-            <span class="crumb-separator">/</span>
-            <span id="crumb-server" class="crumb-active">Server Name</span>
+            <div class="spacer"></div>
+
+            <div id="status-indicator" class="status-pill offline">
+                <span class="status-dot"></span>
+                <span class="status-text">Connecting...</span>
+            </div>
         </nav>
 
-        <main id="dashboard-view">
-            <div id="server-list"></div>
-        </main>
-
-        <div id="details-view" class="hidden">
-            <button class="btn-back" onclick="goBackToContext()">← Back</button>
-            
-            <div class="details-layout">
-                <aside id="detail-sidebar" class="sidebar-card"></aside>
-
-                <section id="detail-content" class="content-card">
-                    <h2>S.M.A.R.T. Attributes</h2>
-                    <div class="table-wrapper">
-                        <table class="smart-table" id="detail-table"></table>
-                    </div>
-                </section>
+        <main class="content-area">
+            <div id="dashboard-view" class="view-section">
+                <div id="server-list" class="grid-layout"></div>
             </div>
-        </div>
+
+            <div id="details-view" class="view-section hidden">
+                <div class="details-container">
+                    <button class="btn-back" onclick="goBackToContext()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                        Back
+                    </button>
+                    
+                    <div class="split-layout">
+                        <aside id="detail-sidebar" class="panel sidebar-panel"></aside>
+                        <section class="panel content-panel">
+                            <div class="panel-header">
+                                <h2>S.M.A.R.T. Analysis</h2>
+                                <div class="badge-subtle">LIVE</div>
+                            </div>
+                            <div class="table-wrapper">
+                                <table class="smart-table" id="detail-table"></table>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
     <script src="app.js"></script>
 </body>
