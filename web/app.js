@@ -34,7 +34,6 @@ function goBackToContext() {
     else resetDashboard();
 }
 
-// Drive Details Sidebar
 function showDriveDetails(serverIdx, driveIdx) {
     const server = globalData[serverIdx];
     const drive = server.details.drives[driveIdx];
@@ -57,7 +56,6 @@ function showDriveDetails(serverIdx, driveIdx) {
         <div class="spec-row"><span class="spec-key">Power On</span><span class="spec-val">${formatAge(drive.power_on_time?.hours)}</span></div>
     `;
 
-    // Table
     const tbody = document.getElementById('detail-table');
     const attr = drive.ata_smart_attributes?.table || [];
     if (!attr.length) {
@@ -74,7 +72,7 @@ function showDriveDetails(serverIdx, driveIdx) {
     document.getElementById('details-view').classList.remove('hidden');
 }
 
-// Fetch & Render
+// Fetch
 async function fetchData() {
     try {
         const res = await fetch(API_URL);
@@ -86,11 +84,12 @@ async function fetchData() {
             renderDashboard(globalData);
         }
 
-        const el = document.getElementById('status-indicator');
-        el.className = 'status-pill online';
-        el.innerHTML = '<span class="status-dot"></span><span>Online</span>';
+        // Update Version Pill Status (Green/Normal)
+        const el = document.getElementById('connection-status');
+        el.classList.remove('disconnected');
     } catch (e) {
-        document.getElementById('status-indicator').className = 'status-pill offline';
+        // Update Version Pill Status (Red/Disconnected)
+        document.getElementById('connection-status').classList.add('disconnected');
     }
 }
 
