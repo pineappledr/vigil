@@ -1,12 +1,9 @@
-name: Build and Release
+name: Release
 
 on:
   push:
-    branches: [ "main" ]
     tags:
       - 'v*'
-  pull_request:
-    branches: [ "main" ]
 
 env:
   REGISTRY: ghcr.io
@@ -35,10 +32,9 @@ jobs:
       - name: Test
         run: go test -v ./...
 
-  build-and-push:
+  build-release-images:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     permissions:
       contents: read
       packages: write
@@ -46,6 +42,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -60,18 +62,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "is_release=true" >> $GITHUB_OUTPUT
-          else
-            echo "version=latest" >> $GITHUB_OUTPUT
-            echo "is_release=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build and push Server
         uses: docker/build-push-action@v5
         with:
@@ -80,9 +70,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ steps.version.outputs.is_release == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.version.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -94,16 +83,14 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}
-            ${{ steps.version.outputs.is_release == 'true' && format('{0}/{1}-agent:{2}', env.REGISTRY, env.IMAGE_NAME, steps.version.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  release:
+  build-release-binaries:
     needs: test
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
 
@@ -129,16 +116,21 @@ jobs:
           mkdir -p dist
           VERSION=${{ steps.version.outputs.version }}
           
-          # Agent binaries (no CGO needed)
+          # Agent binaries (no CGO - works cross-platform)
+          echo "Building agent binaries..."
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
           
-          # Server binary (amd64 only due to CGO)
+          # Server binary (needs CGO for sqlite, amd64 only)
+          echo "Building server binary..."
           GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-amd64 ./cmd/server
           
           # Create checksums
           cd dist
           sha256sum * > checksums.txt
+          
+          echo "Built files:"
+          ls -la
 
       - name: Generate changelog
         id: changelog
@@ -164,25 +156,53 @@ jobs:
             ### Changes
             ${{ steps.changelog.outputs.changes }}
             
-            ### Installation
+            ---
             
-            **Server (Docker):**
+            ### 🐳 Docker Installation
+            
+            **Server:**
             ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            docker run -d \
+              --name vigil-server \
+              -p 8090:8090 \
+              -v vigil_data:/data \
+              --restart unless-stopped \
+              ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
             ```
             
-            **Agent (Binary):**
+            **Agent:**
             ```bash
-            # AMD64
+            docker run -d \
+              --name vigil-agent \
+              --net=host \
+              --privileged \
+              -v /dev:/dev:ro \
+              --restart unless-stopped \
+              ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }} \
+              --server http://YOUR_SERVER_IP:8090
+            ```
+            
+            ---
+            
+            ### 📦 Binary Installation
+            
+            **Agent (AMD64):**
+            ```bash
             sudo curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-amd64 -o /usr/local/bin/vigil-agent
             sudo chmod +x /usr/local/bin/vigil-agent
-            
-            # ARM64
-            sudo curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o /usr/local/bin/vigil-agent
-            sudo chmod +x /usr/local/bin/vigil-agent
+            sudo vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
             ```
             
-            ### Checksums
+            **Agent (ARM64 / Raspberry Pi):**
+            ```bash
+            sudo curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o /usr/local/bin/vigil-agent
+            sudo chmod +x /usr/local/bin/vigil-agent
+            sudo vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
+            ```
+            
+            ---
+            
+            ### ✅ Checksums
             See `checksums.txt` for SHA256 checksums of all binaries.
           files: |
             dist/vigil-server-linux-amd64

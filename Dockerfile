@@ -1,9 +1,6 @@
-# Build Stage
-FROM golang:1.25-alpine AS builder
+# Build Stage - Use debian for reliable CGO compilation
+FROM golang:1.25 AS builder
 WORKDIR /app
-
-# Install build dependencies for sqlite
-RUN apk add --no-cache git gcc musl-dev
 
 # Copy go mod files first for better caching
 COPY go.mod go.sum ./
@@ -12,18 +9,21 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the server binary (CGO enabled for sqlite)
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o vigil-server ./cmd/server
+# Build the server binary
+RUN go build -ldflags="-s -w" -o vigil-server ./cmd/server
 
 # Final Stage
-FROM alpine:3.19
+FROM debian:bookworm-slim
 WORKDIR /app
 
-# Add ca-certificates for HTTPS and tzdata for timezone support
-RUN apk add --no-cache ca-certificates tzdata
+# Add ca-certificates for HTTPS
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN adduser -D -u 1000 vigil
+RUN useradd -m -u 1000 vigil
 
 # Copy the binary
 COPY --from=builder /app/vigil-server .
