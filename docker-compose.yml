@@ -1,0 +1,24 @@
+services:
+  server:
+    container_name: vigil-server
+    image: ghcr.io/pineappledr/vigil:latest
+    ports:
+      - "8090:8090"
+    volumes:
+      - vigil_data:/data
+    restart: unless-stopped
+    environment:
+      - PORT=8090
+      - DB_PATH=/data/vigil.db
+  agent:
+    image: ghcr.io/pineappledr/vigil-agent:latest
+    container_name: vigil-agent
+    network_mode: host
+    privileged: true
+    volumes:
+      - /dev:/dev
+    restart: unless-stopped
+    command: ["--server", "http://YOUR_SERVER_IP:8090"]
+
+volumes:
+  vigil_data:
