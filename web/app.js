@@ -9,6 +9,7 @@ const REFRESH_INTERVAL = 5000;
 // Application State
 let globalData = [];
 let activeServerIndex = null;
+let activeFilter = null; // 'attention' or null
 let refreshTimer = null;
 
 // ============================================
@@ -55,9 +56,9 @@ const getHealthStatus = (drive) => {
 };
 
 const getRotationType = (rate) => {
-    if (rate === 0) return 'SSD';
-    if (rate === undefined || rate === null) return 'N/A';
-    return `${rate} RPM`;
+    if (rate === 0) return 'SSD (Solid State)';
+    if (rate === undefined || rate === null) return 'Unknown';
+    return `HDD (${rate} RPM)`;
 };
 
 // ============================================
@@ -66,6 +67,7 @@ const getRotationType = (rate) => {
 
 function resetDashboard() {
     activeServerIndex = null;
+    activeFilter = null;
     
     document.getElementById('breadcrumbs').classList.add('hidden');
     document.getElementById('details-view').classList.add('hidden');
@@ -76,7 +78,49 @@ function resetDashboard() {
     document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
     document.querySelector('.nav-item')?.classList.add('active');
     
+    // Remove active state from summary cards
+    document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
+    
     renderDashboard(globalData);
+}
+
+function showNeedsAttention() {
+    activeServerIndex = null;
+    activeFilter = 'attention';
+    
+    // Update UI
+    document.getElementById('breadcrumbs').classList.remove('hidden');
+    document.getElementById('crumb-server').textContent = 'Needs Attention';
+    document.getElementById('page-title').textContent = 'Drives Needing Attention';
+    
+    document.getElementById('details-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+    
+    // Highlight the attention card
+    document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
+    document.querySelector('.summary-card.clickable')?.classList.add('active');
+    
+    // Filter to only show servers/drives that need attention
+    const filteredServers = globalData.map(server => {
+        const drives = server.details?.drives || [];
+        const attentionDrives = drives.filter(d => getHealthStatus(d) !== 'healthy');
+        
+        if (attentionDrives.length === 0) return null;
+        
+        return {
+            ...server,
+            details: {
+                ...server.details,
+                drives: attentionDrives
+            }
+        };
+    }).filter(Boolean);
+    
+    renderDashboard(filteredServers, false, true);
 }
 
 function showServer(serverIdx) {
@@ -113,10 +157,19 @@ function showDriveDetails(serverIdx, driveIdx) {
     if (!drive) return;
     
     const status = getHealthStatus(drive);
-    const rotation = getRotationType(drive.rotation_rate);
     
     // Render sidebar
     const sidebar = document.getElementById('detail-sidebar');
+    
+    // Get rotation rate with proper formatting
+    const getRotationDisplay = (rate) => {
+        if (rate === 0) return { type: 'SSD', detail: 'Solid State Drive' };
+        if (rate === undefined || rate === null) return { type: 'Unknown', detail: 'Not reported' };
+        return { type: 'HDD', detail: `${rate} RPM` };
+    };
+    
+    const rotationInfo = getRotationDisplay(drive.rotation_rate);
+    
     sidebar.innerHTML = `
         <div class="drive-header">
             <div class="icon ${status}">
@@ -143,8 +196,12 @@ function showDriveDetails(serverIdx, driveIdx) {
                 <span class="value">${drive.firmware_version || 'N/A'}</span>
             </div>
             <div class="info-row">
-                <span class="label">Type</span>
-                <span class="value">${rotation}</span>
+                <span class="label">Drive Type</span>
+                <span class="value">${rotationInfo.type}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Rotation Rate</span>
+                <span class="value">${rotationInfo.detail}</span>
             </div>
             <div class="info-row">
                 <span class="label">Interface</span>
@@ -165,7 +222,7 @@ function showDriveDetails(serverIdx, driveIdx) {
                 <span class="value ${(drive.temperature?.current > 50) ? 'warning' : ''}">${drive.temperature?.current ?? 'N/A'}°C</span>
             </div>
             <div class="info-row">
-                <span class="label">Power On Time</span>
+                <span class="label">Powered On</span>
                 <span class="value">${formatAge(drive.power_on_time?.hours)}</span>
             </div>
             <div class="info-row">
@@ -238,7 +295,9 @@ function showDriveDetails(serverIdx, driveIdx) {
 }
 
 function goBackToContext() {
-    if (activeServerIndex !== null) {
+    if (activeFilter === 'attention') {
+        showNeedsAttention();
+    } else if (activeServerIndex !== null) {
         showServer(activeServerIndex);
     } else {
         resetDashboard();
@@ -261,7 +320,10 @@ async function fetchData() {
         
         // Update UI based on current view
         if (!document.getElementById('dashboard-view').classList.contains('hidden')) {
-            if (activeServerIndex !== null && globalData[activeServerIndex]) {
+            if (activeFilter === 'attention') {
+                // Re-apply attention filter with fresh data
+                showNeedsAttention();
+            } else if (activeServerIndex !== null && globalData[activeServerIndex]) {
                 renderDashboard([globalData[activeServerIndex]], true);
             } else {
                 renderDashboard(globalData);
@@ -335,15 +397,15 @@ function updateStats() {
     document.getElementById('warning-count').textContent = totalDrives - healthyDrives;
 }
 
-function renderDashboard(servers, isFiltered = false) {
+function renderDashboard(servers, isFiltered = false, isAttentionView = false) {
     const container = document.getElementById('server-list');
     const summaryContainer = document.getElementById('summary-cards');
     
-    // Calculate summary stats
+    // Calculate summary stats from GLOBAL data (not filtered)
     let totalServers = globalData.length;
     let totalDrives = 0;
     let healthyDrives = 0;
-    let criticalDrives = 0;
+    let attentionDrives = 0;
     
     globalData.forEach(server => {
         const drives = server.details?.drives || [];
@@ -351,11 +413,15 @@ function renderDashboard(servers, isFiltered = false) {
         drives.forEach(drive => {
             const status = getHealthStatus(drive);
             if (status === 'healthy') healthyDrives++;
-            else if (status === 'critical') criticalDrives++;
+            else attentionDrives++;
         });
     });
     
     // Render summary cards
+    const attentionCardClass = attentionDrives > 0 ? 'clickable' : '';
+    const attentionCardClick = attentionDrives > 0 ? 'onclick="showNeedsAttention()"' : '';
+    const activeClass = activeFilter === 'attention' ? 'active' : '';
+    
     summaryContainer.innerHTML = `
         <div class="summary-card">
             <div class="icon blue">
@@ -389,33 +455,46 @@ function renderDashboard(servers, isFiltered = false) {
             <div class="value">${healthyDrives}</div>
             <div class="label">Healthy</div>
         </div>
-        <div class="summary-card">
-            <div class="icon ${criticalDrives > 0 ? 'red' : 'yellow'}">
+        <div class="summary-card ${attentionCardClass} ${activeClass}" ${attentionCardClick} title="${attentionDrives > 0 ? 'Click to view drives needing attention' : ''}">
+            <div class="icon ${attentionDrives > 0 ? 'red' : 'green'}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                     <line x1="12" y1="9" x2="12" y2="13"/>
                     <line x1="12" y1="17" x2="12.01" y2="17"/>
                 </svg>
             </div>
-            <div class="value">${totalDrives - healthyDrives}</div>
+            <div class="value">${attentionDrives}</div>
             <div class="label">Needs Attention</div>
         </div>
     `;
     
     // Render server cards
     if (!servers || servers.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <rect x="2" y="2" width="20" height="8" rx="2"/>
-                    <rect x="2" y="14" width="20" height="8" rx="2"/>
-                    <circle cx="6" cy="6" r="1"/>
-                    <circle cx="6" cy="18" r="1"/>
-                </svg>
-                <p>Waiting for agents to connect...</p>
-                <span class="hint">Run vigil-agent on your servers to begin monitoring</span>
-            </div>
-        `;
+        if (isAttentionView) {
+            container.innerHTML = `
+                <div class="empty-state success-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <p>All drives are healthy!</p>
+                    <span class="hint">No drives currently need attention</span>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="2" y="2" width="20" height="8" rx="2"/>
+                        <rect x="2" y="14" width="20" height="8" rx="2"/>
+                        <circle cx="6" cy="6" r="1"/>
+                        <circle cx="6" cy="18" r="1"/>
+                    </svg>
+                    <p>Waiting for agents to connect...</p>
+                    <span class="hint">Run vigil-agent on your servers to begin monitoring</span>
+                </div>
+            `;
+        }
         return;
     }
     
@@ -446,7 +525,7 @@ function renderDashboard(servers, isFiltered = false) {
                                 Size: <span class="value">${formatSize(drive.user_capacity?.bytes)}</span>
                             </span>
                             <span class="drive-stat">
-                                Age: <span class="value">${formatAge(drive.power_on_time?.hours)}</span>
+                                Powered On: <span class="value">${formatAge(drive.power_on_time?.hours)}</span>
                             </span>
                         </div>
                     </div>
