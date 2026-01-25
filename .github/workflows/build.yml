@@ -1,7 +1,11 @@
-name: Build and Push
+name: Build and Release
 
 on:
   push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
     branches: [ "main" ]
 
 env:
@@ -9,37 +13,183 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: |
+          go build -v ./cmd/server
+          go build -v ./cmd/agent
+
+      - name: Test
+        run: go test -v ./...
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     permissions:
       contents: read
       packages: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- BUILD 1: The Server ---
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push Server
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ steps.version.outputs.is_release == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.version.outputs.version) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # --- BUILD 2: The Agent ---
       - name: Build and push Agent
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}
+            ${{ steps.version.outputs.is_release == 'true' && format('{0}/{1}-agent:{2}', env.REGISTRY, env.IMAGE_NAME, steps.version.outputs.version) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build binaries
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          
+          # Server binaries
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-arm64 ./cmd/server
+          
+          # Agent binaries
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
+          
+          # Create checksums
+          cd dist
+          sha256sum * > checksums.txt
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "changes=Initial release" >> $GITHUB_OUTPUT
+          else
+            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
+            echo "changes<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Vigil v${{ steps.version.outputs.version }}
+          body: |
+            ## Vigil v${{ steps.version.outputs.version }}
+            
+            ### Changes
+            ${{ steps.changelog.outputs.changes }}
+            
+            ### Installation
+            
+            **Server (Docker):**
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ```
+            
+            **Agent (Binary):**
+            ```bash
+            # AMD64
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-amd64 -o /usr/local/bin/vigil-agent
+            chmod +x /usr/local/bin/vigil-agent
+            
+            # ARM64
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o /usr/local/bin/vigil-agent
+            chmod +x /usr/local/bin/vigil-agent
+            ```
+            
+            ### Checksums
+            See `checksums.txt` for SHA256 checksums of all binaries.
+          files: |
+            dist/vigil-server-linux-amd64
+            dist/vigil-server-linux-arm64
+            dist/vigil-agent-linux-amd64
+            dist/vigil-agent-linux-arm64
+            dist/checksums.txt
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}

@@ -1,34 +1,39 @@
-# --- General ---
-.DS_Store
-.vscode/
-.idea/
-*.log
-
-# --- Go ---
 # Binaries
 vigil-agent
 vigil-server
+vigil-agent-*
+vigil-server-*
 *.exe
 *.dll
 *.so
 *.dylib
 
-# Vendor & Build
-vendor/
-# We keep go.sum so builds are reproducible!
+# Build artifacts
+/dist/
+/bin/
 
-# --- Data ---
-# Ignore the local database so you don't overwrite it
+# Go
+vendor/
+
+# Database
 *.db
 *.sqlite
+*.sqlite3
 
-# --- Flutter/Dart ---
-/ui/.dart_tool/
-/ui/.packages
-/ui/.pub/
-/ui/build/
-/ui/ios/Flutter/App.framework
-/ui/ios/Flutter/Flutter.framework
-/ui/linux/flutter/ephemeral/
-/ui/macos/Flutter/ephemeral/
-/ui/windows/flutter/ephemeral/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local

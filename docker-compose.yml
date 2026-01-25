@@ -10,15 +10,26 @@ services:
     environment:
       - PORT=8090
       - DB_PATH=/data/vigil.db
-  agent:
-    image: ghcr.io/pineappledr/vigil-agent:latest
-    container_name: vigil-agent
-    network_mode: host
-    privileged: true
-    volumes:
-      - /dev:/dev
-    restart: unless-stopped
-    command: ["--server", "http://YOUR_SERVER_IP:8090"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Uncomment below to run agent alongside server
+  # agent:
+  #   image: ghcr.io/pineappledr/vigil-agent:latest
+  #   container_name: vigil-agent
+  #   network_mode: host
+  #   privileged: true
+  #   volumes:
+  #     - /dev:/dev:ro
+  #   restart: unless-stopped
+  #   command: ["--server", "http://localhost:8090", "--interval", "60"]
+  #   depends_on:
+  #     server:
+  #       condition: service_healthy
 
 volumes:
   vigil_data:
