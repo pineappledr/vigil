@@ -1,5 +1,5 @@
 services:
-  server:
+  vigil-server:
     container_name: vigil-server
     image: ghcr.io/pineappledr/vigil:latest
     restart: unless-stopped
@@ -26,7 +26,7 @@ services:
           memory: "128M"
 
   # Uncomment below to run agent alongside server
-  # agent:
+  # vigil-agent:
   #   container_name: vigil-agent
   #   image: ghcr.io/pineappledr/vigil-agent:latest
   #   restart: unless-stopped

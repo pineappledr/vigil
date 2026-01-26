@@ -102,7 +102,6 @@ function showNeedsAttention() {
     
     // Highlight the attention card
     document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
-    document.querySelector('.summary-card.clickable')?.classList.add('active');
     
     // Filter to only show servers/drives that need attention
     const filteredServers = globalData.map(server => {
@@ -121,6 +120,41 @@ function showNeedsAttention() {
     }).filter(Boolean);
     
     renderDashboard(filteredServers, false, true);
+}
+
+function showHealthyDrives() {
+    activeServerIndex = null;
+    activeFilter = 'healthy';
+    
+    // Update UI
+    document.getElementById('breadcrumbs').classList.remove('hidden');
+    document.getElementById('crumb-server').textContent = 'Healthy Drives';
+    document.getElementById('page-title').textContent = 'Healthy Drives';
+    
+    document.getElementById('details-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+    
+    // Filter to only show healthy drives
+    const filteredServers = globalData.map(server => {
+        const drives = server.details?.drives || [];
+        const healthyDrives = drives.filter(d => getHealthStatus(d) === 'healthy');
+        
+        if (healthyDrives.length === 0) return null;
+        
+        return {
+            ...server,
+            details: {
+                ...server.details,
+                drives: healthyDrives
+            }
+        };
+    }).filter(Boolean);
+    
+    renderDashboard(filteredServers, false, false);
 }
 
 function showServer(serverIdx) {
@@ -495,11 +529,15 @@ async function fetchData() {
         
         // Update UI based on current view
         if (!document.getElementById('dashboard-view').classList.contains('hidden')) {
-            if (activeFilter === 'attention') {
+            if (activeServerIndex !== null && globalData[activeServerIndex]) {
+                // Server detail view - use new layout
+                renderServerDetailView(globalData[activeServerIndex], activeServerIndex);
+            } else if (activeFilter === 'attention') {
                 // Re-apply attention filter with fresh data
                 showNeedsAttention();
-            } else if (activeServerIndex !== null && globalData[activeServerIndex]) {
-                renderDashboard([globalData[activeServerIndex]], true);
+            } else if (activeFilter === 'healthy') {
+                // Re-apply healthy filter with fresh data
+                showHealthyDrives();
             } else {
                 renderDashboard(globalData);
             }
@@ -592,13 +630,13 @@ function renderDashboard(servers, isFiltered = false, isAttentionView = false) {
         });
     });
     
-    // Render summary cards
+    // Render summary cards - all clickable
     const attentionCardClass = attentionDrives > 0 ? 'clickable' : '';
     const attentionCardClick = attentionDrives > 0 ? 'onclick="showNeedsAttention()"' : '';
     const activeClass = activeFilter === 'attention' ? 'active' : '';
     
     summaryContainer.innerHTML = `
-        <div class="summary-card">
+        <div class="summary-card clickable" onclick="resetDashboard()" title="View all servers">
             <div class="icon blue">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="2" y="2" width="20" height="8" rx="2"/>
@@ -610,7 +648,7 @@ function renderDashboard(servers, isFiltered = false, isAttentionView = false) {
             <div class="value">${totalServers}</div>
             <div class="label">Servers</div>
         </div>
-        <div class="summary-card">
+        <div class="summary-card clickable" onclick="resetDashboard()" title="View all drives">
             <div class="icon blue">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="2" y="4" width="20" height="16" rx="2"/>
@@ -620,7 +658,7 @@ function renderDashboard(servers, isFiltered = false, isAttentionView = false) {
             <div class="value">${totalDrives}</div>
             <div class="label">Total Drives</div>
         </div>
-        <div class="summary-card">
+        <div class="summary-card clickable" onclick="showHealthyDrives()" title="View healthy drives">
             <div class="icon green">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>

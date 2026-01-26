@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -192,25 +191,12 @@ func tryReadDrive(ctx context.Context, name, detectedType string) map[string]int
 			log.Printf("   🔄 Retrying %s with -d %s...", name, devType)
 		}
 
-		data, err := readDriveWithType(ctx, name, devType)
-		if err == nil && data != nil {
-			// Check if we got valid SMART data
-			if hasValidSmartData(data) {
-				if i > 0 {
-					log.Printf("   ✓ Success with -d %s", devType)
-				}
-				return data
+		data, _ := readDriveWithType(ctx, name, devType)
+		if data != nil && hasValidSmartData(data) {
+			if i > 0 {
+				log.Printf("   ✓ Success with -d %s", devType)
 			}
-		}
-
-		// If it's exit status 4, the device type doesn't support SMART or wrong type
-		if err != nil && strings.Contains(err.Error(), "exit status 4") {
-			continue // Try next type
-		}
-
-		// Other errors - still try fallbacks for SCSI devices
-		if err != nil && i < len(typesToTry)-1 {
-			continue
+			return data
 		}
 	}
 
@@ -222,15 +208,23 @@ func tryReadDrive(ctx context.Context, name, detectedType string) map[string]int
 func readDriveWithType(ctx context.Context, name, devType string) (map[string]interface{}, error) {
 	cmd := exec.CommandContext(ctx, "smartctl", "-x", "--json", "-d", devType, name)
 	out, err := cmd.Output()
-	if err != nil {
+
+	// smartctl returns non-zero exit codes for various warnings/errors
+	// but may still produce valid JSON output, so try to parse it anyway
+	if len(out) == 0 {
 		return nil, err
 	}
 
 	var data map[string]interface{}
-	if err := json.Unmarshal(out, &data); err != nil {
-		return nil, err
+	if jsonErr := json.Unmarshal(out, &data); jsonErr != nil {
+		// If JSON parsing fails, return the original error
+		if err != nil {
+			return nil, err
+		}
+		return nil, jsonErr
 	}
 
+	// If we got valid JSON data, return it even if there was an exit error
 	return data, nil
 }
 

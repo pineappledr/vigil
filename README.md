@@ -77,20 +77,21 @@ docker run -d \
 
 ```yaml
 services:
-  server:
+  vigil-server:
     container_name: vigil-server
     image: ghcr.io/pineappledr/vigil:latest
+    restart: unless-stopped
     ports:
       - "9080:9080"
-    volumes:
-      - vigil_data:/data
-    restart: unless-stopped
     environment:
       - PORT=9080
       - DB_PATH=/data/vigil.db
+    volumes:
+      - vigil_data:/data
 
 volumes:
   vigil_data:
+    name: vigil_data
 ```
 
 ---
@@ -105,7 +106,7 @@ Download and run the agent directly from GitHub.
 
 ```bash
 # 1. Download and Install (Replace v1.0.0 with your latest version)
-sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil-agent-linux-amd64 \
+sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.4/vigil-agent-linux-amd64 \
   -o /usr/local/bin/vigil-agent
 
 sudo chmod +x /usr/local/bin/vigil-agent
@@ -137,6 +138,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable vigil-agent
 sudo systemctl start vigil-agent
+sudo systemctl status vigil-agent
 ```
 
 ### Option C: Docker Agent
@@ -161,15 +163,15 @@ docker run -d \
 
 ```yaml
 services:
-  agent:
-    image: ghcr.io/pineappledr/vigil-agent:latest
+  vigil-agent:
     container_name: vigil-agent
+    image: ghcr.io/pineappledr/vigil-agent:latest
+    restart: unless-stopped
     network_mode: host
     privileged: true
+    command: ["--server", "http://YOUR_SERVER_IP:9080", "--interval", "60"]
     volumes:
       - /dev:/dev
-    restart: unless-stopped
-    command: ["--server", "http://YOUR_SERVER_IP:9080", "--interval", "60"]
 ```
 
 ---

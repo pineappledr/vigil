@@ -1099,21 +1099,20 @@ body {
 .server-detail-view {
     display: flex;
     flex-direction: column;
-    gap: 32px;
-    max-width: 1400px;
-    margin: 0 auto;
+    gap: 24px;
+    max-width: 100%;
 }
 
 /* Drive Section */
 .drive-section {
     background: var(--bg-secondary);
-    border-radius: 16px;
+    border-radius: 12px;
     border: 1px solid var(--border-color);
     overflow: hidden;
 }
 
 .drive-section-header {
-    padding: 16px 24px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-elevated);
 }
@@ -1121,15 +1120,15 @@ body {
 .drive-section-title {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 1rem;
+    gap: 10px;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .section-icon {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
 }
 
@@ -1148,32 +1147,34 @@ body {
 .drive-section-count {
     background: var(--bg-hover);
     color: var(--text-secondary);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 500;
-    padding: 2px 10px;
-    border-radius: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
     margin-left: auto;
 }
 
-/* Drive Grid */
+/* Drive Grid - Compact */
 .drive-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-    padding: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
-/* Drive Card */
+/* Drive Card - Compact */
 .drive-card {
     background: var(--bg-elevated);
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid var(--border-color);
-    padding: 16px;
+    padding: 12px;
     cursor: pointer;
     transition: all var(--transition-normal);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
 
 .drive-card:hover {
@@ -1201,9 +1202,9 @@ body {
 }
 
 .drive-card-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1211,8 +1212,8 @@ body {
 }
 
 .drive-card-icon svg {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
 .drive-card-icon.healthy {
@@ -1232,43 +1233,50 @@ body {
 
 .drive-card-body {
     flex: 1;
+    min-height: 0;
 }
 
 .drive-card-model {
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
     word-break: break-word;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .drive-card-serial {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     color: var(--text-muted);
 }
 
 .drive-card-stats {
     display: flex;
-    gap: 16px;
-    padding-top: 12px;
+    gap: 12px;
+    padding-top: 8px;
     border-top: 1px solid var(--border-color);
 }
 
 .drive-card-stat {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
 }
 
 .drive-card-stat .stat-value {
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     color: var(--text-primary);
 }
 
 .drive-card-stat .stat-label {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1281,10 +1289,10 @@ body {
 }
 
 .drive-type-badge {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 6px;
+    padding: 2px 6px;
+    border-radius: 4px;
     background: var(--bg-hover);
     color: var(--text-secondary);
 }
@@ -1300,13 +1308,26 @@ body {
     color: var(--warning);
 }
 
+/* Status badge - smaller */
+.drive-card .status-badge {
+    font-size: 0.6rem;
+    padding: 2px 6px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .drive-grid {
         grid-template-columns: 1fr;
+        max-height: none;
     }
     
     .drive-card-stats {
         flex-wrap: wrap;
+    }
+}
+
+@media (min-width: 1400px) {
+    .drive-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
 }
