@@ -74,6 +74,10 @@ function resetDashboard() {
     document.getElementById('dashboard-view').classList.remove('hidden');
     document.getElementById('page-title').textContent = 'Infrastructure Overview';
     
+    // Hide settings view if it exists
+    const settingsView = document.getElementById('settings-view');
+    if (settingsView) settingsView.classList.add('hidden');
+    
     // Reset nav active states
     document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
     document.querySelector('.nav-item')?.classList.add('active');
@@ -321,6 +325,9 @@ function renderDriveCard(drive, serverIdx) {
     const isSsd = drive.rotation_rate === 0;
     const driveType = isNvme ? 'NVMe' : isSsd ? 'SSD' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'HDD';
     const driveName = getDriveName(drive);
+    const hostname = globalData[serverIdx]?.hostname || '';
+    const serial = drive.serial_number || '';
+    const alias = drive._alias || '';
     
     return `
         <div class="drive-card ${status}" onclick="showDriveDetails(${serverIdx}, ${drive._idx})">
@@ -333,6 +340,12 @@ function renderDriveCard(drive, serverIdx) {
                         <line x1="14" y1="12" x2="18" y2="12"/>
                     </svg>
                 </div>
+                <button class="alias-btn" onclick="event.stopPropagation(); showAliasModal('${hostname}', '${serial}', '${alias.replace(/'/g, "\\'")}', '${driveName.replace(/'/g, "\\'")}')" title="Set alias">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                </button>
                 <span class="status-badge ${drive.smart_status?.passed ? 'passed' : 'failed'}">
                     ${drive.smart_status?.passed ? 'Passed' : 'Failed'}
                 </span>
@@ -923,10 +936,457 @@ function renderDashboard(servers, isFiltered = false, isAttentionView = false) {
 }
 
 // ============================================
+// AUTHENTICATION
+// ============================================
+
+let currentUser = null;
+let mustChangePassword = false;
+
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+        
+        if (data.auth_enabled && !data.authenticated) {
+            window.location.href = '/login.html';
+            return false;
+        }
+        
+        currentUser = data.username || null;
+        mustChangePassword = data.must_change_password || false;
+        updateUserUI();
+        
+        // Force password change modal if required
+        if (mustChangePassword) {
+            setTimeout(() => showForcePasswordChange(), 500);
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('Auth check failed:', e);
+        return true; // Continue anyway
+    }
+}
+
+function updateUserUI() {
+    const userMenuEl = document.getElementById('user-menu');
+    if (!userMenuEl) return;
+    
+    if (currentUser) {
+        userMenuEl.innerHTML = `
+            <div class="user-dropdown">
+                <button class="user-btn" onclick="toggleUserMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <span>${currentUser}</span>
+                    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                <div class="dropdown-menu" id="dropdown-menu">
+                    <button onclick="showSettings()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        Settings
+                    </button>
+                    <button onclick="logout()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        userMenuEl.innerHTML = '';
+    }
+}
+
+function toggleUserMenu() {
+    const menu = document.getElementById('dropdown-menu');
+    if (menu) {
+        menu.classList.toggle('show');
+    }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.user-dropdown')) {
+        const menu = document.getElementById('dropdown-menu');
+        if (menu) menu.classList.remove('show');
+    }
+});
+
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+        console.error('Logout error:', e);
+    }
+    window.location.href = '/login.html';
+}
+
+// Settings Page
+function showSettings() {
+    // Hide dashboard, show settings view
+    document.getElementById('dashboard-view').classList.add('hidden');
+    document.getElementById('details-view').classList.add('hidden');
+    
+    // Update breadcrumbs
+    document.getElementById('breadcrumbs').classList.remove('hidden');
+    document.getElementById('crumb-server').textContent = 'Settings';
+    document.getElementById('page-title').textContent = 'Settings';
+    
+    // Clear server selection
+    document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+    
+    // Create settings view if not exists
+    let settingsView = document.getElementById('settings-view');
+    if (!settingsView) {
+        settingsView = document.createElement('div');
+        settingsView.id = 'settings-view';
+        settingsView.className = 'view settings-view';
+        document.querySelector('.main-content').appendChild(settingsView);
+    }
+    
+    settingsView.innerHTML = `
+        <div class="settings-container">
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <h3>Security</h3>
+                </div>
+                <div class="settings-card">
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <div class="settings-item-title">Change Password</div>
+                            <div class="settings-item-desc">Update your account password</div>
+                        </div>
+                        <button class="btn btn-secondary" onclick="showChangePasswordModal()">Change</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <h3>Account</h3>
+                </div>
+                <div class="settings-card">
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <div class="settings-item-title">Username</div>
+                            <div class="settings-item-desc">${currentUser}</div>
+                        </div>
+                    </div>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <div class="settings-item-title">Sign Out</div>
+                            <div class="settings-item-desc">Log out of your account</div>
+                        </div>
+                        <button class="btn btn-danger" onclick="logout()">Sign Out</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="16" x2="12" y2="12"/>
+                        <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    <h3>About</h3>
+                </div>
+                <div class="settings-card">
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <div class="settings-item-title">Version</div>
+                            <div class="settings-item-desc" id="settings-version">Loading...</div>
+                        </div>
+                    </div>
+                    <div class="settings-item">
+                        <div class="settings-item-info">
+                            <div class="settings-item-title">GitHub</div>
+                            <div class="settings-item-desc">
+                                <a href="https://github.com/pineappledr/vigil" target="_blank">github.com/pineappledr/vigil</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    settingsView.classList.remove('hidden');
+    
+    // Load version
+    fetch('/api/version').then(r => r.json()).then(data => {
+        document.getElementById('settings-version').textContent = data.version || 'Unknown';
+    });
+}
+
+function showChangePasswordModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Change Password</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Current Password</label>
+                    <input type="password" id="current-password" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>New Password</label>
+                    <input type="password" id="new-password" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="confirm-password" class="form-input">
+                </div>
+                <div id="password-error" class="form-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitPasswordChange()">Change Password</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('current-password').focus();
+}
+
+// Force password change on first login
+function showForcePasswordChange() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'force-password-modal';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🔐 Password Change Required</h3>
+            </div>
+            <div class="modal-body">
+                <p class="modal-message">For security, you must change your password before continuing.</p>
+                <div class="form-group">
+                    <label>Current Password</label>
+                    <input type="password" id="force-current-password" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>New Password</label>
+                    <input type="password" id="force-new-password" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="force-confirm-password" class="form-input">
+                </div>
+                <div id="force-password-error" class="form-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="submitForcePasswordChange()">Set New Password</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('force-current-password').focus();
+}
+
+async function submitForcePasswordChange() {
+    const currentPassword = document.getElementById('force-current-password').value;
+    const newPassword = document.getElementById('force-new-password').value;
+    const confirmPassword = document.getElementById('force-confirm-password').value;
+    const errorEl = document.getElementById('force-password-error');
+    
+    if (!currentPassword) {
+        errorEl.textContent = 'Please enter your current password';
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        errorEl.textContent = 'New passwords do not match';
+        return;
+    }
+    
+    if (newPassword.length < 6) {
+        errorEl.textContent = 'Password must be at least 6 characters';
+        return;
+    }
+    
+    if (currentPassword === newPassword) {
+        errorEl.textContent = 'New password must be different from current password';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/users/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            document.getElementById('force-password-modal').remove();
+            mustChangePassword = false;
+            alert('Password changed successfully! Welcome to Vigil.');
+        } else {
+            errorEl.textContent = data.error || 'Failed to change password';
+        }
+    } catch (e) {
+        errorEl.textContent = 'Connection error';
+    }
+}
+
+function showChangePassword() {
+    showChangePasswordModal();
+}
+
+async function submitPasswordChange() {
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const errorEl = document.getElementById('password-error');
+    
+    if (newPassword !== confirmPassword) {
+        errorEl.textContent = 'New passwords do not match';
+        return;
+    }
+    
+    if (newPassword.length < 6) {
+        errorEl.textContent = 'Password must be at least 6 characters';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/users/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            document.querySelector('.modal-overlay').remove();
+            alert('Password changed successfully');
+        } else {
+            errorEl.textContent = data.error || 'Failed to change password';
+        }
+    } catch (e) {
+        errorEl.textContent = 'Connection error';
+    }
+}
+
+// ============================================
+// DRIVE ALIASES
+// ============================================
+
+function showAliasModal(hostname, serialNumber, currentAlias, driveName) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Set Drive Alias</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alias-drive-info">
+                    <div><strong>Drive:</strong> ${driveName}</div>
+                    <div><strong>Serial:</strong> ${serialNumber}</div>
+                    <div><strong>Server:</strong> ${hostname}</div>
+                </div>
+                <div class="form-group">
+                    <label>Alias (friendly name)</label>
+                    <input type="text" id="alias-input" class="form-input" 
+                           value="${currentAlias || ''}" 
+                           placeholder="e.g., Plex Media, VM Storage, Backup Drive">
+                </div>
+                <p class="form-hint">Leave empty to remove the alias</p>
+                <div id="alias-error" class="form-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAlias('${hostname}', '${serialNumber}')">Save Alias</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('alias-input').focus();
+}
+
+async function submitAlias(hostname, serialNumber) {
+    const alias = document.getElementById('alias-input').value.trim();
+    const errorEl = document.getElementById('alias-error');
+    
+    try {
+        const response = await fetch('/api/aliases', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                hostname: hostname,
+                serial_number: serialNumber,
+                alias: alias
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            document.querySelector('.modal-overlay').remove();
+            // Refresh data to show new alias
+            fetchData();
+        } else {
+            errorEl.textContent = data.error || 'Failed to save alias';
+        }
+    } catch (e) {
+        errorEl.textContent = 'Connection error';
+    }
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check auth first
+    const isAuth = await checkAuthStatus();
+    if (!isAuth) return;
+    
     fetchVersion();
     fetchData();
     refreshTimer = setInterval(fetchData, REFRESH_INTERVAL);

@@ -127,6 +127,7 @@ func initDB(path string, config Config) error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
+		must_change_password INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -153,22 +154,30 @@ func initDB(path string, config Config) error {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
+	// Add must_change_password column if it doesn't exist (migration for existing DBs)
+	db.Exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+
 	// Create default admin user if auth is enabled and no users exist
 	if config.AuthEnabled {
 		var count int
 		db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 		if count == 0 {
 			password := config.AdminPass
+			mustChange := 1 // Force password change on first login
 			if password == "" {
 				// Generate random password if not set
 				password = generateToken()[:12]
 				log.Printf("🔑 Generated admin password: %s", password)
 				log.Printf("   Set ADMIN_PASS environment variable to use a custom password")
+			} else {
+				// If admin set a password via env, don't force change
+				mustChange = 0
 			}
 			_, err := db.Exec(
-				"INSERT INTO users (username, password_hash) VALUES (?, ?)",
+				"INSERT INTO users (username, password_hash, must_change_password) VALUES (?, ?, ?)",
 				config.AdminUser,
 				hashPassword(password),
+				mustChange,
 			)
 			if err != nil {
 				log.Printf("⚠️  Could not create admin user: %v", err)
@@ -409,15 +418,23 @@ func handleVersion(w http.ResponseWriter, r *http.Request) {
 func handleAuthStatus(config Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		session := getSession(r)
+
+		var mustChangePassword bool
+		var username string
+
+		if session != nil {
+			username = session.Username
+			// Check if user must change password
+			var mustChange int
+			db.QueryRow("SELECT COALESCE(must_change_password, 0) FROM users WHERE id = ?", session.UserID).Scan(&mustChange)
+			mustChangePassword = mustChange == 1
+		}
+
 		jsonResponse(w, map[string]interface{}{
-			"auth_enabled":  config.AuthEnabled,
-			"authenticated": session != nil,
-			"username": func() string {
-				if session != nil {
-					return session.Username
-				}
-				return ""
-			}(),
+			"auth_enabled":         config.AuthEnabled,
+			"authenticated":        session != nil,
+			"username":             username,
+			"must_change_password": mustChangePassword,
 		})
 	}
 }
@@ -445,10 +462,11 @@ func handleLogin(config Config) http.HandlerFunc {
 		// Find user
 		var user User
 		var createdAt string
+		var mustChange int
 		err := db.QueryRow(
-			"SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
+			"SELECT id, username, password_hash, COALESCE(must_change_password, 0), created_at FROM users WHERE username = ?",
 			creds.Username,
-		).Scan(&user.ID, &user.Username, &user.PasswordHash, &createdAt)
+		).Scan(&user.ID, &user.Username, &user.PasswordHash, &mustChange, &createdAt)
 
 		if err != nil || user.PasswordHash != hashPassword(creds.Password) {
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
@@ -480,9 +498,10 @@ func handleLogin(config Config) http.HandlerFunc {
 
 		log.Printf("🔓 Login: %s", user.Username)
 		jsonResponse(w, map[string]interface{}{
-			"success":  true,
-			"token":    token,
-			"username": user.Username,
+			"success":              true,
+			"token":                token,
+			"username":             user.Username,
+			"must_change_password": mustChange == 1,
 		})
 	}
 }
@@ -540,9 +559,9 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update password
+	// Update password and clear must_change_password flag
 	_, err := db.Exec(
-		"UPDATE users SET password_hash = ? WHERE id = ?",
+		"UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
 		hashPassword(req.NewPassword), session.UserID,
 	)
 	if err != nil {

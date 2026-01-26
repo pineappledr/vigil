@@ -1,6 +1,6 @@
 # Vigil
 
-> **Proactive, lightweight server monitoring.**
+> **Proactive, lightweight server & drive monitoring with SMART health analysis.**
 
 <p align="left">
   <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
@@ -9,19 +9,13 @@
   <img src="https://img.shields.io/badge/SQLite-v1.44.0-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
 </p>
 
-<p align="right">
-  <a href="https://github.com/pineappledr/vigil">
-    <img src="https://img.shields.io/badge/GitHub-Repository-181717?logo=github&logoColor=white" alt="GitHub">
-  </a>
-</p>
-
 **Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard and predictive health analysis, ensuring you never miss a critical hardware failure.
 
-Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.).
+Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
 
 ---
 
-## 🚀 Features
+## ✨ Features
 
 - **🔥 Lightweight Agent:** Single Go binary with zero dependencies. Deploy it on any server in seconds.
 - **🐳 Docker Server:** The central hub is containerized for easy deployment via Docker or Compose.
@@ -29,6 +23,22 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.).
 - **🔍 Deep Analysis:** View raw S.M.A.R.T. attributes, temperature history, and drive details.
 - **🤖 Predictive Checks:** Advanced analysis to determine if a drive is failing or just aging.
 - **📊 Continuous Monitoring:** Configurable reporting intervals with automatic reconnection.
+- **🔐 Authentication:** Built-in login system with secure sessions.
+- **🏷️ Drive Aliases:** Set custom names for your drives (e.g., "Plex Media", "Backup Drive").
+- **🔧 HBA Support:** Automatic detection for SATA drives behind SAS HBA controllers (LSI SAS3224, etc.).
+
+---
+
+## 📸 Screenshots
+
+### Dashboard
+The main dashboard shows all servers with their drives in a clean card grid layout.
+
+### Drive Details
+Click any drive to see detailed S.M.A.R.T. attributes, temperature, power-on hours, and health status.
+
+### Settings
+Manage your password and account settings.
 
 ---
 
@@ -58,64 +68,72 @@ sudo pacman -S smartmontools nvme-cli
 
 ---
 
-## Deployment: Server
+## 🚀 Quick Start
 
-The central server runs in a container. It collects data from all your agents.
-
-### Option A: Docker Run (Quick)
+### 1. Deploy the Server
 
 ```bash
 docker run -d \
   --name vigil-server \
   -p 9080:9080 \
   -v vigil_data:/data \
+  -e ADMIN_PASS=your-secure-password \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil:latest
 ```
 
-### Option B: Docker Compose
+### 2. Access the Dashboard
 
-```yaml
-services:
-  vigil-server:
-    container_name: vigil-server
-    image: ghcr.io/pineappledr/vigil:latest
-    restart: unless-stopped
-    ports:
-      - "9080:9080"
-    environment:
-      - PORT=9080
-      - DB_PATH=/data/vigil.db
-    volumes:
-      - vigil_data:/data
+Open `http://YOUR_SERVER_IP:9080` in your browser.
 
-volumes:
-  vigil_data:
-    name: vigil_data
+**Default login:**
+- Username: `admin`
+- Password: Check server logs or set via `ADMIN_PASS` environment variable
+
+> 💡 On first login with a generated password, you'll be prompted to change it.
+
+### 3. Deploy Agents
+
+On each server you want to monitor:
+
+```bash
+# Download agent
+sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \
+  -o /usr/local/bin/vigil-agent
+sudo chmod +x /usr/local/bin/vigil-agent
+
+# Run agent
+sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
 ```
 
 ---
 
-## Deployment: Agent
+## 📦 Deployment Options
 
-The agent runs on your managed nodes (NAS, Servers, VMs). You can run it as a binary (recommended) or via Docker.
+### Server: Docker Compose (Recommended)
 
-### Option A: Binary (One-Line Install)
+```yaml
+services:
+  server:
+    container_name: vigil-server
+    image: ghcr.io/pineappledr/vigil:latest
+    ports:
+      - "9080:9080"
+    volumes:
+      - vigil_data:/data
+    restart: unless-stopped
+    environment:
+      - PORT=9080
+      - DB_PATH=/data/vigil.db
+      - AUTH_ENABLED=true
+      - ADMIN_USER=admin
+      - ADMIN_PASS=your-secure-password
 
-Download and run the agent directly from GitHub.
-
-```bash
-# 1. Download and Install (Replace v1.0.0 with your latest version)
-sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.4/vigil-agent-linux-amd64 \
-  -o /usr/local/bin/vigil-agent
-
-sudo chmod +x /usr/local/bin/vigil-agent
-
-# 2. Run (Replace with your Server IP)
-sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
+volumes:
+  vigil_data:
 ```
 
-### Option B: Systemd Service (Recommended for Production)
+### Agent: Systemd Service (Recommended)
 
 ```bash
 # Create service file
@@ -138,14 +156,9 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable vigil-agent
 sudo systemctl start vigil-agent
-sudo systemctl status vigil-agent
 ```
 
-### Option C: Docker Agent
-
-> **Note:** The agent requires privileged access to read physical disk stats.
-
-**Docker Run:**
+### Agent: Docker
 
 ```bash
 docker run -d \
@@ -159,24 +172,19 @@ docker run -d \
   --interval 60
 ```
 
-**Docker Compose:**
-
-```yaml
-services:
-  vigil-agent:
-    container_name: vigil-agent
-    image: ghcr.io/pineappledr/vigil-agent:latest
-    restart: unless-stopped
-    network_mode: host
-    privileged: true
-    command: ["--server", "http://YOUR_SERVER_IP:9080", "--interval", "60"]
-    volumes:
-      - /dev:/dev
-```
-
 ---
 
-## Configuration
+## ⚙️ Configuration
+
+### Server Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `9080` | HTTP server port |
+| `DB_PATH` | `vigil.db` | SQLite database path |
+| `AUTH_ENABLED` | `true` | Enable/disable authentication |
+| `ADMIN_USER` | `admin` | Default admin username |
+| `ADMIN_PASS` | (generated) | Admin password (random if not set) |
 
 ### Agent Flags
 
@@ -185,17 +193,89 @@ services:
 | `--server` | `http://localhost:9080` | Vigil server URL |
 | `--interval` | `60` | Reporting interval in seconds (0 = single run) |
 | `--hostname` | (auto-detected) | Override hostname |
-
-### Server Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `9080` | HTTP server port |
-| `DB_PATH` | `vigil.db` | SQLite database path |
+| `--version` | - | Show version |
 
 ---
 
-## Build from Source
+## 🏷️ Drive Aliases
+
+You can set custom names for your drives to make them easier to identify:
+
+1. Hover over any drive card
+2. Click the **edit icon** (pencil) in the top-right corner
+3. Enter a friendly name like "Plex Media", "VM Storage", or "Backup Drive"
+4. Click **Save**
+
+Aliases are stored in the database and persist across reboots.
+
+---
+
+## 🔐 Authentication
+
+### First Login
+
+When you first start Vigil with authentication enabled:
+
+1. If `ADMIN_PASS` is not set, a random password is generated and logged:
+   ```
+   🔑 Generated admin password: a1b2c3d4e5f6
+   ✓ Created admin user: admin
+   ```
+
+2. Login at `http://YOUR_SERVER_IP:9080/login.html`
+
+3. You'll be prompted to change your password on first login
+
+### Disable Authentication
+
+For internal networks or testing, you can disable authentication:
+
+```bash
+docker run -e AUTH_ENABLED=false ghcr.io/pineappledr/vigil:latest
+```
+
+---
+
+## 🔧 HBA Controller Support
+
+Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224, Broadcom, etc.):
+
+- Automatically tries multiple device types (`sat`, `scsi`, `auto`)
+- No manual configuration required
+- Works with SATA drives connected to SAS backplanes
+
+---
+
+## 📡 API Endpoints
+
+### Public Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/api/version` | Get server version |
+| `GET` | `/api/auth/status` | Check authentication status |
+| `POST` | `/api/auth/login` | Login |
+| `POST` | `/api/auth/logout` | Logout |
+| `POST` | `/api/report` | Receive agent reports |
+
+### Protected Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/history` | Get latest reports per host |
+| `GET` | `/api/hosts` | List all known hosts |
+| `DELETE` | `/api/hosts/{hostname}` | Remove a host and its data |
+| `GET` | `/api/hosts/{hostname}/history` | Get host history |
+| `GET` | `/api/aliases` | Get all drive aliases |
+| `POST` | `/api/aliases` | Set a drive alias |
+| `DELETE` | `/api/aliases/{id}` | Delete an alias |
+| `GET` | `/api/users/me` | Get current user |
+| `POST` | `/api/users/password` | Change password |
+
+---
+
+## 🔨 Build from Source
 
 ```bash
 # Clone the repository
@@ -215,18 +295,31 @@ GOOS=linux GOARCH=arm64 go build -o vigil-agent-linux-arm64 ./cmd/agent
 
 ---
 
-## API Endpoints
+## 🐛 Troubleshooting
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/api/report` | Receive agent reports |
-| `GET` | `/api/history` | Get latest reports per host |
-| `GET` | `/api/hosts` | List all known hosts |
-| `DELETE` | `/api/hosts/{hostname}` | Remove a host and its data |
+### Agent not detecting drives
+
+1. Ensure `smartmontools` is installed
+2. Run `smartctl --scan` to see detected drives
+3. Check if drives need special device type: `smartctl -a -d sat /dev/sdX`
+
+### "Unknown Drive" showing instead of model name
+
+This can happen with drives behind HBA controllers. The latest agent version automatically handles this, but the drive may be reporting limited info. Setting an alias can help identify the drive.
+
+### Authentication issues
+
+- Check logs for generated password: `docker logs vigil-server | grep password`
+- Reset by deleting the database: `docker volume rm vigil_data`
 
 ---
 
-## License
+## 📄 License
 
 MIT License - See [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/pineappledr">PineappleDR</a>
+</p>

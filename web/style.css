@@ -1421,28 +1421,137 @@ body {
 
 .alias-btn {
     padding: 6px;
-    background: var(--bg-hover);
+    background: var(--accent-primary);
     border: none;
     border-radius: 6px;
-    color: var(--text-muted);
+    color: white;
     cursor: pointer;
-    opacity: 0;
     transition: all var(--transition-fast);
 }
 
-.drive-card:hover .alias-btn {
-    opacity: 1;
-}
-
 .alias-btn:hover {
-    background: var(--accent-primary);
-    color: white;
+    background: var(--accent-secondary);
+    transform: scale(1.1);
 }
 
 .alias-btn svg {
     width: 14px;
     height: 14px;
     display: block;
+}
+
+/* ============================================
+   SETTINGS PAGE
+   ============================================ */
+
+.settings-view {
+    padding: 24px;
+    max-width: 800px;
+}
+
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.settings-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.settings-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-section-header svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-primary);
+}
+
+.settings-section-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.settings-card {
+    padding: 8px 0;
+}
+
+.settings-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    gap: 16px;
+}
+
+.settings-item:not(:last-child) {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-item-info {
+    flex: 1;
+}
+
+.settings-item-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.settings-item-desc {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.settings-item-desc a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.settings-item-desc a:hover {
+    text-decoration: underline;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+.modal-message {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Dropdown menu icons */
+.dropdown-menu button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dropdown-menu button svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
 }
 
 .drive-section-title {
