@@ -17,7 +17,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const version = "1.0.0"
+const version = "1.0.2"
 
 var db *sql.DB
 

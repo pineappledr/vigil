@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const version = "1.0.0"
+const version = "1.0.2"
 
 type DriveReport struct {
 	Hostname  string                   `json:"hostname"`
