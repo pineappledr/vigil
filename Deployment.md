@@ -26,12 +26,12 @@ services:
     container_name: vigil-server
     image: ghcr.io/pineappledr/vigil:latest
     ports:
-      - "8090:8090"
+      - "9080:9080"
     volumes:
       - ./data:/data
     restart: unless-stopped
     environment:
-      - PORT=8090
+      - PORT=9080
       - DB_PATH=/data/vigil.db
 
 EOF
@@ -64,7 +64,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/var/lib/vigil
-Environment=PORT=8090
+Environment=PORT=9080
 Environment=DB_PATH=/var/lib/vigil/vigil.db
 ExecStart=/usr/local/bin/vigil-server
 Restart=always
@@ -85,7 +85,7 @@ systemctl status vigil-server
 
 ### Verify Server is Running
 
-Open your browser and go to: `http://YOUR_SERVER_IP:8090`
+Open your browser and go to: `http://YOUR_SERVER_IP:9080`
 
 You should see the Vigil dashboard (empty until agents connect).
 
@@ -126,7 +126,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
+ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
 Restart=always
 RestartSec=10
 
@@ -153,21 +153,21 @@ docker run -d \
   -v /dev:/dev:ro \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:8090 \
+  --server http://YOUR_SERVER_IP:9080 \
   --interval 60
 ```
 
 ### Option 3: One-time Manual Run (Testing)
 
 ```bash
-sudo vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 0
+sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 0
 ```
 
 ### Agent Configuration Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--server` | `http://localhost:8090` | Vigil server URL |
+| `--server` | `http://localhost:9080` | Vigil server URL |
 | `--interval` | `60` | Reporting interval in seconds (0 = run once) |
 | `--hostname` | (auto) | Override the hostname |
 | `--version` | - | Show version and exit |
@@ -297,13 +297,13 @@ git push origin --delete v1.0.0
 
 ### Deploy Server
 ```bash
-docker run -d --name vigil-server -p 8090:8090 -v vigil_data:/data --restart unless-stopped ghcr.io/pineappledr/vigil:latest
+docker run -d --name vigil-server -p 9080:9080 -v vigil_data:/data --restart unless-stopped ghcr.io/pineappledr/vigil:latest
 ```
 
 ### Deploy Agent
 ```bash
 sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /usr/local/bin/vigil-agent && sudo chmod +x /usr/local/bin/vigil-agent
-sudo vigil-agent --server http://SERVER_IP:8090 --interval 60
+sudo vigil-agent --server http://SERVER_IP:9080 --interval 60
 ```
 
 ### Create Release
@@ -318,11 +318,11 @@ git tag v1.0.0 && git push origin v1.0.0
 ### Agent can't connect to server
 ```bash
 # Test connectivity
-curl http://YOUR_SERVER_IP:8090/health
+curl http://YOUR_SERVER_IP:9080/health
 
 # Check firewall
-sudo ufw allow 8090/tcp  # Ubuntu
-sudo firewall-cmd --add-port=8090/tcp --permanent  # RHEL/Fedora
+sudo ufw allow 9080/tcp  # Ubuntu
+sudo firewall-cmd --add-port=9080/tcp --permanent  # RHEL/Fedora
 ```
 
 ### Agent shows no drives
@@ -331,7 +331,7 @@ sudo firewall-cmd --add-port=8090/tcp --permanent  # RHEL/Fedora
 sudo smartctl --scan
 
 # Check permissions (agent needs root)
-sudo vigil-agent --server http://localhost:8090 --interval 0
+sudo vigil-agent --server http://localhost:9080 --interval 0
 ```
 
 ### Check logs

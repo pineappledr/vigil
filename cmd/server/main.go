@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -27,7 +28,7 @@ type Config struct {
 
 func loadConfig() Config {
 	return Config{
-		Port:   getEnv("PORT", "8090"),
+		Port:   getEnv("PORT", "9080"),
 		DBPath: getEnv("DB_PATH", "vigil.db"),
 	}
 }
@@ -41,9 +42,25 @@ func getEnv(key, fallback string) string {
 
 func initDB(path string) error {
 	var err error
-	db, err = sql.Open("sqlite", path)
+
+	// Ensure the directory exists
+	dir := filepath.Dir(path)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create database directory %s: %w", dir, err)
+		}
+	}
+
+	// Use file: URI format for modernc.org/sqlite
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", path)
+	db, err = sql.Open("sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database at %s: %w", path, err)
+	}
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Enable WAL mode for better concurrency
