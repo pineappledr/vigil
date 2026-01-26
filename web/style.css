@@ -1129,6 +1129,16 @@ body {
     background: var(--bg-hover);
 }
 
+.drive-section-meta {
+    margin-left: auto;
+    margin-right: 12px;
+}
+
+.drive-section-meta .timestamp {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 .drive-section-arrow {
     color: var(--text-muted);
     width: 20px;
@@ -1142,6 +1152,13 @@ body {
 
 .section-icon.server {
     color: var(--accent-primary);
+}
+
+.drive-grid-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.875rem;
 }
 
 .drive-section-title {
