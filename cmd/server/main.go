@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,14 +26,43 @@ var version = "dev"
 var db *sql.DB
 
 type Config struct {
-	Port   string
-	DBPath string
+	Port        string
+	DBPath      string
+	AdminUser   string
+	AdminPass   string
+	AuthEnabled bool
+}
+
+type User struct {
+	ID           int       `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Session struct {
+	Token     string    `json:"token"`
+	UserID    int       `json:"user_id"`
+	Username  string    `json:"username"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type DriveAlias struct {
+	ID           int       `json:"id"`
+	Hostname     string    `json:"hostname"`
+	SerialNumber string    `json:"serial_number"`
+	Alias        string    `json:"alias"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 func loadConfig() Config {
+	authEnabled := getEnv("AUTH_ENABLED", "true") == "true"
 	return Config{
-		Port:   getEnv("PORT", "9080"),
-		DBPath: getEnv("DB_PATH", "vigil.db"),
+		Port:        getEnv("PORT", "9080"),
+		DBPath:      getEnv("DB_PATH", "vigil.db"),
+		AdminUser:   getEnv("ADMIN_USER", "admin"),
+		AdminPass:   getEnv("ADMIN_PASS", ""),
+		AuthEnabled: authEnabled,
 	}
 }
 
@@ -41,7 +73,18 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func initDB(path string) error {
+func hashPassword(password string) string {
+	hash := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(hash[:])
+}
+
+func generateToken() string {
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
+func initDB(path string, config Config) error {
 	var err error
 
 	// Ensure the directory exists
@@ -69,7 +112,8 @@ func initDB(path string) error {
 		log.Printf("⚠️  Could not enable WAL mode: %v", err)
 	}
 
-	query := `
+	// Create all tables
+	schema := `
 	CREATE TABLE IF NOT EXISTS reports (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		hostname TEXT NOT NULL,
@@ -78,11 +122,64 @@ func initDB(path string) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_reports_hostname ON reports(hostname);
 	CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp);
+
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS sessions (
+		token TEXT PRIMARY KEY,
+		user_id INTEGER NOT NULL,
+		expires_at DATETIME NOT NULL,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+	CREATE TABLE IF NOT EXISTS drive_aliases (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		hostname TEXT NOT NULL,
+		serial_number TEXT NOT NULL,
+		alias TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(hostname, serial_number)
+	);
+	CREATE INDEX IF NOT EXISTS idx_aliases_hostname ON drive_aliases(hostname);
 	`
 
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
+
+	// Create default admin user if auth is enabled and no users exist
+	if config.AuthEnabled {
+		var count int
+		db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+		if count == 0 {
+			password := config.AdminPass
+			if password == "" {
+				// Generate random password if not set
+				password = generateToken()[:12]
+				log.Printf("🔑 Generated admin password: %s", password)
+				log.Printf("   Set ADMIN_PASS environment variable to use a custom password")
+			}
+			_, err := db.Exec(
+				"INSERT INTO users (username, password_hash) VALUES (?, ?)",
+				config.AdminUser,
+				hashPassword(password),
+			)
+			if err != nil {
+				log.Printf("⚠️  Could not create admin user: %v", err)
+			} else {
+				log.Printf("✓ Created admin user: %s", config.AdminUser)
+			}
+		}
+	}
+
+	// Cleanup expired sessions
+	db.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
 
 	return nil
 }
@@ -104,8 +201,8 @@ func jsonError(w http.ResponseWriter, message string, code int) {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -125,36 +222,116 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Get session from request
+func getSession(r *http.Request) *Session {
+	// Try cookie first
+	cookie, err := r.Cookie("session")
+	var token string
+	if err == nil {
+		token = cookie.Value
+	} else {
+		// Try Authorization header
+		auth := r.Header.Get("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			token = strings.TrimPrefix(auth, "Bearer ")
+		}
+	}
+
+	if token == "" {
+		return nil
+	}
+
+	var session Session
+	var expiresAt string
+	err = db.QueryRow(`
+		SELECT s.token, s.user_id, u.username, s.expires_at 
+		FROM sessions s 
+		JOIN users u ON s.user_id = u.id 
+		WHERE s.token = ? AND s.expires_at > datetime('now')
+	`, token).Scan(&session.Token, &session.UserID, &session.Username, &expiresAt)
+
+	if err != nil {
+		return nil
+	}
+
+	session.ExpiresAt, _ = time.Parse("2006-01-02 15:04:05", expiresAt)
+	return &session
+}
+
+// Auth middleware - returns handler that checks auth
+func authMiddleware(config Config, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !config.AuthEnabled {
+			next(w, r)
+			return
+		}
+
+		session := getSession(r)
+		if session == nil {
+			jsonError(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Add session to context
+		ctx := context.WithValue(r.Context(), "session", session)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// Check if request is authenticated (for conditional UI)
+func isAuthenticated(r *http.Request) bool {
+	return getSession(r) != nil
+}
+
 func main() {
 	log.SetFlags(log.Ltime | log.Ldate)
 	log.Printf("🚀 Vigil Server v%s starting...", version)
 
 	config := loadConfig()
 
-	if err := initDB(config.DBPath); err != nil {
+	if err := initDB(config.DBPath, config); err != nil {
 		log.Fatalf("❌ Database error: %v", err)
 	}
 	defer db.Close()
 	log.Printf("✓ Database: %s", config.DBPath)
 
+	if config.AuthEnabled {
+		log.Printf("✓ Authentication: enabled")
+	} else {
+		log.Printf("⚠️  Authentication: disabled (set AUTH_ENABLED=true to enable)")
+	}
+
 	mux := http.NewServeMux()
 
-	// Health check
+	// Public endpoints (no auth required)
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /api/version", handleVersion)
+	mux.HandleFunc("GET /api/auth/status", handleAuthStatus(config))
 
-	// Agent reporting endpoint
+	// Agent reporting endpoint (no auth - agents use their own auth if needed)
 	mux.HandleFunc("POST /api/report", handleReport)
 
-	// Data endpoints
-	mux.HandleFunc("GET /api/history", handleHistory)
-	mux.HandleFunc("GET /api/hosts", handleHosts)
-	mux.HandleFunc("DELETE /api/hosts/{hostname}", handleDeleteHost)
-	mux.HandleFunc("GET /api/hosts/{hostname}/history", handleHostHistory)
+	// Auth endpoints
+	mux.HandleFunc("POST /api/auth/login", handleLogin(config))
+	mux.HandleFunc("POST /api/auth/logout", handleLogout)
 
-	// Static file server
-	fs := http.FileServer(http.Dir("./web"))
-	mux.Handle("/", fs)
+	// Protected data endpoints
+	mux.HandleFunc("GET /api/history", authMiddleware(config, handleHistory))
+	mux.HandleFunc("GET /api/hosts", authMiddleware(config, handleHosts))
+	mux.HandleFunc("DELETE /api/hosts/{hostname}", authMiddleware(config, handleDeleteHost))
+	mux.HandleFunc("GET /api/hosts/{hostname}/history", authMiddleware(config, handleHostHistory))
+
+	// Drive alias endpoints (protected)
+	mux.HandleFunc("GET /api/aliases", authMiddleware(config, handleGetAliases))
+	mux.HandleFunc("POST /api/aliases", authMiddleware(config, handleSetAlias))
+	mux.HandleFunc("DELETE /api/aliases/{id}", authMiddleware(config, handleDeleteAlias))
+
+	// User management (protected)
+	mux.HandleFunc("GET /api/users/me", authMiddleware(config, handleGetCurrentUser))
+	mux.HandleFunc("POST /api/users/password", authMiddleware(config, handleChangePassword))
+
+	// Static file server with login redirect
+	mux.HandleFunc("/", handleStaticFiles(config))
 
 	// Apply middleware
 	handler := loggingMiddleware(corsMiddleware(mux))
@@ -192,6 +369,32 @@ func main() {
 	log.Println("👋 Server stopped")
 }
 
+// Static file handler with auth check
+func handleStaticFiles(config Config) http.HandlerFunc {
+	fs := http.FileServer(http.Dir("./web"))
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Always allow access to login page and static assets
+		if r.URL.Path == "/login.html" ||
+			strings.HasSuffix(r.URL.Path, ".css") ||
+			strings.HasSuffix(r.URL.Path, ".js") ||
+			strings.HasSuffix(r.URL.Path, ".ico") ||
+			strings.HasSuffix(r.URL.Path, ".png") ||
+			strings.HasSuffix(r.URL.Path, ".svg") {
+			fs.ServeHTTP(w, r)
+			return
+		}
+
+		// Check auth for protected pages
+		if config.AuthEnabled && !isAuthenticated(r) {
+			http.Redirect(w, r, "/login.html", http.StatusFound)
+			return
+		}
+
+		fs.ServeHTTP(w, r)
+	}
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{
 		"status":  "healthy",
@@ -201,6 +404,154 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"version": version})
+}
+
+func handleAuthStatus(config Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		session := getSession(r)
+		jsonResponse(w, map[string]interface{}{
+			"auth_enabled":  config.AuthEnabled,
+			"authenticated": session != nil,
+			"username": func() string {
+				if session != nil {
+					return session.Username
+				}
+				return ""
+			}(),
+		})
+	}
+}
+
+func handleLogin(config Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !config.AuthEnabled {
+			jsonResponse(w, map[string]interface{}{
+				"success": true,
+				"message": "Authentication disabled",
+			})
+			return
+		}
+
+		var creds struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+			jsonError(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+
+		// Find user
+		var user User
+		var createdAt string
+		err := db.QueryRow(
+			"SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
+			creds.Username,
+		).Scan(&user.ID, &user.Username, &user.PasswordHash, &createdAt)
+
+		if err != nil || user.PasswordHash != hashPassword(creds.Password) {
+			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+
+		// Create session
+		token := generateToken()
+		expiresAt := time.Now().Add(24 * time.Hour * 7) // 7 days
+
+		_, err = db.Exec(
+			"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
+			token, user.ID, expiresAt.Format("2006-01-02 15:04:05"),
+		)
+		if err != nil {
+			jsonError(w, "Failed to create session", http.StatusInternalServerError)
+			return
+		}
+
+		// Set cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session",
+			Value:    token,
+			Path:     "/",
+			Expires:  expiresAt,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
+		log.Printf("🔓 Login: %s", user.Username)
+		jsonResponse(w, map[string]interface{}{
+			"success":  true,
+			"token":    token,
+			"username": user.Username,
+		})
+	}
+}
+
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	session := getSession(r)
+	if session != nil {
+		db.Exec("DELETE FROM sessions WHERE token = ?", session.Token)
+		log.Printf("🔒 Logout: %s", session.Username)
+	}
+
+	// Clear cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+	})
+
+	jsonResponse(w, map[string]string{"status": "logged_out"})
+}
+
+func handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	session := r.Context().Value("session").(*Session)
+	jsonResponse(w, map[string]interface{}{
+		"id":       session.UserID,
+		"username": session.Username,
+	})
+}
+
+func handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	session := r.Context().Value("session").(*Session)
+
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.NewPassword) < 6 {
+		jsonError(w, "Password must be at least 6 characters", http.StatusBadRequest)
+		return
+	}
+
+	// Verify current password
+	var currentHash string
+	db.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&currentHash)
+	if currentHash != hashPassword(req.CurrentPassword) {
+		jsonError(w, "Current password is incorrect", http.StatusUnauthorized)
+		return
+	}
+
+	// Update password
+	_, err := db.Exec(
+		"UPDATE users SET password_hash = ? WHERE id = ?",
+		hashPassword(req.NewPassword), session.UserID,
+	)
+	if err != nil {
+		jsonError(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("🔑 Password changed: %s", session.Username)
+	jsonResponse(w, map[string]string{"status": "password_changed"})
 }
 
 func handleReport(w http.ResponseWriter, r *http.Request) {
@@ -240,6 +591,20 @@ func handleReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleHistory(w http.ResponseWriter, r *http.Request) {
+	// Get all aliases for enriching drive data
+	aliases := make(map[string]string)
+	aliasRows, _ := db.Query("SELECT hostname, serial_number, alias FROM drive_aliases")
+	if aliasRows != nil {
+		defer aliasRows.Close()
+		for aliasRows.Next() {
+			var hostname, serial, alias string
+			if aliasRows.Scan(&hostname, &serial, &alias) == nil {
+				key := hostname + ":" + serial
+				aliases[key] = alias
+			}
+		}
+	}
+
 	query := `
 	SELECT hostname, timestamp, data 
 	FROM reports 
@@ -267,6 +632,22 @@ func handleHistory(w http.ResponseWriter, r *http.Request) {
 
 		var dataMap map[string]interface{}
 		json.Unmarshal(dataRaw, &dataMap)
+
+		// Enrich drives with aliases
+		if drives, ok := dataMap["drives"].([]interface{}); ok {
+			for i, d := range drives {
+				if drive, ok := d.(map[string]interface{}); ok {
+					if serial, ok := drive["serial_number"].(string); ok {
+						key := host + ":" + serial
+						if alias, exists := aliases[key]; exists {
+							drive["_alias"] = alias
+							drives[i] = drive
+						}
+					}
+				}
+			}
+			dataMap["drives"] = drives
+		}
 
 		history = append(history, map[string]interface{}{
 			"hostname":  host,
@@ -340,6 +721,9 @@ func handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Also delete aliases for this host
+	db.Exec("DELETE FROM drive_aliases WHERE hostname = ?", hostname)
+
 	log.Printf("🗑️  Deleted host: %s (%d reports)", hostname, affected)
 	jsonResponse(w, map[string]interface{}{
 		"status":  "deleted",
@@ -391,4 +775,112 @@ func handleHostHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, history)
+}
+
+// Drive alias handlers
+func handleGetAliases(w http.ResponseWriter, r *http.Request) {
+	hostname := r.URL.Query().Get("hostname")
+
+	var rows *sql.Rows
+	var err error
+
+	if hostname != "" {
+		rows, err = db.Query(
+			"SELECT id, hostname, serial_number, alias, created_at FROM drive_aliases WHERE hostname = ? ORDER BY alias",
+			hostname,
+		)
+	} else {
+		rows, err = db.Query(
+			"SELECT id, hostname, serial_number, alias, created_at FROM drive_aliases ORDER BY hostname, alias",
+		)
+	}
+
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var aliases []DriveAlias
+	for rows.Next() {
+		var a DriveAlias
+		var createdAt string
+		if err := rows.Scan(&a.ID, &a.Hostname, &a.SerialNumber, &a.Alias, &createdAt); err != nil {
+			continue
+		}
+		a.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAt)
+		aliases = append(aliases, a)
+	}
+
+	if aliases == nil {
+		aliases = []DriveAlias{}
+	}
+
+	jsonResponse(w, aliases)
+}
+
+func handleSetAlias(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Hostname     string `json:"hostname"`
+		SerialNumber string `json:"serial_number"`
+		Alias        string `json:"alias"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Hostname == "" || req.SerialNumber == "" {
+		jsonError(w, "Missing hostname or serial_number", http.StatusBadRequest)
+		return
+	}
+
+	req.Alias = strings.TrimSpace(req.Alias)
+
+	// If alias is empty, delete the entry
+	if req.Alias == "" {
+		db.Exec("DELETE FROM drive_aliases WHERE hostname = ? AND serial_number = ?",
+			req.Hostname, req.SerialNumber)
+		jsonResponse(w, map[string]string{"status": "deleted"})
+		return
+	}
+
+	// Upsert the alias
+	_, err := db.Exec(`
+		INSERT INTO drive_aliases (hostname, serial_number, alias) 
+		VALUES (?, ?, ?)
+		ON CONFLICT(hostname, serial_number) 
+		DO UPDATE SET alias = excluded.alias
+	`, req.Hostname, req.SerialNumber, req.Alias)
+
+	if err != nil {
+		jsonError(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("📝 Alias set: %s/%s -> %s", req.Hostname, req.SerialNumber, req.Alias)
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+func handleDeleteAlias(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		jsonError(w, "Missing alias ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := db.Exec("DELETE FROM drive_aliases WHERE id = ?", id)
+	if err != nil {
+		jsonError(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		jsonError(w, "Alias not found", http.StatusNotFound)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "deleted"})
 }

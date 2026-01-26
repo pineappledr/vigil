@@ -284,12 +284,43 @@ function renderFilteredDrivesView(filterFn, filterType) {
     container.style.display = 'block';
 }
 
+// Get drive display name from multiple possible fields
+function getDriveName(drive) {
+    // Check for user-defined alias first (future feature)
+    if (drive._alias) return drive._alias;
+    
+    // Try various model name fields that smartctl might use
+    if (drive.model_name && drive.model_name !== '') return drive.model_name;
+    if (drive.scsi_model_name && drive.scsi_model_name !== '') return drive.scsi_model_name;
+    if (drive.model_family && drive.model_family !== '') return drive.model_family;
+    
+    // Try device info
+    if (drive.device?.model && drive.device.model !== '') return drive.device.model;
+    if (drive.device?.name && drive.device.name !== '') {
+        // Extract just the device name like "sda" from "/dev/sda"
+        const name = drive.device.name.replace('/dev/', '');
+        // If we have a serial, show both
+        if (drive.serial_number) {
+            return `${name} (${drive.serial_number.slice(-8)})`;
+        }
+        return name;
+    }
+    
+    // Last resort - use serial number if available
+    if (drive.serial_number && drive.serial_number !== '') {
+        return `Drive ${drive.serial_number.slice(-8)}`;
+    }
+    
+    return 'Unknown Drive';
+}
+
 // Render a single drive card (shared helper)
 function renderDriveCard(drive, serverIdx) {
     const status = getHealthStatus(drive);
     const isNvme = drive.device?.type?.toLowerCase() === 'nvme' || drive.device?.protocol === 'NVMe';
     const isSsd = drive.rotation_rate === 0;
     const driveType = isNvme ? 'NVMe' : isSsd ? 'SSD' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'HDD';
+    const driveName = getDriveName(drive);
     
     return `
         <div class="drive-card ${status}" onclick="showDriveDetails(${serverIdx}, ${drive._idx})">
@@ -307,7 +338,7 @@ function renderDriveCard(drive, serverIdx) {
                 </span>
             </div>
             <div class="drive-card-body">
-                <div class="drive-card-model">${drive.model_name || 'Unknown Drive'}</div>
+                <div class="drive-card-model">${driveName}</div>
                 <div class="drive-card-serial">${drive.serial_number || 'N/A'}</div>
             </div>
             <div class="drive-card-stats">
@@ -517,7 +548,7 @@ function showDriveDetails(serverIdx, driveIdx) {
                     <line x1="14" y1="15" x2="18" y2="15"/>
                 </svg>
             </div>
-            <h3>${drive.model_name || 'Unknown Drive'}</h3>
+            <h3>${getDriveName(drive)}</h3>
             <span class="serial">${drive.serial_number || 'N/A'}</span>
         </div>
         
