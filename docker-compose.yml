@@ -3,15 +3,15 @@ services:
     container_name: vigil-server
     image: ghcr.io/pineappledr/vigil:latest
     ports:
-      - "8090:8090"
+      - "9080:9080"
     volumes:
       - vigil_data:/data
     restart: unless-stopped
     environment:
-      - PORT=8090
+      - PORT=9080
       - DB_PATH=/data/vigil.db
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8090/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -26,7 +26,7 @@ services:
   #   volumes:
   #     - /dev:/dev:ro
   #   restart: unless-stopped
-  #   command: ["--server", "http://localhost:8090", "--interval", "60"]
+  #   command: ["--server", "http://localhost:9080", "--interval", "60"]
   #   depends_on:
   #     server:
   #       condition: service_healthy

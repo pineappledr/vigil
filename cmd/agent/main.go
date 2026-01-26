@@ -33,7 +33,7 @@ type ScanResult struct {
 }
 
 func main() {
-	serverURL := flag.String("server", "http://localhost:8090", "Vigil Server URL")
+	serverURL := flag.String("server", "http://localhost:9080", "Vigil Server URL")
 	interval := flag.Int("interval", 60, "Reporting interval in seconds (0 for single run)")
 	hostnameOverride := flag.String("hostname", "", "Override hostname")
 	showVersion := flag.Bool("version", false, "Show version")

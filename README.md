@@ -6,7 +6,7 @@
   <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
   <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
   <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go Version">
-  <img src="https://img.shields.io/badge/SQLite-v1.44.3-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
+  <img src="https://img.shields.io/badge/SQLite-v1.44.0-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
 </p>
 
 <p align="right">
@@ -67,7 +67,7 @@ The central server runs in a container. It collects data from all your agents.
 ```bash
 docker run -d \
   --name vigil-server \
-  -p 8090:8090 \
+  -p 9080:9080 \
   -v vigil_data:/data \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil:latest
@@ -81,12 +81,12 @@ services:
     container_name: vigil-server
     image: ghcr.io/pineappledr/vigil:latest
     ports:
-      - "8090:8090"
+      - "9080:9080"
     volumes:
       - vigil_data:/data
     restart: unless-stopped
     environment:
-      - PORT=8090
+      - PORT=9080
       - DB_PATH=/data/vigil.db
 
 volumes:
@@ -111,7 +111,7 @@ sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil
 sudo chmod +x /usr/local/bin/vigil-agent
 
 # 2. Run (Replace with your Server IP)
-sudo vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
+sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
 ```
 
 ### Option B: Systemd Service (Recommended for Production)
@@ -125,7 +125,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:8090 --interval 60
+ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
 Restart=always
 RestartSec=10
 
@@ -153,7 +153,7 @@ docker run -d \
   -v /dev:/dev \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:8090 \
+  --server http://YOUR_SERVER_IP:9080 \
   --interval 60
 ```
 
@@ -169,7 +169,7 @@ services:
     volumes:
       - /dev:/dev
     restart: unless-stopped
-    command: ["--server", "http://YOUR_SERVER_IP:8090", "--interval", "60"]
+    command: ["--server", "http://YOUR_SERVER_IP:9080", "--interval", "60"]
 ```
 
 ---
@@ -180,7 +180,7 @@ services:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--server` | `http://localhost:8090` | Vigil server URL |
+| `--server` | `http://localhost:9080` | Vigil server URL |
 | `--interval` | `60` | Reporting interval in seconds (0 = single run) |
 | `--hostname` | (auto-detected) | Override hostname |
 
@@ -188,7 +188,7 @@ services:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8090` | HTTP server port |
+| `PORT` | `9080` | HTTP server port |
 | `DB_PATH` | `vigil.db` | SQLite database path |
 
 ---

@@ -1,6 +1,5 @@
 # Build Stage
 FROM golang:1.25-alpine AS builder
-FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
 # Copy go mod files first for better caching
@@ -25,4 +24,4 @@ RUN apk add --no-cache smartmontools nvme-cli ca-certificates
 COPY --from=builder /app/vigil-agent .
 
 ENTRYPOINT ["./vigil-agent"]
-CMD ["--server", "http://localhost:8090", "--interval", "60"]
+CMD ["--server", "http://localhost:9080", "--interval", "60"]
