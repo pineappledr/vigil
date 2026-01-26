@@ -1091,6 +1091,7 @@ function showSettings() {
                             <div class="settings-item-title">Username</div>
                             <div class="settings-item-desc">${currentUser}</div>
                         </div>
+                         <button class="btn btn-secondary" onclick="showChangeUsernameModal()">Change</button>
                     </div>
                     <div class="settings-item">
                         <div class="settings-item-info">
@@ -1300,6 +1301,90 @@ async function submitPasswordChange() {
             alert('Password changed successfully');
         } else {
             errorEl.textContent = data.error || 'Failed to change password';
+        }
+    } catch (e) {
+        errorEl.textContent = 'Connection error';
+    }
+}
+
+// [ADDED FUNCTION] Show Change Username Modal
+function showChangeUsernameModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Change Username</h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="form-hint" style="margin-bottom: 16px;">
+                    Changing your username will update it immediately. You will need to use the new username for future logins.
+                </p>
+                <div class="form-group">
+                    <label>New Username</label>
+                    <input type="text" id="new-username" class="form-input" placeholder="Enter new username">
+                </div>
+                <div class="form-group">
+                    <label>Current Password</label>
+                    <input type="password" id="current-password-for-user" class="form-input" placeholder="Verify your password">
+                </div>
+                <div id="username-error" class="form-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitUsernameChange()">Save Changes</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('new-username').focus();
+}
+
+// [ADDED FUNCTION] Submit Username Change
+async function submitUsernameChange() {
+    const newUsername = document.getElementById('new-username').value.trim();
+    const currentPassword = document.getElementById('current-password-for-user').value;
+    const errorEl = document.getElementById('username-error');
+
+    if (!newUsername) {
+        errorEl.textContent = 'Username cannot be empty';
+        return;
+    }
+
+    if (!currentPassword) {
+        errorEl.textContent = 'Please enter your password to confirm';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/users/username', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                new_username: newUsername,
+                current_password: currentPassword
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            document.querySelector('.modal-overlay').remove();
+            // Update global user state
+            currentUser = newUsername;
+            // Refresh settings view to show new name
+            showSettings();
+            // Update sidebar user menu
+            updateUserUI();
+            alert(`Username successfully changed to ${newUsername}`);
+        } else {
+            errorEl.textContent = data.error || 'Failed to change username';
         }
     } catch (e) {
         errorEl.textContent = 'Connection error';

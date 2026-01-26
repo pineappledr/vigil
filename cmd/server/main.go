@@ -338,6 +338,7 @@ func main() {
 	// User management (protected)
 	mux.HandleFunc("GET /api/users/me", authMiddleware(config, handleGetCurrentUser))
 	mux.HandleFunc("POST /api/users/password", authMiddleware(config, handleChangePassword))
+	mux.HandleFunc("POST /api/users/username", authMiddleware(config, handleChangeUsername)) // <--- ADDED THIS
 
 	// Static file server with login redirect
 	mux.HandleFunc("/", handleStaticFiles(config))
@@ -571,6 +572,58 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("🔑 Password changed: %s", session.Username)
 	jsonResponse(w, map[string]string{"status": "password_changed"})
+}
+
+// [ADDED FUNCTION]
+func handleChangeUsername(w http.ResponseWriter, r *http.Request) {
+	session := r.Context().Value("session").(*Session)
+
+	var req struct {
+		NewUsername     string `json:"new_username"`
+		CurrentPassword string `json:"current_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	req.NewUsername = strings.TrimSpace(req.NewUsername)
+	if req.NewUsername == "" {
+		jsonError(w, "Username cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	// Verify current password for security
+	var currentHash string
+	err := db.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&currentHash)
+	if err != nil {
+		jsonError(w, "User not found", http.StatusInternalServerError)
+		return
+	}
+
+	if currentHash != hashPassword(req.CurrentPassword) {
+		jsonError(w, "Incorrect password", http.StatusUnauthorized)
+		return
+	}
+
+	// Update username
+	_, err = db.Exec("UPDATE users SET username = ? WHERE id = ?", req.NewUsername, session.UserID)
+	if err != nil {
+		// Handle unique constraint violation
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			jsonError(w, "Username already taken", http.StatusConflict)
+			return
+		}
+		jsonError(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("👤 Username changed: %s -> %s", session.Username, req.NewUsername)
+	jsonResponse(w, map[string]string{
+		"status":       "username_updated",
+		"new_username": req.NewUsername,
+	})
 }
 
 func handleReport(w http.ResponseWriter, r *http.Request) {
