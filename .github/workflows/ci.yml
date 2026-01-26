@@ -65,6 +65,8 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -75,6 +77,8 @@ jobs:
           context: .
           file: Dockerfile.agent
           push: true
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -135,6 +139,9 @@ jobs:
           # Replace / with - for valid docker tag
           BRANCH_TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
           echo "name=$BRANCH_TAG" >> $GITHUB_OUTPUT
+          # Create short SHA for version
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
 
       - name: Build and push Server (Dev)
         uses: docker/build-push-action@v5
@@ -142,6 +149,8 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+          build-args: |
+            VERSION=dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.branch.outputs.name }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.branch.outputs.name }}-${{ github.sha }}
@@ -154,6 +163,8 @@ jobs:
           context: .
           file: Dockerfile.agent
           push: true
+          build-args: |
+            VERSION=dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}-${{ github.sha }}
@@ -200,6 +211,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
       - name: Build and push Server
         uses: docker/build-push-action@v5
         with:
@@ -207,6 +222,8 @@ jobs:
           file: Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=latest-${{ steps.sha.outputs.short }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
@@ -220,6 +237,8 @@ jobs:
           file: Dockerfile.agent
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=latest-${{ steps.sha.outputs.short }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}
