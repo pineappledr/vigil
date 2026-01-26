@@ -99,27 +99,11 @@ function showNeedsAttention() {
     // Update nav
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
-    
-    // Highlight the attention card
     document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
     
-    // Filter to only show servers/drives that need attention
-    const filteredServers = globalData.map(server => {
-        const drives = server.details?.drives || [];
-        const attentionDrives = drives.filter(d => getHealthStatus(d) !== 'healthy');
-        
-        if (attentionDrives.length === 0) return null;
-        
-        return {
-            ...server,
-            details: {
-                ...server.details,
-                drives: attentionDrives
-            }
-        };
-    }).filter(Boolean);
-    
-    renderDashboard(filteredServers, false, true);
+    // Filter to only show drives that need attention
+    const filterFn = (drive) => getHealthStatus(drive) !== 'healthy';
+    renderFilteredDrivesView(filterFn, 'attention');
 }
 
 function showHealthyDrives() {
@@ -137,24 +121,214 @@ function showHealthyDrives() {
     // Update nav
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
     
     // Filter to only show healthy drives
-    const filteredServers = globalData.map(server => {
-        const drives = server.details?.drives || [];
-        const healthyDrives = drives.filter(d => getHealthStatus(d) === 'healthy');
-        
-        if (healthyDrives.length === 0) return null;
-        
-        return {
-            ...server,
-            details: {
-                ...server.details,
-                drives: healthyDrives
-            }
-        };
-    }).filter(Boolean);
+    const filterFn = (drive) => getHealthStatus(drive) === 'healthy';
+    renderFilteredDrivesView(filterFn, 'healthy');
+}
+
+function showAllDrives() {
+    activeServerIndex = null;
+    activeFilter = 'all';
     
-    renderDashboard(filteredServers, false, false);
+    // Update UI
+    document.getElementById('breadcrumbs').classList.remove('hidden');
+    document.getElementById('crumb-server').textContent = 'All Drives';
+    document.getElementById('page-title').textContent = 'All Drives';
+    
+    document.getElementById('details-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
+    
+    // Show all drives
+    const filterFn = () => true;
+    renderFilteredDrivesView(filterFn, 'all');
+}
+
+// Render drives grouped by server with card layout
+function renderFilteredDrivesView(filterFn, filterType) {
+    const container = document.getElementById('server-list');
+    const summaryContainer = document.getElementById('summary-cards');
+    
+    // Calculate global stats
+    let totalServers = globalData.length;
+    let totalDrives = 0;
+    let healthyDrives = 0;
+    let attentionDrives = 0;
+    
+    globalData.forEach(server => {
+        const drives = server.details?.drives || [];
+        totalDrives += drives.length;
+        drives.forEach(drive => {
+            const status = getHealthStatus(drive);
+            if (status === 'healthy') healthyDrives++;
+            else attentionDrives++;
+        });
+    });
+    
+    // Render summary cards
+    summaryContainer.innerHTML = `
+        <div class="summary-card clickable" onclick="resetDashboard()" title="View all servers">
+            <div class="icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="8" rx="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2"/>
+                    <circle cx="6" cy="6" r="1"/>
+                    <circle cx="6" cy="18" r="1"/>
+                </svg>
+            </div>
+            <div class="value">${totalServers}</div>
+            <div class="label">Servers</div>
+        </div>
+        <div class="summary-card clickable ${filterType === 'all' ? 'active' : ''}" onclick="showAllDrives()" title="View all drives">
+            <div class="icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <circle cx="8" cy="12" r="2"/>
+                </svg>
+            </div>
+            <div class="value">${totalDrives}</div>
+            <div class="label">Total Drives</div>
+        </div>
+        <div class="summary-card clickable ${filterType === 'healthy' ? 'active' : ''}" onclick="showHealthyDrives()" title="View healthy drives">
+            <div class="icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <div class="value">${healthyDrives}</div>
+            <div class="label">Healthy</div>
+        </div>
+        <div class="summary-card ${attentionDrives > 0 ? 'clickable' : ''} ${filterType === 'attention' ? 'active' : ''}" ${attentionDrives > 0 ? 'onclick="showNeedsAttention()"' : ''} title="${attentionDrives > 0 ? 'View drives needing attention' : 'All drives healthy'}">
+            <div class="icon ${attentionDrives > 0 ? 'red' : 'green'}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </div>
+            <div class="value">${attentionDrives}</div>
+            <div class="label">Needs Attention</div>
+        </div>
+    `;
+    
+    // Build sections for each server that has matching drives
+    let sectionsHtml = '';
+    
+    globalData.forEach((server, serverIdx) => {
+        const drives = server.details?.drives || [];
+        const filteredDrives = drives.map((drive, idx) => ({ ...drive, _idx: idx }))
+                                     .filter(filterFn);
+        
+        if (filteredDrives.length === 0) return;
+        
+        // Server icon
+        const serverIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon server"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>`;
+        
+        sectionsHtml += `
+            <div class="drive-section">
+                <div class="drive-section-header clickable" onclick="showServer(${serverIdx})">
+                    <div class="drive-section-title">
+                        ${serverIcon}
+                        <span>${server.hostname}</span>
+                        <span class="drive-section-count">${filteredDrives.length} drive${filteredDrives.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="drive-section-arrow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="drive-grid">
+                    ${filteredDrives.map(drive => renderDriveCard(drive, serverIdx)).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    // Handle empty state
+    if (!sectionsHtml) {
+        if (filterType === 'attention') {
+            container.innerHTML = `
+                <div class="empty-state success-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <p>All drives are healthy!</p>
+                    <span class="hint">No drives currently need attention</span>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <circle cx="8" cy="12" r="2"/>
+                    </svg>
+                    <p>No drives found</p>
+                    <span class="hint">No drives match the current filter</span>
+                </div>
+            `;
+        }
+    } else {
+        container.innerHTML = `<div class="server-detail-view">${sectionsHtml}</div>`;
+    }
+    
+    container.style.display = 'block';
+}
+
+// Render a single drive card (shared helper)
+function renderDriveCard(drive, serverIdx) {
+    const status = getHealthStatus(drive);
+    const isNvme = drive.device?.type?.toLowerCase() === 'nvme' || drive.device?.protocol === 'NVMe';
+    const isSsd = drive.rotation_rate === 0;
+    const driveType = isNvme ? 'NVMe' : isSsd ? 'SSD' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'HDD';
+    
+    return `
+        <div class="drive-card ${status}" onclick="showDriveDetails(${serverIdx}, ${drive._idx})">
+            <div class="drive-card-header">
+                <div class="drive-card-icon ${status}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <circle cx="8" cy="12" r="2"/>
+                        <line x1="14" y1="9" x2="18" y2="9"/>
+                        <line x1="14" y1="12" x2="18" y2="12"/>
+                    </svg>
+                </div>
+                <span class="status-badge ${drive.smart_status?.passed ? 'passed' : 'failed'}">
+                    ${drive.smart_status?.passed ? 'Passed' : 'Failed'}
+                </span>
+            </div>
+            <div class="drive-card-body">
+                <div class="drive-card-model">${drive.model_name || 'Unknown Drive'}</div>
+                <div class="drive-card-serial">${drive.serial_number || 'N/A'}</div>
+            </div>
+            <div class="drive-card-stats">
+                <div class="drive-card-stat">
+                    <span class="stat-value">${formatSize(drive.user_capacity?.bytes)}</span>
+                    <span class="stat-label">Capacity</span>
+                </div>
+                <div class="drive-card-stat">
+                    <span class="stat-value">${drive.temperature?.current ?? '--'}°C</span>
+                    <span class="stat-label">Temp</span>
+                </div>
+                <div class="drive-card-stat">
+                    <span class="stat-value">${formatAge(drive.power_on_time?.hours)}</span>
+                    <span class="stat-label">Age</span>
+                </div>
+            </div>
+            <div class="drive-card-footer">
+                <span class="drive-type-badge">${driveType}</span>
+            </div>
+        </div>
+    `;
 }
 
 function showServer(serverIdx) {
@@ -275,53 +449,6 @@ function renderServerDetailView(server, serverIdx) {
         </div>
     `;
     
-    // Helper function to render a drive card
-    const renderDriveCard = (drive) => {
-        const status = getHealthStatus(drive);
-        const isNvme = drive.device?.type?.toLowerCase() === 'nvme' || drive.device?.protocol === 'NVMe';
-        const isSsd = drive.rotation_rate === 0;
-        const driveType = isNvme ? 'NVMe' : isSsd ? 'SSD' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'HDD';
-        
-        return `
-            <div class="drive-card ${status}" onclick="showDriveDetails(${serverIdx}, ${drive._idx})">
-                <div class="drive-card-header">
-                    <div class="drive-card-icon ${status}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="4" width="20" height="16" rx="2"/>
-                            <circle cx="8" cy="12" r="2"/>
-                            <line x1="14" y1="9" x2="18" y2="9"/>
-                            <line x1="14" y1="12" x2="18" y2="12"/>
-                        </svg>
-                    </div>
-                    <span class="status-badge ${drive.smart_status?.passed ? 'passed' : 'failed'}">
-                        ${drive.smart_status?.passed ? 'Passed' : 'Failed'}
-                    </span>
-                </div>
-                <div class="drive-card-body">
-                    <div class="drive-card-model">${drive.model_name || 'Unknown Drive'}</div>
-                    <div class="drive-card-serial">${drive.serial_number || 'N/A'}</div>
-                </div>
-                <div class="drive-card-stats">
-                    <div class="drive-card-stat">
-                        <span class="stat-value">${formatSize(drive.user_capacity?.bytes)}</span>
-                        <span class="stat-label">Capacity</span>
-                    </div>
-                    <div class="drive-card-stat">
-                        <span class="stat-value">${drive.temperature?.current ?? '--'}°C</span>
-                        <span class="stat-label">Temp</span>
-                    </div>
-                    <div class="drive-card-stat">
-                        <span class="stat-value">${formatAge(drive.power_on_time?.hours)}</span>
-                        <span class="stat-label">Age</span>
-                    </div>
-                </div>
-                <div class="drive-card-footer">
-                    <span class="drive-type-badge">${driveType}</span>
-                </div>
-            </div>
-        `;
-    };
-    
     // Helper function to render a section
     const renderSection = (title, icon, drivesArray) => {
         if (drivesArray.length === 0) return '';
@@ -336,7 +463,7 @@ function renderServerDetailView(server, serverIdx) {
                     </div>
                 </div>
                 <div class="drive-grid">
-                    ${drivesArray.map(renderDriveCard).join('')}
+                    ${drivesArray.map(d => renderDriveCard(d, serverIdx)).join('')}
                 </div>
             </div>
         `;
@@ -534,10 +661,16 @@ async function fetchData() {
                 renderServerDetailView(globalData[activeServerIndex], activeServerIndex);
             } else if (activeFilter === 'attention') {
                 // Re-apply attention filter with fresh data
-                showNeedsAttention();
+                const filterFn = (drive) => getHealthStatus(drive) !== 'healthy';
+                renderFilteredDrivesView(filterFn, 'attention');
             } else if (activeFilter === 'healthy') {
                 // Re-apply healthy filter with fresh data
-                showHealthyDrives();
+                const filterFn = (drive) => getHealthStatus(drive) === 'healthy';
+                renderFilteredDrivesView(filterFn, 'healthy');
+            } else if (activeFilter === 'all') {
+                // Re-apply all drives filter with fresh data
+                const filterFn = () => true;
+                renderFilteredDrivesView(filterFn, 'all');
             } else {
                 renderDashboard(globalData);
             }
