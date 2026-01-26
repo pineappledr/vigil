@@ -116,23 +116,24 @@ sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
 
 ```yaml
 services:
-  server:
-    container_name: vigil-server
+  vigil-server:
     image: ghcr.io/pineappledr/vigil:latest
+    container_name: vigil-server
+    restart: unless-stopped
     ports:
       - "9080:9080"
-    volumes:
-      - vigil_data:/data
-    restart: unless-stopped
     environment:
       - PORT=9080
       - DB_PATH=/data/vigil.db
       - AUTH_ENABLED=true
       - ADMIN_USER=admin
       - ADMIN_PASS=your-secure-password
+    volumes:
+      - vigil_data:/data
 
 volumes:
   vigil_data:
+    name: vigil_data
 ```
 
 ### Agent: Systemd Service (Recommended)
