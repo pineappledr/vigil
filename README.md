@@ -90,7 +90,9 @@ Open `http://YOUR_SERVER_IP:9080` in your browser.
 - Username: `admin`
 - Password: Check server logs or set via `ADMIN_PASS` environment variable
 
-> 💡 On first login with a generated password, you'll be prompted to change it.
+> 💡 To find the generated password in the logs, run: `docker logs vigil-server 2>&1 | grep "Generated admin password"`
+> 
+> On first login with a generated password, you'll be prompted to change it.
 
 ### 3. Deploy Agents
 
