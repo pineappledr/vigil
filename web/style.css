@@ -1091,3 +1091,222 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+/* ============================================
+   SERVER DETAIL VIEW - Organized Drive Layout
+   ============================================ */
+
+.server-detail-view {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Drive Section */
+.drive-section {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.drive-section-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+}
+
+.drive-section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.section-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.section-icon.nvme {
+    color: #f59e0b;
+}
+
+.section-icon.ssd {
+    color: #3b82f6;
+}
+
+.section-icon.hdd {
+    color: #10b981;
+}
+
+.drive-section-count {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 10px;
+    border-radius: 12px;
+    margin-left: auto;
+}
+
+/* Drive Grid */
+.drive-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 20px;
+}
+
+/* Drive Card */
+.drive-card {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    padding: 16px;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.drive-card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.drive-card.healthy {
+    border-left: 3px solid var(--success);
+}
+
+.drive-card.warning {
+    border-left: 3px solid var(--warning);
+}
+
+.drive-card.critical {
+    border-left: 3px solid var(--danger);
+}
+
+.drive-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.drive-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-hover);
+}
+
+.drive-card-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.drive-card-icon.healthy {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.drive-card-icon.warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.drive-card-icon.critical {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.drive-card-body {
+    flex: 1;
+}
+
+.drive-card-model {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    word-break: break-word;
+}
+
+.drive-card-serial {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.drive-card-stats {
+    display: flex;
+    gap: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.drive-card-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.drive-card-stat .stat-value {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.drive-card-stat .stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.drive-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.drive-type-badge {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+/* Summary card color variants */
+.summary-card .icon.purple {
+    background: rgba(139, 92, 246, 0.15);
+    color: #8b5cf6;
+}
+
+.summary-card .icon.yellow {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .drive-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .drive-card-stats {
+        flex-wrap: wrap;
+    }
+}

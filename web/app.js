@@ -125,6 +125,7 @@ function showNeedsAttention() {
 
 function showServer(serverIdx) {
     activeServerIndex = serverIdx;
+    activeFilter = null;
     const server = globalData[serverIdx];
     
     if (!server) {
@@ -147,7 +148,181 @@ function showServer(serverIdx) {
     document.getElementById('details-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
     
-    renderDashboard([server], true);
+    renderServerDetailView(server, serverIdx);
+}
+
+function renderServerDetailView(server, serverIdx) {
+    const container = document.getElementById('server-list');
+    const summaryContainer = document.getElementById('summary-cards');
+    const drives = server.details?.drives || [];
+    
+    // Categorize drives
+    const ssdDrives = [];
+    const hddDrives = [];
+    const nvmeDrives = [];
+    
+    drives.forEach((drive, idx) => {
+        const driveWithIndex = { ...drive, _idx: idx };
+        const deviceType = drive.device?.type?.toLowerCase() || '';
+        
+        if (deviceType === 'nvme' || drive.device?.protocol === 'NVMe') {
+            nvmeDrives.push(driveWithIndex);
+        } else if (drive.rotation_rate === 0) {
+            ssdDrives.push(driveWithIndex);
+        } else {
+            hddDrives.push(driveWithIndex);
+        }
+    });
+    
+    // Calculate stats
+    let healthyCount = 0;
+    let warningCount = 0;
+    let criticalCount = 0;
+    let totalCapacity = 0;
+    let avgTemp = 0;
+    let tempCount = 0;
+    
+    drives.forEach(drive => {
+        const status = getHealthStatus(drive);
+        if (status === 'healthy') healthyCount++;
+        else if (status === 'warning') warningCount++;
+        else criticalCount++;
+        
+        if (drive.user_capacity?.bytes) {
+            totalCapacity += drive.user_capacity.bytes;
+        }
+        if (drive.temperature?.current) {
+            avgTemp += drive.temperature.current;
+            tempCount++;
+        }
+    });
+    
+    avgTemp = tempCount > 0 ? Math.round(avgTemp / tempCount) : 0;
+    
+    // Render summary cards for this server
+    summaryContainer.innerHTML = `
+        <div class="summary-card">
+            <div class="icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <circle cx="8" cy="12" r="2"/>
+                </svg>
+            </div>
+            <div class="value">${drives.length}</div>
+            <div class="label">Total Drives</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                </svg>
+            </div>
+            <div class="value">${formatSize(totalCapacity)}</div>
+            <div class="label">Total Capacity</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon ${avgTemp > 50 ? 'red' : avgTemp > 40 ? 'yellow' : 'green'}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                </svg>
+            </div>
+            <div class="value">${avgTemp}°C</div>
+            <div class="label">Avg Temperature</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon ${criticalCount > 0 ? 'red' : warningCount > 0 ? 'yellow' : 'green'}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <div class="value">${healthyCount}/${drives.length}</div>
+            <div class="label">Healthy</div>
+        </div>
+    `;
+    
+    // Helper function to render a drive card
+    const renderDriveCard = (drive) => {
+        const status = getHealthStatus(drive);
+        const isNvme = drive.device?.type?.toLowerCase() === 'nvme' || drive.device?.protocol === 'NVMe';
+        const isSsd = drive.rotation_rate === 0;
+        const driveType = isNvme ? 'NVMe' : isSsd ? 'SSD' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'HDD';
+        
+        return `
+            <div class="drive-card ${status}" onclick="showDriveDetails(${serverIdx}, ${drive._idx})">
+                <div class="drive-card-header">
+                    <div class="drive-card-icon ${status}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="4" width="20" height="16" rx="2"/>
+                            <circle cx="8" cy="12" r="2"/>
+                            <line x1="14" y1="9" x2="18" y2="9"/>
+                            <line x1="14" y1="12" x2="18" y2="12"/>
+                        </svg>
+                    </div>
+                    <span class="status-badge ${drive.smart_status?.passed ? 'passed' : 'failed'}">
+                        ${drive.smart_status?.passed ? 'Passed' : 'Failed'}
+                    </span>
+                </div>
+                <div class="drive-card-body">
+                    <div class="drive-card-model">${drive.model_name || 'Unknown Drive'}</div>
+                    <div class="drive-card-serial">${drive.serial_number || 'N/A'}</div>
+                </div>
+                <div class="drive-card-stats">
+                    <div class="drive-card-stat">
+                        <span class="stat-value">${formatSize(drive.user_capacity?.bytes)}</span>
+                        <span class="stat-label">Capacity</span>
+                    </div>
+                    <div class="drive-card-stat">
+                        <span class="stat-value">${drive.temperature?.current ?? '--'}°C</span>
+                        <span class="stat-label">Temp</span>
+                    </div>
+                    <div class="drive-card-stat">
+                        <span class="stat-value">${formatAge(drive.power_on_time?.hours)}</span>
+                        <span class="stat-label">Age</span>
+                    </div>
+                </div>
+                <div class="drive-card-footer">
+                    <span class="drive-type-badge">${driveType}</span>
+                </div>
+            </div>
+        `;
+    };
+    
+    // Helper function to render a section
+    const renderSection = (title, icon, drivesArray) => {
+        if (drivesArray.length === 0) return '';
+        
+        return `
+            <div class="drive-section">
+                <div class="drive-section-header">
+                    <div class="drive-section-title">
+                        ${icon}
+                        <span>${title}</span>
+                        <span class="drive-section-count">${drivesArray.length}</span>
+                    </div>
+                </div>
+                <div class="drive-grid">
+                    ${drivesArray.map(renderDriveCard).join('')}
+                </div>
+            </div>
+        `;
+    };
+    
+    // Icons for each section
+    const nvmeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon nvme"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+    const ssdIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon ssd"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h4v8H6z"/><path d="M14 8h4"/><path d="M14 12h4"/><path d="M14 16h4"/></svg>`;
+    const hddIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon hdd"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="3"/><line x1="14" y1="9" x2="18" y2="9"/><line x1="14" y1="12" x2="18" y2="12"/><line x1="14" y1="15" x2="18" y2="15"/></svg>`;
+    
+    // Render the container
+    container.innerHTML = `
+        <div class="server-detail-view">
+            ${renderSection('NVMe Drives', nvmeIcon, nvmeDrives)}
+            ${renderSection('Solid State Drives', ssdIcon, ssdDrives)}
+            ${renderSection('Hard Disk Drives', hddIcon, hddDrives)}
+        </div>
+    `;
+    
+    container.style.display = 'block';
 }
 
 function showDriveDetails(serverIdx, driveIdx) {
