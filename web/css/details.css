@@ -1,0 +1,183 @@
+/* ============================================
+   DETAILS VIEW
+   ============================================ */
+
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    margin-bottom: 24px;
+}
+
+.btn-back:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.btn-back svg { width: 16px; height: 16px; }
+
+.details-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+}
+
+/* Detail Sidebar */
+.detail-sidebar {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    height: fit-content;
+    position: sticky;
+    top: calc(var(--header-height) + 24px);
+}
+
+.drive-header {
+    text-align: center;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.drive-header .icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+}
+
+.drive-header .icon svg { width: 28px; height: 28px; }
+
+.drive-header .icon.healthy { background: var(--success-soft); color: var(--success); }
+.drive-header .icon.warning { background: var(--warning-soft); color: var(--warning); }
+.drive-header .icon.critical { background: var(--danger-soft); color: var(--danger); }
+
+.drive-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.drive-header .serial {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.info-group { margin-bottom: 20px; }
+.info-group:last-child { margin-bottom: 0; }
+
+.info-group-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.info-row .label { font-size: 0.85rem; color: var(--text-muted); }
+
+.info-row .value {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.info-row .value.success { color: var(--success); }
+.info-row .value.warning { color: var(--warning); }
+.info-row .value.danger { color: var(--danger); }
+
+/* Detail Main */
+.detail-main { min-width: 0; }
+
+.detail-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.detail-card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.table-container { overflow-x: auto; }
+
+/* SMART Table */
+.smart-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.smart-table th {
+    text-align: left;
+    padding: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.smart-table td {
+    padding: 12px;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-mono);
+}
+
+.smart-table tr:hover { background: var(--bg-hover); }
+.smart-table .status-cell { width: 70px; }
+
+.attr-pill {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.attr-pill.ok { background: var(--success-soft); color: var(--success); }
+.attr-pill.fail { background: var(--danger-soft); color: var(--danger); }
+
+.nvme-notice {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+}
+
+.nvme-notice svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}

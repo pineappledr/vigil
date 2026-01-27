@@ -7,31 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/variables.css">
     <style>
-        :root {
-            --bg-primary: #0a0e17;
-            --bg-secondary: #111827;
-            --bg-elevated: #1a2234;
-            --bg-hover: #243049;
-            --accent-primary: #3b82f6;
-            --accent-secondary: #6366f1;
-            --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-            --success: #10b981;
-            --danger: #ef4444;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --border-color: rgba(148, 163, 184, 0.1);
-            --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
         body {
             font-family: var(--font-sans);
             background: var(--bg-primary);
@@ -43,10 +20,7 @@
             padding: 20px;
         }
 
-        .login-container {
-            width: 100%;
-            max-width: 400px;
-        }
+        .login-container { width: 100%; max-width: 400px; }
 
         .login-card {
             background: var(--bg-secondary);
@@ -64,11 +38,7 @@
             margin-bottom: 32px;
         }
 
-        .logo svg {
-            width: 40px;
-            height: 40px;
-            color: var(--accent-primary);
-        }
+        .logo svg { width: 40px; height: 40px; color: var(--accent-primary); }
 
         .logo-text {
             font-size: 2rem;
@@ -86,9 +56,7 @@
             margin-bottom: 32px;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 20px; }
 
         .form-label {
             display: block;
@@ -116,9 +84,7 @@
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         }
 
-        .form-input::placeholder {
-            color: var(--text-muted);
-        }
+        .form-input::placeholder { color: var(--text-muted); }
 
         .login-button {
             width: 100%;
@@ -139,15 +105,8 @@
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
 
-        .login-button:active {
-            transform: translateY(0);
-        }
-
-        .login-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
+        .login-button:active { transform: translateY(0); }
+        .login-button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
         .error-message {
             background: rgba(239, 68, 68, 0.1);
@@ -160,9 +119,7 @@
             display: none;
         }
 
-        .error-message.show {
-            display: block;
-        }
+        .error-message.show { display: block; }
 
         .footer {
             text-align: center;
@@ -171,16 +128,9 @@
             font-size: 0.75rem;
         }
 
-        .footer a {
-            color: var(--accent-primary);
-            text-decoration: none;
-        }
+        .footer a { color: var(--accent-primary); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
 
-        .footer a:hover {
-            text-decoration: underline;
-        }
-
-        /* Loading spinner */
         .spinner {
             display: inline-block;
             width: 16px;
@@ -193,9 +143,7 @@
             vertical-align: middle;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -209,39 +157,20 @@
             </div>
             
             <p class="login-title">Sign in to your dashboard</p>
-            
             <div id="error-message" class="error-message"></div>
             
             <form id="login-form">
                 <div class="form-group">
                     <label class="form-label" for="username">Username</label>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        class="form-input" 
-                        placeholder="Enter your username"
-                        autocomplete="username"
-                        required
-                    >
+                    <input type="text" id="username" name="username" class="form-input" 
+                           placeholder="Enter your username" autocomplete="username" required>
                 </div>
-                
                 <div class="form-group">
                     <label class="form-label" for="password">Password</label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        class="form-input" 
-                        placeholder="Enter your password"
-                        autocomplete="current-password"
-                        required
-                    >
+                    <input type="password" id="password" name="password" class="form-input" 
+                           placeholder="Enter your password" autocomplete="current-password" required>
                 </div>
-                
-                <button type="submit" class="login-button" id="login-btn">
-                    Sign In
-                </button>
+                <button type="submit" class="login-button" id="login-btn">Sign In</button>
             </form>
             
             <div class="footer">
@@ -251,12 +180,10 @@
     </div>
 
     <script>
-        // Check if already authenticated
         (async function checkAuth() {
             try {
                 const response = await fetch('/api/auth/status');
                 const data = await response.json();
-                
                 if (!data.auth_enabled || data.authenticated) {
                     window.location.href = '/';
                 }
@@ -265,7 +192,6 @@
             }
         })();
 
-        // Handle form submission
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -274,7 +200,6 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
-            // Show loading state
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span>Signing in...';
             errorEl.classList.remove('show');
@@ -282,19 +207,15 @@
             try {
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password }),
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
-                    // Redirect to dashboard
                     window.location.href = '/';
                 } else {
-                    // Show error
                     errorEl.textContent = data.error || 'Login failed. Please try again.';
                     errorEl.classList.add('show');
                 }
@@ -307,7 +228,6 @@
             }
         });
 
-        // Focus username field on load
         document.getElementById('username').focus();
     </script>
 </body>

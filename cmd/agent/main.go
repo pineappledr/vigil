@@ -13,9 +13,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"vigil/cmd/agent/smart"
 )
 
-// Version is set at build time via -ldflags
 var version = "dev"
 
 type DriveReport struct {
@@ -25,21 +26,43 @@ type DriveReport struct {
 	Drives    []map[string]interface{} `json:"drives"`
 }
 
-type ScanResult struct {
-	Devices []struct {
-		Name     string `json:"name"`
-		Type     string `json:"type"`
-		Protocol string `json:"protocol"`
-	} `json:"devices"`
+func main() {
+	cfg := parseFlags()
+
+	log.SetFlags(log.Ltime | log.Ldate)
+	log.Printf("🚀 Vigil Agent v%s starting...", version)
+
+	if err := checkSmartctl(); err != nil {
+		log.Fatal(err)
+	}
+
+	hostname := getHostname(cfg.hostnameOverride)
+	log.Printf("✓ Hostname: %s", hostname)
+	log.Printf("✓ Server: %s", cfg.serverURL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	setupSignalHandler(cancel)
+
+	// Run immediately
+	sendReport(ctx, cfg.serverURL, hostname)
+
+	if cfg.interval <= 0 {
+		log.Println("✅ Single run complete")
+		return
+	}
+
+	runInterval(ctx, cfg.serverURL, hostname, cfg.interval)
 }
 
-// Device types to try when default fails (in order of preference)
-// sat = SATA via SAS HBA (most common for LSI controllers)
-// scsi = Pure SCSI/SAS drives
-// auto = Let smartctl figure it out
-var fallbackDeviceTypes = []string{"sat", "scsi", "auto"}
+type agentConfig struct {
+	serverURL        string
+	interval         int
+	hostnameOverride string
+}
 
-func main() {
+func parseFlags() agentConfig {
 	serverURL := flag.String("server", "http://localhost:9080", "Vigil Server URL")
 	interval := flag.Int("interval", 60, "Reporting interval in seconds (0 for single run)")
 	hostnameOverride := flag.String("hostname", "", "Override hostname")
@@ -51,31 +74,33 @@ func main() {
 		os.Exit(0)
 	}
 
-	log.SetFlags(log.Ltime | log.Ldate)
-	log.Printf("🚀 Vigil Agent v%s starting...", version)
+	return agentConfig{
+		serverURL:        *serverURL,
+		interval:         *interval,
+		hostnameOverride: *hostnameOverride,
+	}
+}
 
-	// Check for smartctl
+func checkSmartctl() error {
 	if _, err := exec.LookPath("smartctl"); err != nil {
-		log.Fatal("❌ Error: 'smartctl' not found. Please install smartmontools.")
+		return fmt.Errorf("❌ Error: 'smartctl' not found. Please install smartmontools")
 	}
 	log.Println("✓ smartctl found")
+	return nil
+}
 
-	// Determine hostname
-	hostname := *hostnameOverride
-	if hostname == "" {
-		var err error
-		hostname, err = os.Hostname()
-		if err != nil {
-			log.Fatalf("❌ Failed to get hostname: %v", err)
-		}
+func getHostname(override string) string {
+	if override != "" {
+		return override
 	}
-	log.Printf("✓ Hostname: %s", hostname)
-	log.Printf("✓ Server: %s", *serverURL)
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalf("❌ Failed to get hostname: %v", err)
+	}
+	return hostname
+}
 
-	// Setup graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+func setupSignalHandler(cancel context.CancelFunc) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -84,19 +109,11 @@ func main() {
 		log.Println("\n⏹️  Shutting down...")
 		cancel()
 	}()
+}
 
-	// Run immediately
-	sendReport(ctx, *serverURL, hostname)
-
-	// Exit if single run mode
-	if *interval <= 0 {
-		log.Println("✅ Single run complete")
-		return
-	}
-
-	// Start interval loop
-	log.Printf("📊 Reporting every %d seconds", *interval)
-	ticker := time.NewTicker(time.Duration(*interval) * time.Second)
+func runInterval(ctx context.Context, serverURL, hostname string, interval int) {
+	log.Printf("📊 Reporting every %d seconds", interval)
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -105,7 +122,7 @@ func main() {
 			log.Println("👋 Agent stopped")
 			return
 		case <-ticker.C:
-			sendReport(ctx, *serverURL, hostname)
+			sendReport(ctx, serverURL, hostname)
 		}
 	}
 }
@@ -115,145 +132,63 @@ func sendReport(ctx context.Context, serverURL, hostname string) {
 		Hostname:  hostname,
 		Timestamp: time.Now().UTC(),
 		Version:   version,
-		Drives:    []map[string]interface{}{},
+		Drives:    collectDriveData(ctx),
 	}
 
-	// Scan for devices
-	scanCmd := exec.CommandContext(ctx, "smartctl", "--scan", "--json")
-	scanOut, err := scanCmd.Output()
-	if err != nil {
-		log.Printf("⚠️  Device scan failed: %v", err)
-	}
-
-	var scan ScanResult
-	if err := json.Unmarshal(scanOut, &scan); err != nil {
-		log.Printf("⚠️  Failed to parse scan output: %v", err)
-	}
-
-	if len(scan.Devices) == 0 {
-		log.Println("⚠️  No drives detected (check permissions)")
-	}
-
-	// Get details for each device
-	for _, dev := range scan.Devices {
-		data := tryReadDrive(ctx, dev.Name, dev.Type)
-		if data != nil {
-			report.Drives = append(report.Drives, data)
-		}
-	}
-
-	// Send to server
-	payload, err := json.Marshal(report)
-	if err != nil {
-		log.Printf("❌ Failed to marshal report: %v", err)
-		return
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "POST", serverURL+"/api/report", bytes.NewBuffer(payload))
-	if err != nil {
-		log.Printf("❌ Failed to create request: %v", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", fmt.Sprintf("vigil-agent/%s", version))
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("❌ Connection failed: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("❌ Server returned %d", resp.StatusCode)
+	if err := postReport(ctx, serverURL, report); err != nil {
+		log.Printf("❌ %v", err)
 		return
 	}
 
 	log.Printf("✅ Report sent (%d drives)", len(report.Drives))
 }
 
-// tryReadDrive attempts to read SMART data using the detected type first,
-// then falls back to alternative device types (sat, scsi, auto) for HBA/RAID controllers
-func tryReadDrive(ctx context.Context, name, detectedType string) map[string]interface{} {
-	// Build list of types to try: detected type first, then fallbacks
-	typesToTry := []string{detectedType}
-	for _, ft := range fallbackDeviceTypes {
-		if ft != detectedType {
-			typesToTry = append(typesToTry, ft)
+func collectDriveData(ctx context.Context) []map[string]interface{} {
+	devices, err := smart.ScanDevices(ctx)
+	if err != nil {
+		log.Printf("⚠️  Device scan failed: %v", err)
+		return nil
+	}
+
+	if len(devices) == 0 {
+		log.Println("⚠️  No drives detected (check permissions)")
+		return nil
+	}
+
+	var drives []map[string]interface{}
+	for _, dev := range devices {
+		if data := smart.ReadDrive(ctx, dev.Name, dev.Type); data != nil {
+			drives = append(drives, data)
 		}
 	}
 
-	for i, devType := range typesToTry {
-		if i == 0 {
-			log.Printf("   📀 Scanning %s (%s)...", name, devType)
-		} else {
-			log.Printf("   🔄 Retrying %s with -d %s...", name, devType)
-		}
+	return drives
+}
 
-		data, _ := readDriveWithType(ctx, name, devType)
-		if data != nil && hasValidSmartData(data) {
-			if i > 0 {
-				log.Printf("   ✓ Success with -d %s", devType)
-			}
-			return data
-		}
+func postReport(ctx context.Context, serverURL string, report DriveReport) error {
+	payload, err := json.Marshal(report)
+	if err != nil {
+		return fmt.Errorf("Failed to marshal report: %v", err)
 	}
 
-	log.Printf("   ⚠️  Skipping %s (no SMART support or incompatible)", name)
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "POST", serverURL+"/api/report", bytes.NewBuffer(payload))
+	if err != nil {
+		return fmt.Errorf("Failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", fmt.Sprintf("vigil-agent/%s", version))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("Connection failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Server returned %d", resp.StatusCode)
+	}
+
 	return nil
-}
-
-// readDriveWithType reads SMART data with a specific device type
-func readDriveWithType(ctx context.Context, name, devType string) (map[string]interface{}, error) {
-	cmd := exec.CommandContext(ctx, "smartctl", "-x", "--json", "-d", devType, name)
-	out, err := cmd.Output()
-
-	// smartctl returns non-zero exit codes for various warnings/errors
-	// but may still produce valid JSON output, so try to parse it anyway
-	if len(out) == 0 {
-		return nil, err
-	}
-
-	var data map[string]interface{}
-	if jsonErr := json.Unmarshal(out, &data); jsonErr != nil {
-		// If JSON parsing fails, return the original error
-		if err != nil {
-			return nil, err
-		}
-		return nil, jsonErr
-	}
-
-	// If we got valid JSON data, return it even if there was an exit error
-	return data, nil
-}
-
-// hasValidSmartData checks if the response contains meaningful SMART data
-func hasValidSmartData(data map[string]interface{}) bool {
-	// Check for device info
-	if _, ok := data["device"]; !ok {
-		return false
-	}
-
-	// Check for either ATA or SCSI SMART data
-	if _, ok := data["ata_smart_attributes"]; ok {
-		return true
-	}
-	if _, ok := data["scsi_error_counter_log"]; ok {
-		return true
-	}
-	if _, ok := data["nvme_smart_health_information_log"]; ok {
-		return true
-	}
-
-	// Check smart_status exists and is valid
-	if smartStatus, ok := data["smart_status"]; ok {
-		if status, ok := smartStatus.(map[string]interface{}); ok {
-			if _, ok := status["passed"]; ok {
-				return true
-			}
-		}
-	}
-
-	return false
 }

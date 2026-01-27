@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [ "**" ]  # All branches
+    branches: [ "**" ]
     tags:
       - 'v*'
   pull_request:
@@ -91,7 +91,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🐳 Preview Images Built!
+              body: `## Preview Images Built!
               
               **Server:**
               \`\`\`bash
@@ -173,7 +173,7 @@ jobs:
 
       - name: Print dev image info
         run: |
-          echo "## 🚀 Dev Images Built!"
+          echo "## Dev Images Built!"
           echo ""
           echo "**Server:**"
           echo "\`\`\`"
@@ -354,7 +354,7 @@ jobs:
             
             ---
             
-            ### 🐳 Docker
+            ### Docker
             
             ```bash
             # Server
@@ -364,7 +364,7 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}
             ```
             
-            ### 📦 Binaries
+            ### Binaries
             
             ```bash
             # Agent (AMD64)

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vigil · Infrastructure Monitor</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -41,9 +41,7 @@
                 
                 <div class="nav-section">
                     <span class="nav-label">Servers <span id="server-count" class="count-badge">0</span></span>
-                    <div id="server-nav-list" class="server-list-nav">
-                        <!-- Dynamically populated -->
-                    </div>
+                    <div id="server-nav-list" class="server-list-nav"></div>
                 </div>
             </nav>
             
@@ -75,7 +73,6 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Header -->
             <header class="main-header">
                 <div class="header-left">
                     <nav id="breadcrumbs" class="breadcrumbs hidden">
@@ -99,15 +96,8 @@
 
             <!-- Dashboard View -->
             <div id="dashboard-view" class="view">
-                <!-- Summary Cards -->
-                <div class="summary-grid" id="summary-cards">
-                    <!-- Dynamically populated -->
-                </div>
-
-                <!-- Server Grid -->
-                <div class="section-header">
-                    <h2>Servers</h2>
-                </div>
+                <div class="summary-grid" id="summary-cards"></div>
+                <div class="section-header"><h2>Servers</h2></div>
                 <div id="server-list" class="server-grid">
                     <div class="empty-state">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -131,19 +121,13 @@
                     </svg>
                     Back
                 </button>
-                
                 <div class="details-layout">
-                    <aside id="detail-sidebar" class="detail-sidebar">
-                        <!-- Drive info populated here -->
-                    </aside>
-
+                    <aside id="detail-sidebar" class="detail-sidebar"></aside>
                     <section class="detail-main">
                         <div class="detail-card">
                             <h2>S.M.A.R.T. Attributes</h2>
                             <div class="table-container">
-                                <table class="smart-table" id="detail-table">
-                                    <!-- Attributes populated here -->
-                                </table>
+                                <table class="smart-table" id="detail-table"></table>
                             </div>
                         </div>
                     </section>
@@ -151,6 +135,17 @@
             </div>
         </main>
     </div>
-    <script src="app.js"></script>
+
+    <!-- Modular JavaScript -->
+    <script src="js/utils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/navigation.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
