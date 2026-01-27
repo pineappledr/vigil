@@ -330,6 +330,4 @@ MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-<p align="center">
-  Made with ❤️ by <a href="https://github.com/pineappledr">PineappleDR</a>
-</p>
+> **Note:** This code has been created with the help of AI. Every change has been tested extensively before merging to main.
