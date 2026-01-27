@@ -31,6 +31,13 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.) in
 
 ## 📸 Screenshots
 
+<img width="461" height="537" alt="Login" src="https://github.com/user-attachments/assets/ce1b6b4b-27e6-4b10-81f0-181596af931d" />
+<img width="1349" height="1030" alt="pwd_change" src="https://github.com/user-attachments/assets/6854f192-a66c-4124-bfe3-cd5ec19a949b" />
+<img width="1345" height="1024" alt="screen1" src="https://github.com/user-attachments/assets/a476366b-6738-4065-b764-9bf63c56bd0a" />
+<img width="1342" height="1023" alt="Screen2" src="https://github.com/user-attachments/assets/caa910a7-cbc2-4b83-b361-f424986804a9" />
+<img width="1341" height="1025" alt="screen3" src="https://github.com/user-attachments/assets/ae84ee07-7a1c-4000-b53c-40a6dcfcb89e" />
+<img width="1342" height="1014" alt="screen4" src="https://github.com/user-attachments/assets/bc5b9147-1fdd-428c-88de-18f34ee4d079" />
+
 ### Dashboard
 The main dashboard shows all servers with their drives in a clean card grid layout.
 
