@@ -1,0 +1,404 @@
+/* ============================================
+   SMART ATTRIBUTES DISPLAY
+   Phase 1.1: Enhanced S.M.A.R.T. Monitoring
+   ============================================ */
+
+/* SMART Table Container */
+.smart-table-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+/* SMART Attributes Table */
+.smart-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.smart-table thead {
+    background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.smart-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.smart-table td {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-mono);
+}
+
+.smart-table tbody tr {
+    transition: background var(--transition-fast);
+    cursor: pointer;
+}
+
+.smart-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.smart-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Critical Attribute Highlighting */
+.smart-table tr.critical-attribute {
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.smart-table tr.critical-attribute:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Severity Badges */
+.severity-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.severity-badge.healthy {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.severity-badge.info {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent-primary);
+}
+
+.severity-badge.warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.severity-badge.critical {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+/* Health Summary Card */
+.health-summary {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.health-summary.healthy {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.05);
+}
+
+.health-summary.warning {
+    border-color: var(--warning);
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.health-summary.critical {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.health-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.health-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.health-summary.healthy .health-icon {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.health-summary.warning .health-icon {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.health-summary.critical .health-icon {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.health-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.health-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    background: var(--bg-elevated);
+    border-radius: 8px;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.stat-value.critical {
+    color: var(--danger);
+}
+
+.stat-value.warning {
+    color: var(--warning);
+}
+
+/* Health Issues List */
+.health-issues {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.health-issues h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+}
+
+.health-issues ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.health-issues li {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.health-issues li::before {
+    content: '●';
+    font-size: 1.2rem;
+}
+
+.health-issues li.critical {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-left: 3px solid var(--danger);
+}
+
+.health-issues li.critical::before {
+    color: var(--danger);
+}
+
+.health-issues li.warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+    border-left: 3px solid var(--warning);
+}
+
+.health-issues li.warning::before {
+    color: var(--warning);
+}
+
+/* No Data Message */
+.no-data {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* SMART Attributes Tab Navigation */
+.smart-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.smart-tab {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.smart-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.smart-tab.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+}
+
+/* Attribute Detail Modal/Panel */
+.attribute-detail-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 16px;
+}
+
+.attribute-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.attribute-detail-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.close-detail-btn {
+    padding: 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all var(--transition-fast);
+}
+
+.close-detail-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.attribute-chart-container {
+    height: 300px;
+    margin-bottom: 20px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .smart-table {
+        font-size: 0.75rem;
+    }
+
+    .smart-table th,
+    .smart-table td {
+        padding: 8px 12px;
+    }
+
+    .health-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .stat-value {
+        font-size: 1.25rem;
+    }
+}
+
+/* Loading State */
+.smart-loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+}
+
+.smart-loading::before {
+    content: '';
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(59, 130, 246, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--accent-primary);
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Attribute Trend Indicator */
+.trend-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.trend-indicator.stable {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-primary);
+}
+
+.trend-indicator.improving {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.trend-indicator.degrading {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.trend-indicator svg {
+    width: 12px;
+    height: 12px;
+}
