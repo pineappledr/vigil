@@ -1,36 +1,35 @@
-# Build Stage - Use debian for reliable CGO compilation
-FROM golang:1.25 AS builder
+# Build Stage - Alpine with CGO support for SQLite
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
 # Version build arg (set by CI or defaults to dev)
 ARG VERSION=dev
 
-# Copy go mod files first
-COPY go.mod ./
-COPY go.sum* ./
+# Install build dependencies (gcc, musl-dev needed for CGO/SQLite)
+RUN apk add --no-cache gcc musl-dev
 
-# Download dependencies and tidy
-RUN go mod download || true
-RUN go mod tidy
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
 
 # Copy source code
 COPY . .
 
 # Build the server binary with version
-RUN go build -ldflags="-s -w -X main.version=${VERSION}" -o vigil-server ./cmd/server
+# CGO_ENABLED=1 is required for modernc.org/sqlite
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -ldflags="-s -w -X main.version=${VERSION}" \
+    -o vigil-server ./cmd/server
 
-# Final Stage
-FROM debian:bookworm-slim
+# Final Stage - Minimal Alpine runtime
+FROM alpine:3.19
 WORKDIR /app
 
-# Add ca-certificates for HTTPS
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates wget tzdata
 
 # Create non-root user and data directory
-RUN useradd -m -u 1000 vigil && \
+RUN adduser -D -u 1000 vigil && \
     mkdir -p /data && \
     chown -R vigil:vigil /data
 
