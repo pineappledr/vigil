@@ -108,7 +108,7 @@ jobs:
               _Built with Alpine Linux for minimal size and security._`
             })
 
-  # Build dev images for feature branches (not main, not tags)
+  # Build dev images and binaries for feature branches (not main, not tags)
   build-branch-dev:
     needs: test
     runs-on: ubuntu-latest
@@ -123,6 +123,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -144,6 +149,25 @@ jobs:
           # Create short SHA for version
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Build dev agent binaries
+        run: |
+          mkdir -p dist
+          VERSION="dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}"
+          
+          # Agent binaries (no CGO - cross-platform)
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
+          
+          # Checksums
+          cd dist && sha256sum * > checksums.txt
+
+      - name: Upload dev agent binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: vigil-agent-dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
+          path: dist/
+          retention-days: 14
 
       - name: Build and push Server (Dev)
         uses: docker/build-push-action@v5
@@ -173,19 +197,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Print dev image info
+      - name: Print dev build info
         run: |
-          echo "## Dev Images Built!"
+          echo "## 🛠️ Dev Build Complete!"
           echo ""
-          echo "**Server:**"
-          echo "\`\`\`"
+          echo "### Agent Binaries"
+          echo "Download from the workflow artifacts or use:"
+          echo ""
+          echo "**Docker Images:**"
+          echo "\`\`\`bash"
+          echo "# Server"
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.branch.outputs.name }}"
-          echo "\`\`\`"
           echo ""
-          echo "**Agent:**"
-          echo "\`\`\`"
+          echo "# Agent"
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}"
           echo "\`\`\`"
+          echo ""
+          echo "**Binary Artifacts:**"
+          echo "- vigil-agent-linux-amd64"
+          echo "- vigil-agent-linux-arm64"
+          echo "- checksums.txt"
 
   # Build latest images for main branch
   build-latest:

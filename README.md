@@ -184,6 +184,120 @@ docker run -d \
 
 ---
 
+## 🔄 Upgrading the Agent
+
+When a new version of Vigil is released, follow these steps to upgrade your agents.
+
+### Upgrade Binary Agent (Systemd)
+
+```bash
+# 1. Stop the agent service
+sudo systemctl stop vigil-agent
+
+# 2. Backup the current binary (optional)
+sudo cp /usr/local/bin/vigil-agent /usr/local/bin/vigil-agent.bak
+
+# 3. Download the new version
+# For latest release:
+sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \
+  -o /usr/local/bin/vigil-agent
+
+# Or for a specific version (e.g., v1.2.0):
+sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.2.0/vigil-agent-linux-amd64 \
+  -o /usr/local/bin/vigil-agent
+
+# 4. Make it executable
+sudo chmod +x /usr/local/bin/vigil-agent
+
+# 5. Verify the new version
+vigil-agent --version
+
+# 6. Start the agent service
+sudo systemctl start vigil-agent
+
+# 7. Check status
+sudo systemctl status vigil-agent
+```
+
+### Upgrade Docker Agent
+
+```bash
+# 1. Pull the latest image
+docker pull ghcr.io/pineappledr/vigil-agent:latest
+
+# 2. Stop and remove the old container
+docker stop vigil-agent
+docker rm vigil-agent
+
+# 3. Start with the new image
+docker run -d \
+  --name vigil-agent \
+  --net=host \
+  --privileged \
+  -v /dev:/dev \
+  --restart unless-stopped \
+  ghcr.io/pineappledr/vigil-agent:latest \
+  --server http://YOUR_SERVER_IP:9080 \
+  --interval 60
+```
+
+### Upgrade Script (Automated)
+
+For convenience, you can use this one-liner to upgrade the binary agent:
+
+```bash
+# One-liner upgrade (stops, downloads, restarts)
+sudo systemctl stop vigil-agent && \
+sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \
+  -o /usr/local/bin/vigil-agent && \
+sudo chmod +x /usr/local/bin/vigil-agent && \
+sudo systemctl start vigil-agent && \
+echo "✅ Agent upgraded to $(vigil-agent --version)"
+```
+
+### Batch Upgrade (Multiple Servers)
+
+If you have multiple servers running the agent, you can use SSH to upgrade them all:
+
+```bash
+# Create a list of your servers
+SERVERS="server1.local server2.local server3.local"
+
+# Upgrade each server
+for server in $SERVERS; do
+  echo "Upgrading $server..."
+  ssh root@$server 'systemctl stop vigil-agent && \
+    curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \
+    -o /usr/local/bin/vigil-agent && \
+    chmod +x /usr/local/bin/vigil-agent && \
+    systemctl start vigil-agent'
+  echo "✅ $server upgraded"
+done
+```
+
+### Rollback (If Needed)
+
+If you encounter issues with a new version:
+
+```bash
+# Rollback to backup
+sudo systemctl stop vigil-agent
+sudo mv /usr/local/bin/vigil-agent.bak /usr/local/bin/vigil-agent
+sudo systemctl start vigil-agent
+```
+
+Or download a specific older version:
+
+```bash
+sudo systemctl stop vigil-agent
+sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil-agent-linux-amd64 \
+  -o /usr/local/bin/vigil-agent
+sudo chmod +x /usr/local/bin/vigil-agent
+sudo systemctl start vigil-agent
+```
+
+---
+
 ## ⚙️ Configuration
 
 ### Server Environment Variables
@@ -305,6 +419,30 @@ GOOS=linux GOARCH=arm64 go build -o vigil-agent-linux-arm64 ./cmd/agent
 
 ---
 
+## 🛠️ Development Builds
+
+Dev branch builds are automatically compiled and available as artifacts in GitHub Actions. This is useful for testing new features before they're released.
+
+### Download Dev Agent Binary
+
+1. Go to [GitHub Actions](https://github.com/pineappledr/vigil/actions)
+2. Click on the latest workflow run for your branch (e.g., `develop`)
+3. Scroll down to **Artifacts**
+4. Download `vigil-agent-dev-{branch}-{commit}`
+
+### Use Dev Docker Images
+
+```bash
+# Pull dev branch images
+docker pull ghcr.io/pineappledr/vigil:dev-develop
+docker pull ghcr.io/pineappledr/vigil-agent:dev-develop
+
+# Or for feature branches (slashes replaced with dashes)
+docker pull ghcr.io/pineappledr/vigil-agent:dev-feature-new-feature
+```
+
+---
+
 ## 🐛 Troubleshooting
 
 ### Agent not detecting drives
@@ -321,6 +459,15 @@ This can happen with drives behind HBA controllers. The latest agent version aut
 
 - Check logs for generated password: `docker logs vigil-server | grep password`
 - Reset by deleting the database: `docker volume rm vigil_data`
+
+### Agent version mismatch
+
+Check your agent version:
+```bash
+vigil-agent --version
+```
+
+Compare with the latest release on [GitHub Releases](https://github.com/pineappledr/vigil/releases).
 
 ---
 
