@@ -208,7 +208,8 @@ func GetDriveHealthSummary(hostname, serialNumber string) (map[string]interface{
 	for _, attr := range attributes {
 		severity := smart.GetAttributeSeverity(attr.ID, attr.RawValue, attr.Threshold)
 
-		if severity == "CRITICAL" {
+		switch severity {
+		case "CRITICAL":
 			criticalCount++
 			issues = append(issues, map[string]interface{}{
 				"attribute_id":   attr.ID,
@@ -218,7 +219,7 @@ func GetDriveHealthSummary(hostname, serialNumber string) (map[string]interface{
 				"threshold":      attr.Threshold,
 				"message":        fmt.Sprintf("%s has critical value: %d", attr.Name, attr.RawValue),
 			})
-		} else if severity == "WARNING" {
+		case "WARNING":
 			warningCount++
 			issues = append(issues, map[string]interface{}{
 				"attribute_id":   attr.ID,
@@ -310,11 +311,12 @@ func GetAttributeTrend(hostname, serialNumber string, attributeID int, days int)
 	if count > 1 {
 		// Determine trend direction
 		if change > 0 {
-			// For most attributes, increasing is bad
-			if attributeID == 5 || attributeID == 197 || attributeID == 198 {
+			switch attributeID {
+			case 5, 197, 198:
+				// Sector errors — increasing is degradation
 				trend = "degrading"
-			} else if attributeID == 9 || attributeID == 12 || attributeID == 241 || attributeID == 242 {
-				// For counters like power-on hours, increasing is normal
+			case 9, 12, 241, 242:
+				// Monotonic counters (power-on hours, cycles, LBAs) — increasing is normal
 				trend = "increasing"
 			}
 		} else if change < 0 {
