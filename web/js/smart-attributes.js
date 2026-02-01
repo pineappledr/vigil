@@ -1,17 +1,571 @@
 /**
  * Vigil Dashboard - SMART Attributes Module
- * Phase 1.1: Enhanced S.M.A.R.T. Monitoring
+ * Phase 1.3: Enhanced S.M.A.R.T. Monitoring UI with NVMe Health
  */
 
 const SmartAttributes = {
-    // Critical attribute IDs that should be highlighted
-    criticalIDs: [5, 10, 187, 188, 196, 197, 198, 181, 182, 183, 184, 232],
+    // Current state
+    currentDrive: null,
+    currentHostname: null,
+    attributeFilter: 'all',
+    detailPanelOpen: false,
 
-    // Fetch SMART attributes for a specific drive
+    // Critical attribute IDs for ATA drives
+    criticalATAIds: [5, 10, 187, 188, 196, 197, 198, 181, 182, 183, 184, 199, 232, 233],
+    
+    // NVMe attribute pseudo-IDs
+    nvmeAttrIds: {
+        temperature: 194,
+        availableSpare: 232,
+        percentageUsed: 233,
+        dataUnitsWritten: 241,
+        dataUnitsRead: 242,
+        powerCycles: 12,
+        powerOnHours: 9,
+        mediaErrors: 187,
+        criticalWarning: 1,
+        unsafeShutdowns: 174,
+        controllerBusyTime: 175,
+        hostReads: 176,
+        hostWrites: 178
+    },
+
+    // Icons for different attribute types
+    icons: {
+        health: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+        temp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>`,
+        storage: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
+        power: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>`,
+        error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+        clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+        activity: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
+        check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
+        warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+        alert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+        nvme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
+        close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+        table: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
+        trendUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+        trendDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`,
+        minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+    },
+
+    async init(hostname, serialNumber, driveData) {
+        this.currentHostname = hostname;
+        this.currentDrive = driveData;
+        this.attributeFilter = 'all';
+        const isNvme = this.isNvmeDrive(driveData);
+        await this.render(hostname, serialNumber, isNvme);
+    },
+
+    isNvmeDrive(drive) {
+        if (!drive) return false;
+        const deviceType = drive.device?.type?.toLowerCase() || '';
+        const protocol = drive.device?.protocol || '';
+        return deviceType === 'nvme' || protocol === 'NVMe';
+    },
+
+    async render(hostname, serialNumber, isNvme) {
+        const container = document.getElementById('smart-view-container');
+        if (!container) return;
+
+        container.innerHTML = this.renderLoading();
+
+        try {
+            const healthData = await this.fetchHealthSummary(hostname, serialNumber);
+            const attrData = await this.fetchAttributes(hostname, serialNumber);
+            const tempData = await this.fetchTemperatureHistory(hostname, serialNumber, 24);
+
+            let html = '';
+            html += this.renderTabs(isNvme);
+            html += '<div id="smart-tab-contents">';
+            html += `<div id="tab-health" class="smart-tab-content active">`;
+            html += this.renderHealthSummary(healthData);
+            if (healthData?.issues?.length > 0) {
+                html += this.renderIssuesList(healthData.issues);
+            }
+            html += `</div>`;
+
+            if (isNvme) {
+                html += `<div id="tab-nvme" class="smart-tab-content">`;
+                html += this.renderNvmeHealth(attrData, this.currentDrive);
+                html += `</div>`;
+            }
+
+            html += `<div id="tab-attributes" class="smart-tab-content">`;
+            html += this.renderAttributesTable(attrData?.attributes || [], isNvme);
+            html += `</div>`;
+
+            html += `<div id="tab-temperature" class="smart-tab-content">`;
+            html += this.renderTemperatureChart(tempData);
+            html += `</div>`;
+
+            html += '</div>';
+            container.innerHTML = html;
+            this.initTabs();
+        } catch (error) {
+            console.error('Error rendering SMART view:', error);
+            container.innerHTML = this.renderError('Failed to load SMART data');
+        }
+    },
+
+    renderTabs(isNvme) {
+        let tabs = `
+            <div class="smart-tabs">
+                <button class="smart-tab active" data-tab="health">
+                    ${this.icons.health}
+                    <span>Health</span>
+                </button>
+        `;
+        if (isNvme) {
+            tabs += `
+                <button class="smart-tab" data-tab="nvme">
+                    ${this.icons.nvme}
+                    <span>NVMe Info</span>
+                </button>
+            `;
+        }
+        tabs += `
+                <button class="smart-tab" data-tab="attributes">
+                    ${this.icons.table}
+                    <span>Attributes</span>
+                </button>
+                <button class="smart-tab" data-tab="temperature">
+                    ${this.icons.temp}
+                    <span>Temperature</span>
+                </button>
+            </div>
+        `;
+        return tabs;
+    },
+
+    initTabs() {
+        const tabs = document.querySelectorAll('.smart-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.dataset.tab;
+                this.switchTab(tabId);
+            });
+        });
+    },
+
+    switchTab(tabId) {
+        document.querySelectorAll('.smart-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.smart-tab[data-tab="${tabId}"]`)?.classList.add('active');
+        document.querySelectorAll('.smart-tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(`tab-${tabId}`)?.classList.add('active');
+    },
+
+    renderHealthSummary(healthData) {
+        if (!healthData) {
+            return `<div class="smart-empty">
+                ${this.icons.alert}
+                <p>Health data unavailable</p>
+                <span class="hint">No SMART data has been collected yet</span>
+            </div>`;
+        }
+
+        const healthClass = healthData.overall_health?.toLowerCase() || 'healthy';
+        const healthIcon = healthClass === 'healthy' ? this.icons.check :
+                          healthClass === 'warning' ? this.icons.warning : this.icons.error;
+
+        return `
+            <div class="health-summary-panel">
+                <div class="health-summary-header">
+                    <div class="health-summary-icon ${healthClass}">
+                        ${healthIcon}
+                    </div>
+                    <div class="health-summary-title">
+                        <h3>${healthData.overall_health || 'Unknown'}</h3>
+                        <span class="subtitle">${healthData.smart_passed ? 'SMART Self-Test Passed' : 'SMART Self-Test Failed'}</span>
+                    </div>
+                </div>
+                <div class="health-summary-stats">
+                    <div class="health-stat-card">
+                        <div class="health-stat-value ${healthData.critical_count > 0 ? 'critical' : 'healthy'}">
+                            ${healthData.critical_count || 0}
+                        </div>
+                        <div class="health-stat-label">Critical Issues</div>
+                    </div>
+                    <div class="health-stat-card">
+                        <div class="health-stat-value ${healthData.warning_count > 0 ? 'warning' : 'healthy'}">
+                            ${healthData.warning_count || 0}
+                        </div>
+                        <div class="health-stat-label">Warnings</div>
+                    </div>
+                    <div class="health-stat-card">
+                        <div class="health-stat-value">${healthData.model_name || 'N/A'}</div>
+                        <div class="health-stat-label">Model</div>
+                    </div>
+                    <div class="health-stat-card">
+                        <div class="health-stat-value">${healthData.drive_type || 'Unknown'}</div>
+                        <div class="health-stat-label">Type</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderIssuesList(issues) {
+        if (!issues || issues.length === 0) return '';
+
+        let html = `
+            <div class="health-issues-panel">
+                <div class="health-issues-header">
+                    ${this.icons.warning}
+                    <span>Issues Detected (${issues.length})</span>
+                </div>
+                <div class="health-issues-list">
+        `;
+
+        for (const issue of issues) {
+            const severityClass = issue.severity?.toLowerCase() || 'warning';
+            html += `
+                <div class="health-issue-item">
+                    <div class="issue-severity-dot ${severityClass}"></div>
+                    <div class="issue-content">
+                        <div class="issue-message">${this.escapeHtml(issue.message)}</div>
+                        <div class="issue-meta">
+                            Attribute #${issue.attribute_id} · ${issue.attribute_name}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        html += '</div></div>';
+        return html;
+    },
+
+    renderNvmeHealth(attrData, driveData) {
+        const attrs = attrData?.attributes || [];
+        const nvmeLog = driveData?.nvme_smart_health_information_log || {};
+        const metrics = this.extractNvmeMetrics(attrs, nvmeLog);
+
+        return `
+            <div class="nvme-health-panel">
+                <div class="nvme-health-header">
+                    ${this.icons.nvme}
+                    <h3>NVMe Health Information</h3>
+                    <span class="badge">NVMe</span>
+                </div>
+                <div class="nvme-health-grid">
+                    ${this.renderNvmeMetric('Available Spare', metrics.availableSpare, '%', this.icons.storage, 
+                        this.getNvmeSpareClass(metrics.availableSpare), metrics.availableSpare)}
+                    ${this.renderNvmeMetric('Percentage Used', metrics.percentageUsed, '%', this.icons.activity,
+                        this.getNvmeWearClass(metrics.percentageUsed), 100 - metrics.percentageUsed)}
+                    ${this.renderNvmeMetric('Temperature', metrics.temperature, '°C', this.icons.temp,
+                        this.getTempClass(metrics.temperature))}
+                    ${this.renderNvmeMetric('Power On Hours', this.formatAge(metrics.powerOnHours), '', this.icons.clock)}
+                    ${this.renderNvmeMetric('Power Cycles', this.formatNumber(metrics.powerCycles), '', this.icons.power)}
+                    ${this.renderNvmeMetric('Data Written', this.formatNvmeBytes(metrics.dataUnitsWritten), '', this.icons.storage)}
+                    ${this.renderNvmeMetric('Data Read', this.formatNvmeBytes(metrics.dataUnitsRead), '', this.icons.storage)}
+                    ${this.renderNvmeMetric('Media Errors', metrics.mediaErrors, '', this.icons.error,
+                        metrics.mediaErrors > 0 ? 'critical' : 'healthy')}
+                    ${this.renderNvmeMetric('Unsafe Shutdowns', this.formatNumber(metrics.unsafeShutdowns), '', this.icons.warning,
+                        metrics.unsafeShutdowns > 10 ? 'warning' : '')}
+                    ${this.renderNvmeMetric('Controller Busy', this.formatNumber(metrics.controllerBusyTime), 'min', this.icons.clock)}
+                    ${this.renderNvmeMetric('Critical Warning', metrics.criticalWarning, '', this.icons.alert,
+                        metrics.criticalWarning > 0 ? 'critical' : 'healthy')}
+                    ${this.renderNvmeMetric('Host Reads', this.formatNumber(metrics.hostReads), '', this.icons.activity)}
+                </div>
+            </div>
+        `;
+    },
+
+    renderNvmeMetric(label, value, unit, icon, valueClass = '', progressValue = null) {
+        let progressHtml = '';
+        if (progressValue !== null && progressValue !== undefined) {
+            const progressClass = valueClass || 'healthy';
+            progressHtml = `
+                <div class="nvme-health-progress">
+                    <div class="nvme-health-progress-bar ${progressClass}" style="width: ${Math.max(0, Math.min(100, progressValue))}%"></div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="nvme-health-item">
+                <div class="nvme-health-label">
+                    ${icon}
+                    ${label}
+                </div>
+                <div class="nvme-health-value ${valueClass}">
+                    ${value !== null && value !== undefined ? value : 'N/A'}
+                    ${unit ? `<span class="unit">${unit}</span>` : ''}
+                </div>
+                ${progressHtml}
+            </div>
+        `;
+    },
+
+    extractNvmeMetrics(attrs, nvmeLog) {
+        const findAttr = (id) => attrs.find(a => a.id === id);
+        const getVal = (id, fallback = null) => {
+            const attr = findAttr(id);
+            return attr?.raw_value ?? fallback;
+        };
+
+        return {
+            temperature: nvmeLog.temperature ?? getVal(194),
+            availableSpare: nvmeLog.available_spare ?? getVal(232),
+            percentageUsed: nvmeLog.percentage_used ?? getVal(233),
+            dataUnitsWritten: nvmeLog.data_units_written ?? getVal(241),
+            dataUnitsRead: nvmeLog.data_units_read ?? getVal(242),
+            powerCycles: nvmeLog.power_cycles ?? getVal(12),
+            powerOnHours: nvmeLog.power_on_hours ?? getVal(9),
+            mediaErrors: nvmeLog.media_errors ?? getVal(187),
+            unsafeShutdowns: nvmeLog.unsafe_shutdowns ?? getVal(174),
+            controllerBusyTime: nvmeLog.controller_busy_time ?? getVal(175),
+            criticalWarning: nvmeLog.critical_warning ?? getVal(1),
+            hostReads: nvmeLog.host_reads ?? getVal(176),
+            hostWrites: nvmeLog.host_writes ?? getVal(178)
+        };
+    },
+
+    renderAttributesTable(attributes, isNvme) {
+        if (!attributes || attributes.length === 0) {
+            return `
+                <div class="smart-empty">
+                    ${this.icons.table}
+                    <p>No SMART attributes available</p>
+                    <span class="hint">${isNvme ? 'NVMe drives report health differently' : 'Waiting for data collection'}</span>
+                </div>
+            `;
+        }
+
+        const sorted = [...attributes].sort((a, b) => {
+            const aSev = this.getAttributeSeverity(a);
+            const bSev = this.getAttributeSeverity(b);
+            const sevOrder = { critical: 0, warning: 1, info: 2, healthy: 3 };
+            const sevDiff = (sevOrder[aSev] || 3) - (sevOrder[bSev] || 3);
+            return sevDiff !== 0 ? sevDiff : a.id - b.id;
+        });
+
+        let html = `
+            <div class="smart-table-container">
+                <div class="smart-table-header">
+                    <div class="smart-table-title">
+                        ${this.icons.table}
+                        S.M.A.R.T. Attributes
+                    </div>
+                    <div class="smart-table-filter">
+                        <button class="filter-btn ${this.attributeFilter === 'all' ? 'active' : ''}" 
+                                onclick="SmartAttributes.setFilter('all')">All</button>
+                        <button class="filter-btn ${this.attributeFilter === 'critical' ? 'active' : ''}"
+                                onclick="SmartAttributes.setFilter('critical')">Critical</button>
+                        <button class="filter-btn ${this.attributeFilter === 'issues' ? 'active' : ''}"
+                                onclick="SmartAttributes.setFilter('issues')">Issues Only</button>
+                    </div>
+                </div>
+                <div class="smart-table-wrapper">
+                    <table class="smart-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 90px">Status</th>
+                                <th style="width: 50px">ID</th>
+                                <th>Attribute</th>
+                                <th style="width: 70px">Value</th>
+                                <th style="width: 70px">Worst</th>
+                                <th style="width: 70px">Thresh</th>
+                                <th style="width: 100px">Raw</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        for (const attr of sorted) {
+            const severity = this.getAttributeSeverity(attr);
+            const isCritical = this.criticalATAIds.includes(attr.id);
+
+            if (this.attributeFilter === 'critical' && !isCritical) continue;
+            if (this.attributeFilter === 'issues' && severity === 'healthy') continue;
+
+            const rowClass = severity === 'critical' ? 'critical-row' : 
+                            severity === 'warning' ? 'warning-row' : '';
+
+            html += `
+                <tr class="${rowClass}" onclick="SmartAttributes.showAttributeDetail(${attr.id})">
+                    <td>${this.getSeverityBadge(severity)}</td>
+                    <td><span class="attr-id ${isCritical ? 'critical' : ''}">${attr.id}</span></td>
+                    <td class="attr-name-cell">${this.escapeHtml(attr.name)}</td>
+                    <td>${attr.value ?? '—'}</td>
+                    <td>${attr.worst ?? '—'}</td>
+                    <td>${attr.threshold ?? '—'}</td>
+                    <td><strong>${attr.raw_value !== undefined ? attr.raw_value : '—'}</strong></td>
+                </tr>
+            `;
+        }
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        return html;
+    },
+
+    setFilter(filter) {
+        this.attributeFilter = filter;
+        const tabContent = document.getElementById('tab-attributes');
+        if (tabContent && this.currentHostname) {
+            this.fetchAttributes(this.currentHostname, this.currentDrive?.serial_number).then(data => {
+                tabContent.innerHTML = this.renderAttributesTable(data?.attributes || [], this.isNvmeDrive(this.currentDrive));
+            });
+        }
+    },
+
+    renderTemperatureChart(tempData) {
+        if (!tempData || !tempData.history || tempData.history.length === 0) {
+            return `
+                <div class="smart-empty">
+                    ${this.icons.temp}
+                    <p>No temperature history available</p>
+                    <span class="hint">Temperature data will appear after collection</span>
+                </div>
+            `;
+        }
+
+        const temps = tempData.history.map(h => h.temperature);
+        const minTemp = tempData.min_temp || Math.min(...temps);
+        const maxTemp = tempData.max_temp || Math.max(...temps);
+        const avgTemp = tempData.avg_temp || Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
+
+        return `
+            <div class="temp-chart-panel">
+                <div class="temp-chart-header">
+                    <div class="temp-chart-title">
+                        ${this.icons.temp}
+                        Temperature History (${tempData.hours || 24}h)
+                    </div>
+                    <div class="temp-chart-stats">
+                        <div class="temp-chart-stat">
+                            <span class="label">Min:</span>
+                            <span class="value min">${minTemp}°C</span>
+                        </div>
+                        <div class="temp-chart-stat">
+                            <span class="label">Avg:</span>
+                            <span class="value avg">${avgTemp}°C</span>
+                        </div>
+                        <div class="temp-chart-stat">
+                            <span class="label">Max:</span>
+                            <span class="value max">${maxTemp}°C</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="temp-chart-body">
+                    <canvas id="temp-chart-canvas" class="temp-chart-canvas"></canvas>
+                </div>
+            </div>
+        `;
+    },
+
+    async showAttributeDetail(attributeId) {
+        const trend = await this.fetchAttributeTrend(
+            this.currentHostname, 
+            this.currentDrive?.serial_number, 
+            attributeId, 
+            30
+        );
+
+        const attrDef = this.getAttributeDefinition(attributeId);
+
+        let panel = document.getElementById('attr-detail-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'attr-detail-panel';
+            panel.className = 'attr-detail-panel';
+            document.body.appendChild(panel);
+        }
+
+        const trendIcon = trend?.trend === 'degrading' ? this.icons.trendUp :
+                         trend?.trend === 'improving' ? this.icons.trendDown :
+                         this.icons.minus;
+
+        panel.innerHTML = `
+            <div class="attr-detail-header">
+                <h3>Attribute #${attributeId}</h3>
+                <button class="attr-detail-close" onclick="SmartAttributes.closeDetailPanel()">
+                    ${this.icons.close}
+                </button>
+            </div>
+            <div class="attr-detail-body">
+                <div class="attr-detail-section">
+                    <h4>Overview</h4>
+                    <div class="attr-detail-row">
+                        <span class="attr-detail-label">Name</span>
+                        <span class="attr-detail-value">${attrDef?.name || 'Unknown'}</span>
+                    </div>
+                    <div class="attr-detail-row">
+                        <span class="attr-detail-label">Severity</span>
+                        <span class="attr-detail-value">${attrDef?.severity || 'Unknown'}</span>
+                    </div>
+                    <div class="attr-detail-row">
+                        <span class="attr-detail-label">Drive Type</span>
+                        <span class="attr-detail-value">${attrDef?.drive_type || 'All'}</span>
+                    </div>
+                </div>
+                ${attrDef?.description ? `
+                    <div class="attr-detail-section">
+                        <h4>Description</h4>
+                        <div class="attr-description">${attrDef.description}</div>
+                    </div>
+                ` : ''}
+                ${trend ? `
+                    <div class="attr-detail-section">
+                        <h4>30-Day Trend</h4>
+                        <div class="attr-detail-row">
+                            <span class="attr-detail-label">Trend</span>
+                            <span class="attr-detail-value">
+                                <span class="trend-indicator ${trend.trend}">
+                                    ${trendIcon}
+                                    ${this.capitalize(trend.trend)}
+                                </span>
+                            </span>
+                        </div>
+                        <div class="attr-detail-row">
+                            <span class="attr-detail-label">First Value</span>
+                            <span class="attr-detail-value">${trend.first_raw_value}</span>
+                        </div>
+                        <div class="attr-detail-row">
+                            <span class="attr-detail-label">Current Value</span>
+                            <span class="attr-detail-value">${trend.last_raw_value}</span>
+                        </div>
+                        <div class="attr-detail-row">
+                            <span class="attr-detail-label">Change</span>
+                            <span class="attr-detail-value">${trend.raw_change >= 0 ? '+' : ''}${trend.raw_change}</span>
+                        </div>
+                        <div class="attr-detail-row">
+                            <span class="attr-detail-label">Data Points</span>
+                            <span class="attr-detail-value">${trend.point_count}</span>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        setTimeout(() => panel.classList.add('open'), 10);
+        this.detailPanelOpen = true;
+    },
+
+    closeDetailPanel() {
+        const panel = document.getElementById('attr-detail-panel');
+        if (panel) {
+            panel.classList.remove('open');
+            setTimeout(() => panel.remove(), 300);
+        }
+        this.detailPanelOpen = false;
+    },
+
+    // API Methods
     async fetchAttributes(hostname, serialNumber) {
         try {
-            const response = await fetch(`/api/smart/attributes?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}`);
-            if (!response.ok) throw new Error('Failed to fetch SMART attributes');
+            const response = await fetch(
+                `/api/smart/attributes?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}`
+            );
+            if (!response.ok) throw new Error('Failed to fetch');
             return await response.json();
         } catch (error) {
             console.error('Error fetching SMART attributes:', error);
@@ -19,39 +573,12 @@ const SmartAttributes = {
         }
     },
 
-    // Fetch attribute history for charting
-    async fetchAttributeHistory(hostname, serialNumber, attributeID, limit = 100) {
-        try {
-            const response = await fetch(
-                `/api/smart/attributes/history?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}&attribute_id=${attributeID}&limit=${limit}`
-            );
-            if (!response.ok) throw new Error('Failed to fetch attribute history');
-            return await response.json();
-        } catch (error) {
-            console.error('Error fetching attribute history:', error);
-            return null;
-        }
-    },
-
-    // Fetch trend analysis
-    async fetchAttributeTrend(hostname, serialNumber, attributeID, days = 30) {
-        try {
-            const response = await fetch(
-                `/api/smart/attributes/trend?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}&attribute_id=${attributeID}&days=${days}`
-            );
-            if (!response.ok) throw new Error('Failed to fetch attribute trend');
-            return await response.json();
-        } catch (error) {
-            console.error('Error fetching attribute trend:', error);
-            return null;
-        }
-    },
-
-    // Fetch health summary for a drive
     async fetchHealthSummary(hostname, serialNumber) {
         try {
-            const response = await fetch(`/api/smart/health/summary?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}`);
-            if (!response.ok) throw new Error('Failed to fetch health summary');
+            const response = await fetch(
+                `/api/smart/health/summary?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}`
+            );
+            if (!response.ok) throw new Error('Failed to fetch');
             return await response.json();
         } catch (error) {
             console.error('Error fetching health summary:', error);
@@ -59,198 +586,188 @@ const SmartAttributes = {
         }
     },
 
-    // Fetch all drives health summaries
-    async fetchAllHealthSummaries() {
+    async fetchTemperatureHistory(hostname, serialNumber, hours = 24) {
         try {
-            const response = await fetch('/api/smart/health/all');
-            if (!response.ok) throw new Error('Failed to fetch all health summaries');
+            const response = await fetch(
+                `/api/smart/temperature/history?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}&hours=${hours}`
+            );
+            if (!response.ok) throw new Error('Failed to fetch');
             return await response.json();
         } catch (error) {
-            console.error('Error fetching all health summaries:', error);
+            console.error('Error fetching temperature history:', error);
             return null;
         }
     },
 
-    // Determine severity based on attribute value
+    async fetchAttributeTrend(hostname, serialNumber, attributeId, days = 30) {
+        try {
+            const response = await fetch(
+                `/api/smart/attributes/trend?hostname=${encodeURIComponent(hostname)}&serial=${encodeURIComponent(serialNumber)}&attribute_id=${attributeId}&days=${days}`
+            );
+            if (!response.ok) throw new Error('Failed to fetch');
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching attribute trend:', error);
+            return null;
+        }
+    },
+
+    // Helper Methods
     getAttributeSeverity(attr) {
-        // Check if value is below threshold
-        if (attr.threshold > 0 && attr.value <= attr.threshold) {
+        if (attr.threshold > 0 && attr.value > 0 && attr.value <= attr.threshold) {
             return 'critical';
         }
 
-        // Check specific critical attributes by raw value
-        if (this.criticalIDs.includes(attr.id)) {
-            // Reallocated sectors, pending sectors, errors
-            if ([5, 196, 197, 198, 187, 188, 181, 182, 183, 184].includes(attr.id)) {
-                if (attr.raw_value > 0) return 'critical';
-            }
-            
-            // Temperature
-            if (attr.id === 194) {
-                if (attr.raw_value > 60) return 'warning';
-                if (attr.raw_value > 50) return 'info';
-            }
+        const id = attr.id;
+        const raw = attr.raw_value || 0;
 
-            // Available Reserved Space (SSD)
-            if (attr.id === 232) {
-                if (attr.raw_value < 10) return 'critical';
-                if (attr.raw_value < 20) return 'warning';
-            }
+        if ([5, 10, 196, 197, 198, 187, 188, 181, 182, 183, 184].includes(id)) {
+            if (raw > 0) return 'critical';
+        }
 
-            // CRC Errors
-            if (attr.id === 199 && attr.raw_value > 0) {
-                return 'warning';
-            }
+        if (id === 194 || id === 190) {
+            if (raw > 65) return 'critical';
+            if (raw > 55) return 'warning';
+            if (raw > 45) return 'info';
+        }
+
+        if (id === 199 && raw > 0) {
+            return raw > 100 ? 'critical' : 'warning';
+        }
+
+        if (id === 232) {
+            if (raw < 10) return 'critical';
+            if (raw < 20) return 'warning';
+        }
+
+        if (id === 233) {
+            if (raw > 95) return 'critical';
+            if (raw > 80) return 'warning';
+            if (raw > 50) return 'info';
+        }
+
+        if (id === 177) {
+            if (attr.value < 10) return 'critical';
+            if (attr.value < 20) return 'warning';
         }
 
         return 'healthy';
     },
 
-    // Get severity badge HTML
     getSeverityBadge(severity) {
-        const badges = {
-            critical: '<span class="severity-badge critical">CRITICAL</span>',
-            warning: '<span class="severity-badge warning">WARNING</span>',
-            info: '<span class="severity-badge info">INFO</span>',
-            healthy: '<span class="severity-badge healthy">OK</span>'
+        const icons = {
+            healthy: this.icons.check,
+            info: this.icons.alert,
+            warning: this.icons.warning,
+            critical: this.icons.error
         };
-        return badges[severity] || badges.healthy;
+        const labels = {
+            healthy: 'OK',
+            info: 'INFO',
+            warning: 'WARN',
+            critical: 'CRIT'
+        };
+        return `<span class="severity-badge ${severity}">${icons[severity] || ''} ${labels[severity] || severity}</span>`;
     },
 
-    // Render SMART attributes table
-    renderAttributesTable(attributes, containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
+    getAttributeDefinition(id) {
+        const defs = {
+            5: { name: 'Reallocated Sectors Count', severity: 'CRITICAL', drive_type: 'BOTH', description: 'Count of reallocated sectors. When a sector is found bad, it\'s remapped to a spare area. Any non-zero value indicates potential drive degradation.' },
+            9: { name: 'Power-On Hours', severity: 'INFO', drive_type: 'BOTH', description: 'Total hours the drive has been powered on.' },
+            10: { name: 'Spin Retry Count', severity: 'CRITICAL', drive_type: 'HDD', description: 'Count of retry attempts to spin up the drive. May indicate motor or bearing issues.' },
+            12: { name: 'Power Cycle Count', severity: 'INFO', drive_type: 'BOTH', description: 'Count of full power on/off cycles.' },
+            177: { name: 'Wear Leveling Count', severity: 'WARNING', drive_type: 'SSD', description: 'SSD wear leveling status. Lower values indicate more wear.' },
+            187: { name: 'Reported Uncorrectable Errors', severity: 'CRITICAL', drive_type: 'BOTH', description: 'Count of uncorrectable errors reported to the host.' },
+            188: { name: 'Command Timeout', severity: 'CRITICAL', drive_type: 'BOTH', description: 'Count of aborted operations due to timeout.' },
+            190: { name: 'Airflow Temperature', severity: 'WARNING', drive_type: 'BOTH', description: 'Temperature of air flowing across the drive.' },
+            194: { name: 'Temperature Celsius', severity: 'WARNING', drive_type: 'BOTH', description: 'Current internal temperature in Celsius.' },
+            196: { name: 'Reallocation Event Count', severity: 'CRITICAL', drive_type: 'BOTH', description: 'Count of remap operations from bad to spare sectors.' },
+            197: { name: 'Current Pending Sector Count', severity: 'CRITICAL', drive_type: 'BOTH', description: 'Count of unstable sectors waiting to be remapped.' },
+            198: { name: 'Offline Uncorrectable Sector Count', severity: 'CRITICAL', drive_type: 'BOTH', description: 'Count of uncorrectable errors found during offline scan.' },
+            199: { name: 'UltraDMA CRC Error Count', severity: 'WARNING', drive_type: 'BOTH', description: 'Count of CRC errors during data transfer. Often indicates cable issues.' },
+            232: { name: 'Available Reserved Space', severity: 'CRITICAL', drive_type: 'SSD', description: 'Percentage of reserved space remaining for bad block replacement.' },
+            233: { name: 'Media Wearout Indicator', severity: 'WARNING', drive_type: 'SSD', description: 'SSD wear indicator showing percentage of rated write cycles used.' },
+            241: { name: 'Total LBAs Written', severity: 'INFO', drive_type: 'SSD', description: 'Total count of logical block addresses written.' },
+            242: { name: 'Total LBAs Read', severity: 'INFO', drive_type: 'SSD', description: 'Total count of logical block addresses read.' }
+        };
+        return defs[id] || null;
+    },
 
-        if (!attributes || attributes.length === 0) {
-            container.innerHTML = '<p class="no-data">No SMART attributes available</p>';
-            return;
-        }
+    getNvmeSpareClass(value) {
+        if (value === null || value === undefined) return '';
+        if (value < 10) return 'critical';
+        if (value < 20) return 'warning';
+        return 'healthy';
+    },
 
-        let html = `
-            <div class="smart-table-container">
-                <table class="smart-table">
-                    <thead>
-                        <tr>
-                            <th>Status</th>
-                            <th>ID</th>
-                            <th>Attribute Name</th>
-                            <th>Value</th>
-                            <th>Worst</th>
-                            <th>Threshold</th>
-                            <th>Raw Value</th>
-                            <th>Flags</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
+    getNvmeWearClass(value) {
+        if (value === null || value === undefined) return '';
+        if (value > 95) return 'critical';
+        if (value > 80) return 'warning';
+        return 'healthy';
+    },
 
-        // Sort: critical attributes first
-        const sorted = [...attributes].sort((a, b) => {
-            const aSev = this.getAttributeSeverity(a);
-            const bSev = this.getAttributeSeverity(b);
-            const severityOrder = { critical: 0, warning: 1, info: 2, healthy: 3 };
-            return (severityOrder[aSev] || 3) - (severityOrder[bSev] || 3);
-        });
+    getTempClass(value) {
+        if (value === null || value === undefined) return '';
+        if (value > 70) return 'critical';
+        if (value > 55) return 'warning';
+        return '';
+    },
 
-        for (const attr of sorted) {
-            const severity = this.getAttributeSeverity(attr);
-            const isCritical = this.criticalIDs.includes(attr.id);
-            const rowClass = isCritical ? 'critical-attribute' : '';
+    formatAge(hours) {
+        if (!hours) return 'N/A';
+        const years = hours / 8760;
+        if (years >= 1) return `${years.toFixed(1)}y`;
+        const months = hours / 730;
+        if (months >= 1) return `${months.toFixed(1)}mo`;
+        const days = hours / 24;
+        if (days >= 1) return `${days.toFixed(0)}d`;
+        return `${hours}h`;
+    },
 
-            html += `
-                <tr class="${rowClass}" data-attr-id="${attr.id}" onclick="SmartAttributes.showAttributeDetails(${attr.id}, this)">
-                    <td>${this.getSeverityBadge(severity)}</td>
-                    <td><strong>${attr.id}</strong></td>
-                    <td>${attr.name}</td>
-                    <td>${attr.value || '—'}</td>
-                    <td>${attr.worst || '—'}</td>
-                    <td>${attr.threshold || '—'}</td>
-                    <td><strong>${attr.raw_value !== undefined ? attr.raw_value : '—'}</strong></td>
-                    <td><code>${attr.flags || '—'}</code></td>
-                </tr>
-            `;
-        }
+    formatNumber(num) {
+        if (num === null || num === undefined) return 'N/A';
+        return num.toLocaleString();
+    },
 
-        html += `
-                    </tbody>
-                </table>
+    formatNvmeBytes(dataUnits) {
+        if (!dataUnits) return 'N/A';
+        const bytes = dataUnits * 512 * 1000;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+    },
+
+    capitalize(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    },
+
+    escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    },
+
+    renderLoading() {
+        return `
+            <div class="smart-loading">
+                <div class="smart-loading-spinner"></div>
+                <span>Loading SMART data...</span>
             </div>
         `;
-
-        container.innerHTML = html;
     },
 
-    // Render health summary
-    renderHealthSummary(summary, containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-
-        if (!summary) {
-            container.innerHTML = '<p class="no-data">Health summary unavailable</p>';
-            return;
-        }
-
-        const healthClass = summary.overall_health.toLowerCase();
-        const healthIcon = {
-            healthy: '✓',
-            warning: '⚠',
-            critical: '✗'
-        }[healthClass] || '?';
-
-        let html = `
-            <div class="health-summary ${healthClass}">
-                <div class="health-header">
-                    <span class="health-icon">${healthIcon}</span>
-                    <h3>Overall Health: ${summary.overall_health}</h3>
-                </div>
-                <div class="health-stats">
-                    <div class="stat-item">
-                        <span class="stat-label">Critical Issues</span>
-                        <span class="stat-value ${summary.critical_count > 0 ? 'critical' : ''}">${summary.critical_count}</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Warnings</span>
-                        <span class="stat-value ${summary.warning_count > 0 ? 'warning' : ''}">${summary.warning_count}</span>
-                    </div>
-                </div>
+    renderError(message) {
+        return `
+            <div class="smart-empty">
+                ${this.icons.error}
+                <p>${message}</p>
+                <span class="hint">Please try again later</span>
+            </div>
         `;
-
-        if (summary.issues && summary.issues.length > 0) {
-            html += '<div class="health-issues"><h4>Issues Detected</h4><ul>';
-            for (const issue of summary.issues) {
-                const issueClass = issue.severity.toLowerCase();
-                html += `<li class="${issueClass}">${issue.message}</li>`;
-            }
-            html += '</ul></div>';
-        }
-
-        html += '</div>';
-        container.innerHTML = html;
-    },
-
-    // Show detailed attribute information (placeholder for modal/expansion)
-    showAttributeDetails(attributeID, rowElement) {
-        console.log(`Show details for attribute ${attributeID}`);
-        // TODO: Implement modal or expansion panel with historical chart
-        // This would fetch history and render a trend chart
-    },
-
-    // Initialize SMART monitoring for current drive
-    async initializeDriveMonitoring(hostname, serialNumber) {
-        // Fetch and render SMART attributes
-        const attrData = await this.fetchAttributes(hostname, serialNumber);
-        if (attrData) {
-            this.renderAttributesTable(attrData.attributes, 'smart-attributes-table');
-        }
-
-        // Fetch and render health summary
-        const healthData = await this.fetchHealthSummary(hostname, serialNumber);
-        if (healthData) {
-            this.renderHealthSummary(healthData, 'smart-health-summary');
-        }
     }
 };
 
-// Add to global scope for onclick handlers
 window.SmartAttributes = SmartAttributes;

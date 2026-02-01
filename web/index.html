@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vigil · Infrastructure Monitor</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/smart-attributes.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -125,10 +126,8 @@
                     <aside id="detail-sidebar" class="detail-sidebar"></aside>
                     <section class="detail-main">
                         <div class="detail-card">
-                            <h2>S.M.A.R.T. Attributes</h2>
-                            <div class="table-container">
-                                <table class="smart-table" id="detail-table"></table>
-                            </div>
+                            <h2>S.M.A.R.T. Health & Attributes</h2>
+                            <div id="smart-view-container"></div>
                         </div>
                     </section>
                 </div>
@@ -142,6 +141,7 @@
     <script src="js/api.js"></script>
     <script src="js/components.js"></script>
     <script src="js/modals.js"></script>
+    <script src="js/smart-attributes.js"></script>
     <script src="js/renderer.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/data.js"></script>
