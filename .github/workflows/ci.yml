@@ -91,7 +91,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## Preview Images Built!
+              body: `## 🐳 Preview Images Built! (Alpine Linux)
               
               **Server:**
               \`\`\`bash
@@ -103,7 +103,9 @@ jobs:
               docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}
               \`\`\`
               
-              These preview images can be used for testing before merging.`
+              These preview images can be used for testing before merging.
+              
+              _Built with Alpine Linux for minimal size and security._`
             })
 
   # Build dev images for feature branches (not main, not tags)
@@ -323,7 +325,7 @@ jobs:
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
           
-          # Server binary (amd64 only)
+          # Server binary (amd64 only - requires CGO for SQLite)
           GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-amd64 ./cmd/server
           
           # Checksums
@@ -354,24 +356,48 @@ jobs:
             
             ---
             
-            ### Docker
+            ### 🐳 Docker Images (Alpine Linux)
             
             ```bash
-            # Server
+            # Server (Alpine-based, ~50MB)
             docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
             
-            # Agent
+            # Agent (Alpine-based, ~50MB)
             docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}
             ```
             
-            ### Binaries
+            **Multi-Architecture Support:**
+            - `linux/amd64` (x86_64)
+            - `linux/arm64` (aarch64)
+            
+            ---
+            
+            ### 📦 Binaries
             
             ```bash
+            # Server (AMD64)
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-server-linux-amd64 -o vigil-server
+            chmod +x vigil-server
+            
             # Agent (AMD64)
             curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-amd64 -o vigil-agent
+            chmod +x vigil-agent
             
             # Agent (ARM64)
             curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o vigil-agent
+            chmod +x vigil-agent
+            ```
+            
+            ---
+            
+            ### ✅ Verify Checksums
+            
+            ```bash
+            # Download checksums
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/checksums.txt -o checksums.txt
+            
+            # Verify (Linux/macOS)
+            sha256sum -c checksums.txt
             ```
           files: |
             dist/vigil-server-linux-amd64
