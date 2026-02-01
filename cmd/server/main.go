@@ -34,6 +34,11 @@ func main() {
 	defer db.DB.Close()
 	log.Printf("✓ Database: %s", cfg.DBPath)
 
+	// Run SMART attributes migration
+	if err := db.MigrateSmartAttributes(db.DB); err != nil {
+		log.Printf("⚠️  SMART migration warning: %v", err)
+	}
+
 	if cfg.AuthEnabled {
 		log.Printf("✓ Authentication: enabled")
 	} else {
@@ -96,6 +101,34 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	mux.HandleFunc("GET /api/users/me", auth(handlers.GetCurrentUser))
 	mux.HandleFunc("POST /api/users/password", auth(handlers.ChangePassword))
 	mux.HandleFunc("POST /api/users/username", auth(handlers.ChangeUsername))
+
+	// ─── SMART Attributes API (Phase 1.2) ────────────────────────────
+	// Get latest SMART attributes for a drive
+	mux.HandleFunc("GET /api/smart/attributes", auth(handlers.GetSmartAttributes))
+
+	// Get historical data for a specific attribute
+	mux.HandleFunc("GET /api/smart/attributes/history", auth(handlers.GetSmartAttributeHistory))
+
+	// Get trend analysis for an attribute
+	mux.HandleFunc("GET /api/smart/attributes/trend", auth(handlers.GetSmartAttributeTrend))
+
+	// Get health summary for a drive
+	mux.HandleFunc("GET /api/smart/health/summary", auth(handlers.GetDriveHealthSummary))
+
+	// Get health summaries for all drives
+	mux.HandleFunc("GET /api/smart/health/all", auth(handlers.GetAllDrivesHealthSummary))
+
+	// Get drives with issues (warnings/critical)
+	mux.HandleFunc("GET /api/smart/health/issues", auth(handlers.GetDrivesWithIssues))
+
+	// Get critical attribute definitions
+	mux.HandleFunc("GET /api/smart/critical-attributes", auth(handlers.GetCriticalAttributes))
+
+	// Get temperature history
+	mux.HandleFunc("GET /api/smart/temperature/history", auth(handlers.GetTemperatureHistory))
+
+	// Admin: cleanup old SMART data
+	mux.HandleFunc("POST /api/smart/cleanup", auth(handlers.CleanupOldSmartData))
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))
