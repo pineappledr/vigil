@@ -251,12 +251,16 @@ const SmartAttributes = {
                     <span>NVMe Info</span>
                 </button>
             `;
-        }
-        tabs += `
+        } else {
+            // Only show Attributes tab for non-NVMe drives (ATA/SATA)
+            tabs += `
                 <button class="smart-tab" data-tab="attributes">
                     ${this.icons.table}
                     <span>Attributes</span>
                 </button>
+            `;
+        }
+        tabs += `
                 <button class="smart-tab" data-tab="temperature">
                     ${this.icons.temp}
                     <span>Temperature</span>
