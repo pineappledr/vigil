@@ -310,5 +310,9 @@ const Renderer = {
                 </div>
             </div>
         `;
+    },
+
+    infoRow(label, value, cls = '') {
+        return `<div class="info-row"><span class="label">${label}</span><span class="value ${cls}">${value}</span></div>`;
     }
 };
