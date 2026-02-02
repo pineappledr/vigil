@@ -84,11 +84,9 @@
 /* Drive Grid */
 .drive-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
     padding: 12px;
-    max-height: 400px;
-    overflow-y: auto;
 }
 
 /* Drive Card */
