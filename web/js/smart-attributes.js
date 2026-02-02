@@ -161,7 +161,7 @@ const SmartAttributes = {
     buildAttrsFromDrive(drive) {
         const attrs = [];
         
-        // ATA SMART attributes
+        // ATA SMART attributes (primary source)
         if (drive.ata_smart_attributes?.table) {
             drive.ata_smart_attributes.table.forEach(attr => {
                 attrs.push({
@@ -173,6 +173,27 @@ const SmartAttributes = {
                     raw_value: attr.raw?.value,
                     flags: attr.flags?.string
                 });
+            });
+        }
+        
+        // Fallback: ATA device statistics (alternative source)
+        if (attrs.length === 0 && drive.ata_device_statistics?.pages) {
+            drive.ata_device_statistics.pages.forEach(page => {
+                if (page.table) {
+                    page.table.forEach(stat => {
+                        if (stat.name && stat.value !== undefined) {
+                            attrs.push({
+                                id: stat.offset || attrs.length + 1,
+                                name: stat.name.replace(/_/g, ' '),
+                                value: stat.flags?.normalized ? stat.value : null,
+                                worst: null,
+                                threshold: null,
+                                raw_value: stat.value,
+                                flags: stat.flags?.string
+                            });
+                        }
+                    });
+                }
             });
         }
         
