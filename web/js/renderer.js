@@ -134,8 +134,25 @@ const Renderer = {
         const sidebar = document.getElementById('detail-sidebar');
         const hostname = server.hostname;
 
-        const rotationType = drive.rotation_rate === 0 ? 'SSD' : drive.rotation_rate ? 'HDD' : 'Unknown';
-        const rotationDetail = drive.rotation_rate === 0 ? 'Solid State Drive' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'Not reported';
+        // Detect drive type properly including NVMe
+        const isNvme = drive.device?.type?.toLowerCase() === 'nvme' || 
+                       drive.device?.protocol === 'NVMe' ||
+                       !!drive.nvme_smart_health_information_log;
+        
+        let rotationType, rotationDetail;
+        if (isNvme) {
+            rotationType = 'NVMe';
+            rotationDetail = 'NVMe SSD';
+        } else if (drive.rotation_rate === 0) {
+            rotationType = 'SSD';
+            rotationDetail = 'Solid State Drive';
+        } else if (drive.rotation_rate) {
+            rotationType = 'HDD';
+            rotationDetail = `${drive.rotation_rate} RPM`;
+        } else {
+            rotationType = 'Unknown';
+            rotationDetail = 'Not reported';
+        }
 
         sidebar.innerHTML = `
             <div class="drive-header">
