@@ -125,87 +125,49 @@ const Renderer = {
         }).join('');
     },
 
-    driveDetails(drive, hostname) {
-        // Validate drive data
-        if (!drive) {
-            console.error('driveDetails: No drive data provided');
-            return;
-        }
-        
-        const sidebar = document.getElementById('detail-sidebar');
-        const container = document.getElementById('smart-view-container');
-        
-        if (!sidebar || !container) {
-            console.error('driveDetails: Required DOM elements not found');
-            return;
-        }
-        
+    driveDetails(serverIdx, driveIdx) {
+        const drive = State.data[serverIdx]?.details?.drives?.[driveIdx];
+        if (!drive) return;
+
         const status = Utils.getHealthStatus(drive);
-        const driveType = Utils.getDriveType(drive);
-        const driveName = Utils.getDriveName(drive);
-        const serial = drive.serial_number || 'N/A';
-        const capacity = Utils.formatSize(drive.user_capacity?.bytes);
-        const firmware = drive.firmware_version || 'N/A';
-        const smartPassed = drive.smart_status?.passed;
-        const temp = drive.temperature?.current;
-        const powerHours = drive.power_on_time?.hours;
-        
+        const sidebar = document.getElementById('detail-sidebar');
+        const table = document.getElementById('detail-table');
+
+        const rotationType = drive.rotation_rate === 0 ? 'SSD' : drive.rotation_rate ? 'HDD' : 'Unknown';
+        const rotationDetail = drive.rotation_rate === 0 ? 'Solid State Drive' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'Not reported';
+
         sidebar.innerHTML = `
             <div class="drive-header">
-                <div class="icon ${status}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="4" width="20" height="16" rx="2"/>
-                        <circle cx="8" cy="12" r="2"/>
-                        <line x1="14" y1="9" x2="18" y2="9"/>
-                        <line x1="14" y1="12" x2="18" y2="12"/>
-                    </svg>
-                </div>
-                <h3>${driveName}</h3>
-                <span class="serial">${serial}</span>
+                <div class="icon ${status}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg></div>
+                <h3>${Utils.getDriveName(drive)}</h3>
+                <span class="serial">${drive.serial_number || 'N/A'}</span>
             </div>
-            
             <div class="info-group">
-                <div class="info-group-label">Drive Information</div>
-                <div class="info-row">
-                    <span class="label">Type</span>
-                    <span class="value">${driveType}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Capacity</span>
-                    <span class="value">${capacity}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Firmware</span>
-                    <span class="value">${firmware}</span>
-                </div>
+                <div class="info-group-label">Device Information</div>
+                ${this.infoRow('Capacity', Utils.formatSize(drive.user_capacity?.bytes))}
+                ${this.infoRow('Firmware', drive.firmware_version || 'N/A')}
+                ${this.infoRow('Drive Type', rotationType)}
+                ${this.infoRow('Rotation Rate', rotationDetail)}
+                ${this.infoRow('Interface', drive.device?.protocol || 'ATA')}
             </div>
-            
             <div class="info-group">
                 <div class="info-group-label">Health Status</div>
-                <div class="info-row">
-                    <span class="label">S.M.A.R.T.</span>
-                    <span class="value ${smartPassed ? 'success' : 'danger'}">
-                        ${smartPassed ? 'PASSED' : 'FAILED'}
-                    </span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Temperature</span>
-                    <span class="value">${temp !== undefined ? temp + '°C' : '--'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Power On</span>
-                    <span class="value">${Utils.formatAge(powerHours)}</span>
-                </div>
+                ${this.infoRow('SMART Status', drive.smart_status?.passed ? 'PASSED' : 'FAILED', drive.smart_status?.passed ? 'success' : 'danger')}
+                ${this.infoRow('Temperature', `${drive.temperature?.current ?? 'N/A'}°C`, drive.temperature?.current > 50 ? 'warning' : '')}
+                ${this.infoRow('Powered On', Utils.formatAge(drive.power_on_time?.hours))}
+                ${this.infoRow('Power Cycles', drive.power_cycle_count ?? 'N/A')}
             </div>
         `;
-        
-        // Use SmartAttributes module if available
-        if (typeof SmartAttributes !== 'undefined') {
-            // Pass the full drive object for local data display
-            SmartAttributes.init(hostname, serial, drive);
+
+        const attrs = drive.ata_smart_attributes?.table || [];
+        if (!attrs.length) {
+            table.innerHTML = `<div class="nvme-notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>No standard ATA SMART attributes available</p><span>NVMe drives use different health reporting</span></div>`;
         } else {
-            // Fallback to basic table
-            this.renderBasicSmartTable(drive, container);
+            const criticalIds = [5, 187, 197, 198];
+            table.innerHTML = `<thead><tr><th class="status-cell">Status</th><th>ID</th><th>Attribute</th><th>Value</th><th>Worst</th><th>Thresh</th><th>Raw</th></tr></thead><tbody>${attrs.map(a => {
+                const fail = (criticalIds.includes(a.id) && a.raw?.value > 0) || (a.thresh > 0 && a.value <= a.thresh);
+                return `<tr><td class="status-cell"><span class="attr-pill ${fail ? 'fail' : 'ok'}">${fail ? 'FAIL' : 'OK'}</span></td><td>${a.id}</td><td style="font-family:var(--font-sans)">${a.name}</td><td>${a.value}</td><td>${a.worst ?? '-'}</td><td>${a.thresh}</td><td>${a.raw?.value ?? '-'}</td></tr>`;
+            }).join('')}</tbody>`;
         }
     },
 

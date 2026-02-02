@@ -1,117 +1,108 @@
 /**
- * Vigil Dashboard - Navigation
+ * Vigil Dashboard - Navigation Controller
  */
 
 const Navigation = {
-    resetDashboard() {
+    showDashboard() {
         State.reset();
-        this.updateUI('Infrastructure Overview');
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        document.getElementById('page-title').textContent = 'Infrastructure Overview';
         document.getElementById('breadcrumbs').classList.add('hidden');
-        document.getElementById('settings-view')?.classList.add('hidden');
-        document.getElementById('dashboard-view').classList.remove('hidden');
-        document.getElementById('details-view').classList.add('hidden');
-        
-        document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
-        document.querySelector('.nav-item')?.classList.add('active');
-        document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
-        
-        Renderer.dashboard(State.data);
-    },
-
-    showNeedsAttention() {
-        State.setFilter('attention');
-        this.showFilteredView('Needs Attention', 'Drives Needing Attention', 
-            d => Utils.getHealthStatus(d) !== 'healthy', 'attention');
-    },
-
-    showHealthyDrives() {
-        State.setFilter('healthy');
-        this.showFilteredView('Healthy Drives', 'Healthy Drives',
-            d => Utils.getHealthStatus(d) === 'healthy', 'healthy');
-    },
-
-    showAllDrives() {
-        State.setFilter('all');
-        this.showFilteredView('All Drives', 'All Drives', () => true, 'all');
-    },
-
-    showFilteredView(crumb, title, filterFn, filterType) {
-        this.updateUI(title, crumb);
-        document.getElementById('details-view').classList.add('hidden');
-        document.getElementById('dashboard-view').classList.remove('hidden');
-        this.clearNavSelection();
-        Renderer.filteredDrives(filterFn, filterType);
-    },
-
-    showServer(serverIdx) {
-        State.setServer(serverIdx);
-        const server = State.data[serverIdx];
-        if (!server) {
-            this.resetDashboard();
-            return;
-        }
-
-        this.updateUI(server.hostname, server.hostname);
-        document.getElementById('details-view').classList.add('hidden');
-        document.getElementById('dashboard-view').classList.remove('hidden');
         
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.server-nav-item').forEach((el, idx) => {
-            el.classList.toggle('active', idx === serverIdx);
-        });
+        document.querySelector('.nav-item[onclick*="resetDashboard"]')?.classList.add('active');
+        document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+        
+        Data.updateViews();
+    },
 
-        Renderer.serverDetail(server, serverIdx);
+    showServer(index) {
+        State.setServer(index);
+        const server = State.data[index];
+        if (!server) return;
+        
+        document.getElementById('page-title').textContent = server.hostname;
+        document.getElementById('crumb-server').textContent = server.hostname;
+        document.getElementById('breadcrumbs').classList.remove('hidden');
+        
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.server-nav-item').forEach((el, i) => {
+            el.classList.toggle('active', i === index);
+        });
+        
+        Data.updateViews();
     },
 
     showDriveDetails(serverIdx, driveIdx) {
-        Renderer.driveDetails(serverIdx, driveIdx);
+        const server = State.data[serverIdx];
+        const drive = server?.details?.drives?.[driveIdx];
+        if (!drive) return;
+        
+        State.setServer(serverIdx);
+        
         document.getElementById('dashboard-view').classList.add('hidden');
         document.getElementById('details-view').classList.remove('hidden');
-    },
-
-    goBackToContext() {
-        if (State.activeFilter === 'attention') this.showNeedsAttention();
-        else if (State.activeFilter === 'healthy') this.showHealthyDrives();
-        else if (State.activeFilter === 'all') this.showAllDrives();
-        else if (State.activeServerIndex !== null) this.showServer(State.activeServerIndex);
-        else this.resetDashboard();
+        
+        document.getElementById('page-title').textContent = Utils.getDriveName(drive);
+        document.getElementById('crumb-server').textContent = `${server.hostname} › ${Utils.getDriveName(drive)}`;
+        document.getElementById('breadcrumbs').classList.remove('hidden');
+        
+        Renderer.driveDetails(serverIdx, driveIdx);
     },
 
     showSettings() {
-        document.getElementById('dashboard-view').classList.add('hidden');
-        document.getElementById('details-view').classList.add('hidden');
-        this.updateUI('Settings', 'Settings');
-        this.clearNavSelection();
-        Renderer.settings();
-    },
-
-    updateUI(title, crumb = null) {
-        document.getElementById('page-title').textContent = title;
-        if (crumb) {
-            document.getElementById('crumb-server').textContent = crumb;
-            document.getElementById('breadcrumbs').classList.remove('hidden');
+        document.getElementById('dropdown-menu')?.classList.remove('show');
+        
+        const dashboardView = document.getElementById('dashboard-view');
+        const detailsView = document.getElementById('details-view');
+        
+        dashboardView.classList.add('hidden');
+        detailsView.classList.add('hidden');
+        
+        let settingsView = document.getElementById('settings-view');
+        if (!settingsView) {
+            settingsView = document.createElement('div');
+            settingsView.id = 'settings-view';
+            settingsView.className = 'view settings-view';
+            dashboardView.parentNode.appendChild(settingsView);
         }
+        
+        settingsView.classList.remove('hidden');
+        settingsView.innerHTML = Renderer.settingsPage();
+        
+        document.getElementById('page-title').textContent = 'Settings';
+        document.getElementById('breadcrumbs').classList.add('hidden');
     },
 
-    clearNavSelection() {
+    showFilter(filter) {
+        State.setFilter(filter);
+        document.getElementById('page-title').textContent = 
+            filter === 'attention' ? 'Drives Needing Attention' :
+            filter === 'healthy' ? 'Healthy Drives' : 'All Drives';
+        document.getElementById('breadcrumbs').classList.add('hidden');
+        
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
+        
+        Data.updateViews();
     }
 };
 
-// Global function aliases for onclick handlers
-const resetDashboard = () => Navigation.resetDashboard();
-const showNeedsAttention = () => Navigation.showNeedsAttention();
-const showHealthyDrives = () => Navigation.showHealthyDrives();
-const showAllDrives = () => Navigation.showAllDrives();
-const showServer = (idx) => Navigation.showServer(idx);
-const showDriveDetails = (s, d) => Navigation.showDriveDetails(s, d);
-const goBackToContext = () => Navigation.goBackToContext();
-const showSettings = () => Navigation.showSettings();
-const fetchData = () => Data.fetch();
-const showAliasModal = (h, s, a, d) => Modals.showAlias(h, s, a, d);
-const showChangePasswordModal = () => Modals.showChangePassword();
-const showChangeUsernameModal = () => Modals.showChangeUsername();
-const toggleUserMenu = () => Auth.toggleMenu();
-const logout = () => Auth.logout();
+function resetDashboard() {
+    Navigation.showDashboard();
+}
+
+function goBackToContext() {
+    if (State.activeServerIndex !== null) {
+        Navigation.showServer(State.activeServerIndex);
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+    } else {
+        Navigation.showDashboard();
+    }
+}
+
+function fetchData() {
+    Data.fetch();
+}
