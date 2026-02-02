@@ -126,10 +126,29 @@ const Renderer = {
     },
 
     driveDetails(drive, hostname) {
+        // Validate drive data
+        if (!drive) {
+            console.error('driveDetails: No drive data provided');
+            return;
+        }
+        
         const sidebar = document.getElementById('detail-sidebar');
         const container = document.getElementById('smart-view-container');
+        
+        if (!sidebar || !container) {
+            console.error('driveDetails: Required DOM elements not found');
+            return;
+        }
+        
         const status = Utils.getHealthStatus(drive);
         const driveType = Utils.getDriveType(drive);
+        const driveName = Utils.getDriveName(drive);
+        const serial = drive.serial_number || 'N/A';
+        const capacity = Utils.formatSize(drive.user_capacity?.bytes);
+        const firmware = drive.firmware_version || 'N/A';
+        const smartPassed = drive.smart_status?.passed;
+        const temp = drive.temperature?.current;
+        const powerHours = drive.power_on_time?.hours;
         
         sidebar.innerHTML = `
             <div class="drive-header">
@@ -141,8 +160,8 @@ const Renderer = {
                         <line x1="14" y1="12" x2="18" y2="12"/>
                     </svg>
                 </div>
-                <h3>${Utils.getDriveName(drive)}</h3>
-                <span class="serial">${drive.serial_number || 'N/A'}</span>
+                <h3>${driveName}</h3>
+                <span class="serial">${serial}</span>
             </div>
             
             <div class="info-group">
@@ -153,11 +172,11 @@ const Renderer = {
                 </div>
                 <div class="info-row">
                     <span class="label">Capacity</span>
-                    <span class="value">${Utils.formatSize(drive.user_capacity?.bytes)}</span>
+                    <span class="value">${capacity}</span>
                 </div>
                 <div class="info-row">
                     <span class="label">Firmware</span>
-                    <span class="value">${drive.firmware_version || 'N/A'}</span>
+                    <span class="value">${firmware}</span>
                 </div>
             </div>
             
@@ -165,24 +184,25 @@ const Renderer = {
                 <div class="info-group-label">Health Status</div>
                 <div class="info-row">
                     <span class="label">S.M.A.R.T.</span>
-                    <span class="value ${drive.smart_status?.passed ? 'success' : 'danger'}">
-                        ${drive.smart_status?.passed ? 'PASSED' : 'FAILED'}
+                    <span class="value ${smartPassed ? 'success' : 'danger'}">
+                        ${smartPassed ? 'PASSED' : 'FAILED'}
                     </span>
                 </div>
                 <div class="info-row">
                     <span class="label">Temperature</span>
-                    <span class="value">${drive.temperature?.current ?? '--'}°C</span>
+                    <span class="value">${temp !== undefined ? temp + '°C' : '--'}</span>
                 </div>
                 <div class="info-row">
                     <span class="label">Power On</span>
-                    <span class="value">${Utils.formatAge(drive.power_on_time?.hours)}</span>
+                    <span class="value">${Utils.formatAge(powerHours)}</span>
                 </div>
             </div>
         `;
         
         // Use SmartAttributes module if available
         if (typeof SmartAttributes !== 'undefined') {
-            SmartAttributes.init(hostname, drive.serial_number, drive);
+            // Pass the full drive object for local data display
+            SmartAttributes.init(hostname, serial, drive);
         } else {
             // Fallback to basic table
             this.renderBasicSmartTable(drive, container);

@@ -53,6 +53,7 @@ const SmartAttributes = {
     async init(hostname, serialNumber, driveData) {
         this.currentHostname = hostname;
         this.currentDrive = driveData;
+        this.currentSerial = serialNumber;
         this.attributeFilter = 'all';
         const isNvme = this.isNvmeDrive(driveData);
         await this.render(hostname, serialNumber, isNvme);
@@ -62,7 +63,9 @@ const SmartAttributes = {
         if (!drive) return false;
         const deviceType = drive.device?.type?.toLowerCase() || '';
         const protocol = drive.device?.protocol || '';
-        return deviceType === 'nvme' || protocol === 'NVMe';
+        // Also check for nvme_smart_health_information_log
+        const hasNvmeLog = !!drive.nvme_smart_health_information_log;
+        return deviceType === 'nvme' || protocol === 'NVMe' || hasNvmeLog;
     },
 
     async render(hostname, serialNumber, isNvme) {
@@ -72,9 +75,18 @@ const SmartAttributes = {
         container.innerHTML = this.renderLoading();
 
         try {
-            const healthData = await this.fetchHealthSummary(hostname, serialNumber);
-            const attrData = await this.fetchAttributes(hostname, serialNumber);
-            const tempData = await this.fetchTemperatureHistory(hostname, serialNumber, 24);
+            // Try to fetch from API, but use local data as fallback
+            let healthData = await this.fetchHealthSummary(hostname, serialNumber);
+            let attrData = await this.fetchAttributes(hostname, serialNumber);
+            let tempData = await this.fetchTemperatureHistory(hostname, serialNumber, 24);
+
+            // If API returns null, build from local drive data
+            if (!healthData && this.currentDrive) {
+                healthData = this.buildHealthFromDrive(this.currentDrive);
+            }
+            if (!attrData && this.currentDrive) {
+                attrData = this.buildAttrsFromDrive(this.currentDrive);
+            }
 
             let html = '';
             html += this.renderTabs(isNvme);
@@ -105,8 +117,123 @@ const SmartAttributes = {
             this.initTabs();
         } catch (error) {
             console.error('Error rendering SMART view:', error);
-            container.innerHTML = this.renderError('Failed to load SMART data');
+            // Try to render with local data
+            if (this.currentDrive) {
+                this.renderFromLocalData(container, isNvme);
+            } else {
+                container.innerHTML = this.renderError('Failed to load SMART data');
+            }
         }
+    },
+
+    // Build health summary from local drive data
+    buildHealthFromDrive(drive) {
+        const smartPassed = drive.smart_status?.passed !== false;
+        const issues = [];
+        
+        // Check ATA attributes for issues
+        const attrs = drive.ata_smart_attributes?.table || [];
+        const criticalIds = [5, 10, 187, 188, 196, 197, 198];
+        
+        attrs.forEach(attr => {
+            if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
+                issues.push({
+                    attribute_id: attr.id,
+                    attribute_name: attr.name,
+                    severity: 'CRITICAL',
+                    message: `${attr.name} has non-zero value: ${attr.raw.value}`
+                });
+            }
+        });
+
+        return {
+            overall_health: issues.length > 0 ? 'Warning' : 'Healthy',
+            smart_passed: smartPassed,
+            critical_count: issues.filter(i => i.severity === 'CRITICAL').length,
+            warning_count: issues.filter(i => i.severity === 'WARNING').length,
+            model_name: drive.model_name || drive.scsi_model_name || 'Unknown',
+            drive_type: Utils.getDriveType(drive),
+            issues: issues
+        };
+    },
+
+    // Build attributes from local drive data
+    buildAttrsFromDrive(drive) {
+        const attrs = [];
+        
+        // ATA SMART attributes
+        if (drive.ata_smart_attributes?.table) {
+            drive.ata_smart_attributes.table.forEach(attr => {
+                attrs.push({
+                    id: attr.id,
+                    name: attr.name,
+                    value: attr.value,
+                    worst: attr.worst,
+                    threshold: attr.thresh,
+                    raw_value: attr.raw?.value,
+                    flags: attr.flags?.string
+                });
+            });
+        }
+        
+        // NVMe attributes from nvme_smart_health_information_log
+        if (drive.nvme_smart_health_information_log) {
+            const log = drive.nvme_smart_health_information_log;
+            if (log.temperature !== undefined) {
+                attrs.push({ id: 194, name: 'Temperature', raw_value: log.temperature });
+            }
+            if (log.available_spare !== undefined) {
+                attrs.push({ id: 232, name: 'Available Spare', raw_value: log.available_spare, value: log.available_spare });
+            }
+            if (log.percentage_used !== undefined) {
+                attrs.push({ id: 233, name: 'Percentage Used', raw_value: log.percentage_used, value: 100 - log.percentage_used });
+            }
+            if (log.power_on_hours !== undefined) {
+                attrs.push({ id: 9, name: 'Power On Hours', raw_value: log.power_on_hours });
+            }
+            if (log.power_cycles !== undefined) {
+                attrs.push({ id: 12, name: 'Power Cycles', raw_value: log.power_cycles });
+            }
+            if (log.media_errors !== undefined) {
+                attrs.push({ id: 187, name: 'Media Errors', raw_value: log.media_errors });
+            }
+            if (log.unsafe_shutdowns !== undefined) {
+                attrs.push({ id: 174, name: 'Unsafe Shutdowns', raw_value: log.unsafe_shutdowns });
+            }
+        }
+        
+        return { attributes: attrs };
+    },
+
+    // Render from local data when API fails
+    renderFromLocalData(container, isNvme) {
+        const healthData = this.buildHealthFromDrive(this.currentDrive);
+        const attrData = this.buildAttrsFromDrive(this.currentDrive);
+        
+        let html = '';
+        html += this.renderTabs(isNvme);
+        html += '<div id="smart-tab-contents">';
+        html += `<div id="tab-health" class="smart-tab-content active">`;
+        html += this.renderHealthSummary(healthData);
+        html += `</div>`;
+
+        if (isNvme) {
+            html += `<div id="tab-nvme" class="smart-tab-content">`;
+            html += this.renderNvmeHealth(attrData, this.currentDrive);
+            html += `</div>`;
+        }
+
+        html += `<div id="tab-attributes" class="smart-tab-content">`;
+        html += this.renderAttributesTable(attrData?.attributes || [], isNvme);
+        html += `</div>`;
+
+        html += `<div id="tab-temperature" class="smart-tab-content">`;
+        html += this.renderTemperatureChart(null);
+        html += `</div>`;
+
+        html += '</div>';
+        container.innerHTML = html;
+        this.initTabs();
     },
 
     renderTabs(isNvme) {
@@ -410,10 +537,10 @@ const SmartAttributes = {
     setFilter(filter) {
         this.attributeFilter = filter;
         const tabContent = document.getElementById('tab-attributes');
-        if (tabContent && this.currentHostname) {
-            this.fetchAttributes(this.currentHostname, this.currentDrive?.serial_number).then(data => {
-                tabContent.innerHTML = this.renderAttributesTable(data?.attributes || [], this.isNvmeDrive(this.currentDrive));
-            });
+        if (tabContent && this.currentDrive) {
+            // Use local data if available, otherwise try API
+            const attrData = this.buildAttrsFromDrive(this.currentDrive);
+            tabContent.innerHTML = this.renderAttributesTable(attrData?.attributes || [], this.isNvmeDrive(this.currentDrive));
         }
     },
 
