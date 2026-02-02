@@ -753,3 +753,109 @@
         gap: 12px;
     }
 }
+/* ============================================
+   ATTRIBUTE TOOLTIPS
+   ============================================ */
+
+.attr-name-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.attr-tooltip-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: help;
+}
+
+.info-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    transition: all var(--transition-fast);
+}
+
+.attr-tooltip-trigger:hover .info-icon {
+    color: var(--accent-primary);
+    opacity: 1;
+}
+
+.attr-tooltip-trigger::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%);
+    padding: 10px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.5;
+    white-space: normal;
+    width: max-content;
+    max-width: 300px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.attr-tooltip-trigger::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 2px);
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--border-color);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1001;
+}
+
+.attr-tooltip-trigger:hover::after,
+.attr-tooltip-trigger:hover::before {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Tooltip arrow inner (for background color) */
+.attr-tooltip-trigger:hover::before {
+    border-top-color: var(--bg-elevated);
+}
+
+/* Critical attribute tooltip styling */
+tr.critical-row .attr-tooltip-trigger::after {
+    border-color: var(--danger);
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, rgba(239, 68, 68, 0.1) 100%);
+}
+
+tr.warning-row .attr-tooltip-trigger::after {
+    border-color: var(--warning);
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, rgba(245, 158, 11, 0.1) 100%);
+}
+
+/* Mobile adjustments for tooltips */
+@media (max-width: 768px) {
+    .attr-tooltip-trigger::after {
+        left: auto;
+        right: 0;
+        transform: none;
+        max-width: 250px;
+    }
+    
+    .attr-tooltip-trigger::before {
+        left: auto;
+        right: 10px;
+        transform: none;
+    }
+}

@@ -30,6 +30,66 @@ const SmartAttributes = {
         hostWrites: 178
     },
 
+    // SMART Attribute explanations for tooltips
+    attributeExplanations: {
+        1: { name: 'Raw Read Error Rate', desc: 'Rate of hardware read errors. Higher raw values may indicate disk surface or read/write head issues.', critical: false },
+        2: { name: 'Throughput Performance', desc: 'Overall throughput performance of the drive. Lower values indicate degraded performance.', critical: false },
+        3: { name: 'Spin-Up Time', desc: 'Average time (ms) for the spindle to spin up. Increasing values may indicate motor issues.', critical: false },
+        4: { name: 'Start/Stop Count', desc: 'Total count of spindle start/stop cycles. High counts indicate heavy usage.', critical: false },
+        5: { name: 'Reallocated Sectors Count', desc: '⚠️ CRITICAL: Count of bad sectors that have been remapped. Non-zero values indicate drive degradation.', critical: true },
+        7: { name: 'Seek Error Rate', desc: 'Rate of seek errors by the magnetic heads. High values may indicate mechanical issues.', critical: false },
+        8: { name: 'Seek Time Performance', desc: 'Average performance of seek operations. Degradation indicates mechanical wear.', critical: false },
+        9: { name: 'Power-On Hours', desc: 'Total hours the drive has been powered on. Used to estimate drive age and remaining lifespan.', critical: false },
+        10: { name: 'Spin Retry Count', desc: '⚠️ CRITICAL: Count of retry attempts to spin up. Non-zero values indicate motor or power issues.', critical: true },
+        11: { name: 'Calibration Retry Count', desc: 'Count of attempts to calibrate the drive. Increasing values may indicate mechanical problems.', critical: false },
+        12: { name: 'Power Cycle Count', desc: 'Total number of complete power on/off cycles. High counts indicate frequent use.', critical: false },
+        183: { name: 'SATA Downshift Error Count', desc: 'Count of errors resulting in SATA speed downgrade. May indicate cable or interface issues.', critical: false },
+        184: { name: 'End-to-End Error', desc: '⚠️ CRITICAL: Parity errors in data path. Non-zero indicates potential data corruption.', critical: true },
+        187: { name: 'Reported Uncorrectable Errors', desc: '⚠️ CRITICAL: Errors that could not be recovered using ECC. Indicates serious media problems.', critical: true },
+        188: { name: 'Command Timeout', desc: '⚠️ CRITICAL: Count of aborted operations due to timeout. May indicate failing drive or connection.', critical: true },
+        190: { name: 'Airflow Temperature', desc: 'Drive temperature from airflow sensor. Used for thermal monitoring.', critical: false },
+        191: { name: 'G-Sense Error Rate', desc: 'Count of errors due to shock/vibration. High values indicate physical stress on the drive.', critical: false },
+        192: { name: 'Power-Off Retract Count', desc: 'Count of emergency head retracts due to power loss. High values may indicate power issues.', critical: false },
+        193: { name: 'Load Cycle Count', desc: 'Count of load/unload cycles of the heads. Each drive has a rated maximum.', critical: false },
+        194: { name: 'Temperature Celsius', desc: 'Current internal drive temperature. Operating range typically 0-60°C.', critical: false },
+        195: { name: 'Hardware ECC Recovered', desc: 'Count of errors corrected by hardware ECC. Increasing values may indicate media wear.', critical: false },
+        196: { name: 'Reallocated Event Count', desc: '⚠️ CRITICAL: Count of remap operations. Non-zero indicates sectors have been reallocated.', critical: true },
+        197: { name: 'Current Pending Sector Count', desc: '⚠️ CRITICAL: Sectors waiting to be remapped. These may cause read errors until resolved.', critical: true },
+        198: { name: 'Offline Uncorrectable', desc: '⚠️ CRITICAL: Sectors that cannot be read or written. Data loss has likely occurred.', critical: true },
+        199: { name: 'UDMA CRC Error Count', desc: 'Count of data transfer CRC errors. Often caused by bad cables or connections.', critical: false },
+        200: { name: 'Multi-Zone Error Rate', desc: 'Rate of errors found when writing to sectors. May indicate surface degradation.', critical: false },
+        220: { name: 'Disk Shift', desc: 'Distance the disk has shifted from its original position. Indicates mechanical issues.', critical: false },
+        222: { name: 'Loaded Hours', desc: 'Time spent with heads loaded (spinning). Subset of Power-On Hours.', critical: false },
+        223: { name: 'Load Retry Count', desc: 'Count of load retries. Increasing values indicate head loading mechanism issues.', critical: false },
+        224: { name: 'Load Friction', desc: 'Resistance encountered when loading heads. Indicates mechanical wear.', critical: false },
+        226: { name: 'Load-in Time', desc: 'Total time spent loading the heads. Used for wear analysis.', critical: false },
+        240: { name: 'Head Flying Hours', desc: 'Time heads have spent over the platters. Key wear indicator for HDDs.', critical: false },
+        241: { name: 'Total LBAs Written', desc: 'Total data written to the drive in logical blocks. Used to calculate total bytes written.', critical: false },
+        242: { name: 'Total LBAs Read', desc: 'Total data read from the drive in logical blocks. Indicates overall read activity.', critical: false },
+        // SSD specific
+        170: { name: 'Available Reserved Space', desc: 'Percentage of reserved blocks remaining for wear leveling.', critical: false },
+        171: { name: 'SSD Program Fail Count', desc: 'Count of flash program failures. Indicates NAND wear.', critical: false },
+        172: { name: 'SSD Erase Fail Count', desc: 'Count of flash erase failures. Indicates NAND degradation.', critical: false },
+        173: { name: 'SSD Wear Leveling Count', desc: 'Count of wear leveling operations. Higher is better for even wear.', critical: false },
+        174: { name: 'Unexpected Power Loss', desc: 'Count of unexpected power losses. May affect data integrity.', critical: false },
+        175: { name: 'Power Loss Protection Failure', desc: 'Count of failures in power loss protection circuits.', critical: false },
+        176: { name: 'Erase Fail Count', desc: 'Total count of erase operation failures.', critical: false },
+        177: { name: 'Wear Range Delta', desc: 'Difference between most and least worn blocks. Lower is better.', critical: false },
+        181: { name: 'Program Fail Count Total', desc: '⚠️ CRITICAL: Total program failures across all flash. Indicates NAND wear.', critical: true },
+        182: { name: 'Erase Fail Count Total', desc: '⚠️ CRITICAL: Total erase failures across all flash. Indicates NAND degradation.', critical: true },
+        231: { name: 'SSD Life Left', desc: 'Estimated remaining drive life as percentage. Plan replacement when low.', critical: false },
+        232: { name: 'Available Reserved Space', desc: 'SSD/NVMe: Percentage of spare blocks remaining for bad block replacement.', critical: false },
+        233: { name: 'Media Wearout Indicator', desc: 'SSD/NVMe: Percentage of rated write endurance used. 100 means end of rated life.', critical: false },
+        234: { name: 'Thermal Throttle Status', desc: 'Indicates if drive is throttling due to temperature.', critical: false },
+        235: { name: 'Good Block Count', desc: 'Number of good/usable NAND blocks remaining.', critical: false },
+        241: { name: 'Total Host Writes', desc: 'Total data written by host system. Key metric for SSD/NVMe wear.', critical: false },
+        242: { name: 'Total Host Reads', desc: 'Total data read by host system.', critical: false },
+        249: { name: 'NAND Writes', desc: 'Total data written to NAND (including write amplification).', critical: false }
+    },
+
+    // Info icon SVG
+    infoIcon: `<svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+
     // Icons for different attribute types
     icons: {
         health: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
@@ -536,11 +596,21 @@ const SmartAttributes = {
             const rowClass = severity === 'critical' ? 'critical-row' : 
                             severity === 'warning' ? 'warning-row' : '';
 
+            // Get attribute explanation for tooltip
+            const explanation = this.attributeExplanations[attr.id];
+            const tooltipContent = explanation ? this.escapeHtml(explanation.desc) : '';
+            const hasTooltip = tooltipContent.length > 0;
+
             html += `
                 <tr class="${rowClass}" onclick="SmartAttributes.showAttributeDetail(${attr.id})">
                     <td>${this.getSeverityBadge(severity)}</td>
                     <td><span class="attr-id ${isCritical ? 'critical' : ''}">${attr.id}</span></td>
-                    <td class="attr-name-cell">${this.escapeHtml(attr.name)}</td>
+                    <td class="attr-name-cell">
+                        <span class="attr-name-wrapper">
+                            ${this.escapeHtml(attr.name)}
+                            ${hasTooltip ? `<span class="attr-tooltip-trigger" data-tooltip="${tooltipContent}">${this.infoIcon}</span>` : ''}
+                        </span>
+                    </td>
                     <td>${attr.value ?? '—'}</td>
                     <td>${attr.worst ?? '—'}</td>
                     <td>${attr.threshold ?? '—'}</td>
