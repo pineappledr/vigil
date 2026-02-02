@@ -153,8 +153,8 @@ const Renderer = {
             </div>
             <div class="info-group">
                 <div class="info-group-label">Health Status</div>
-                ${this.infoRow('SMART Status', drive.smart_status?.passed ? 'PASSED' : 'FAILED', drive.smart_status?.passed ? 'success' : 'danger')}
-                ${this.infoRow('Temperature', `${drive.temperature?.current ?? 'N/A'}°C`, drive.temperature?.current > 50 ? 'warning' : '')}
+                ${this.infoRow('SMART Status', drive.smart_status?.passed === true ? 'PASSED' : drive.smart_status?.passed === false ? 'FAILED' : 'Unknown', drive.smart_status?.passed === true ? 'success' : drive.smart_status?.passed === false ? 'danger' : '')}
+                ${this.infoRow('Temperature', drive.temperature?.current != null ? `${drive.temperature.current}°C` : 'N/A', drive.temperature?.current > 50 ? 'warning' : '')}
                 ${this.infoRow('Powered On', Utils.formatAge(drive.power_on_time?.hours))}
                 ${this.infoRow('Power Cycles', drive.power_cycle_count ?? 'N/A')}
             </div>
