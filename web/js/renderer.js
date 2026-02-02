@@ -126,12 +126,13 @@ const Renderer = {
     },
 
     driveDetails(serverIdx, driveIdx) {
-        const drive = State.data[serverIdx]?.details?.drives?.[driveIdx];
+        const server = State.data[serverIdx];
+        const drive = server?.details?.drives?.[driveIdx];
         if (!drive) return;
 
         const status = Utils.getHealthStatus(drive);
         const sidebar = document.getElementById('detail-sidebar');
-        const table = document.getElementById('detail-table');
+        const hostname = server.hostname;
 
         const rotationType = drive.rotation_rate === 0 ? 'SSD' : drive.rotation_rate ? 'HDD' : 'Unknown';
         const rotationDetail = drive.rotation_rate === 0 ? 'Solid State Drive' : drive.rotation_rate ? `${drive.rotation_rate} RPM` : 'Not reported';
@@ -159,23 +160,38 @@ const Renderer = {
             </div>
         `;
 
-        const attrs = drive.ata_smart_attributes?.table || [];
-        if (!attrs.length) {
-            table.innerHTML = `<div class="nvme-notice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>No standard ATA SMART attributes available</p><span>NVMe drives use different health reporting</span></div>`;
+        // Use SmartAttributes module if available, otherwise render basic view
+        if (typeof SmartAttributes !== 'undefined') {
+            SmartAttributes.init(hostname, drive.serial_number, drive);
         } else {
-            const criticalIds = [5, 187, 197, 198];
-            table.innerHTML = `<thead><tr><th class="status-cell">Status</th><th>ID</th><th>Attribute</th><th>Value</th><th>Worst</th><th>Thresh</th><th>Raw</th></tr></thead><tbody>${attrs.map(a => {
-                const fail = (criticalIds.includes(a.id) && a.raw?.value > 0) || (a.thresh > 0 && a.value <= a.thresh);
-                return `<tr><td class="status-cell"><span class="attr-pill ${fail ? 'fail' : 'ok'}">${fail ? 'FAIL' : 'OK'}</span></td><td>${a.id}</td><td style="font-family:var(--font-sans)">${a.name}</td><td>${a.value}</td><td>${a.worst ?? '-'}</td><td>${a.thresh}</td><td>${a.raw?.value ?? '-'}</td></tr>`;
-            }).join('')}</tbody>`;
+            this.renderBasicSmartView(drive);
         }
     },
 
-    renderBasicSmartTable(drive, container) {
+    renderBasicSmartView(drive) {
+        const container = document.getElementById('smart-view-container');
+        if (!container) return;
+
         const isNvme = Utils.getDriveType(drive) === 'NVMe';
         
         if (isNvme) {
-            this.renderNvmeBasicInfo(drive, container);
+            const health = drive.nvme_smart_health_information_log || {};
+            container.innerHTML = `
+                <div class="table-container">
+                    <table class="smart-table">
+                        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+                        <tbody>
+                            <tr><td>Available Spare</td><td>${health.available_spare ?? '--'}%</td></tr>
+                            <tr><td>Percentage Used</td><td>${health.percentage_used ?? '--'}%</td></tr>
+                            <tr><td>Temperature</td><td>${health.temperature ?? '--'}°C</td></tr>
+                            <tr><td>Power On Hours</td><td>${health.power_on_hours ?? '--'}</td></tr>
+                            <tr><td>Power Cycles</td><td>${health.power_cycles ?? '--'}</td></tr>
+                            <tr><td>Unsafe Shutdowns</td><td>${health.unsafe_shutdowns ?? '--'}</td></tr>
+                            <tr><td>Media Errors</td><td>${health.media_errors ?? '--'}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
             return;
         }
         
@@ -195,87 +211,34 @@ const Renderer = {
             return;
         }
         
+        const criticalIds = [5, 187, 197, 198];
         container.innerHTML = `
             <div class="table-container">
                 <table class="smart-table">
                     <thead>
                         <tr>
+                            <th class="status-cell">Status</th>
                             <th>ID</th>
                             <th>Attribute</th>
                             <th>Value</th>
                             <th>Worst</th>
                             <th>Thresh</th>
                             <th>Raw</th>
-                            <th class="status-cell">Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${attrs.map(attr => `
-                            <tr>
-                                <td>${attr.id}</td>
-                                <td>${attr.name || 'Unknown'}</td>
-                                <td>${attr.value ?? '-'}</td>
-                                <td>${attr.worst ?? '-'}</td>
-                                <td>${attr.thresh ?? '-'}</td>
-                                <td>${attr.raw?.value ?? '-'}</td>
-                                <td class="status-cell">
-                                    <span class="attr-pill ${attr.when_failed ? 'fail' : 'ok'}">
-                                        ${attr.when_failed ? 'FAIL' : 'OK'}
-                                    </span>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
-    },
-
-    renderNvmeBasicInfo(drive, container) {
-        const health = drive.nvme_smart_health_information_log || {};
-        
-        container.innerHTML = `
-            <div class="table-container">
-                <table class="smart-table">
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Available Spare</td>
-                            <td>${health.available_spare ?? '--'}%</td>
-                        </tr>
-                        <tr>
-                            <td>Available Spare Threshold</td>
-                            <td>${health.available_spare_threshold ?? '--'}%</td>
-                        </tr>
-                        <tr>
-                            <td>Percentage Used</td>
-                            <td>${health.percentage_used ?? '--'}%</td>
-                        </tr>
-                        <tr>
-                            <td>Power On Hours</td>
-                            <td>${health.power_on_hours ?? '--'}</td>
-                        </tr>
-                        <tr>
-                            <td>Power Cycles</td>
-                            <td>${health.power_cycles ?? '--'}</td>
-                        </tr>
-                        <tr>
-                            <td>Unsafe Shutdowns</td>
-                            <td>${health.unsafe_shutdowns ?? '--'}</td>
-                        </tr>
-                        <tr>
-                            <td>Media Errors</td>
-                            <td>${health.media_errors ?? '--'}</td>
-                        </tr>
-                        <tr>
-                            <td>Critical Warning</td>
-                            <td>${health.critical_warning ?? '--'}</td>
-                        </tr>
+                        ${attrs.map(a => {
+                            const fail = (criticalIds.includes(a.id) && a.raw?.value > 0) || (a.thresh > 0 && a.value <= a.thresh);
+                            return `<tr>
+                                <td class="status-cell"><span class="attr-pill ${fail ? 'fail' : 'ok'}">${fail ? 'FAIL' : 'OK'}</span></td>
+                                <td>${a.id}</td>
+                                <td style="font-family:var(--font-sans)">${a.name}</td>
+                                <td>${a.value}</td>
+                                <td>${a.worst ?? '-'}</td>
+                                <td>${a.thresh}</td>
+                                <td>${a.raw?.value ?? '-'}</td>
+                            </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
