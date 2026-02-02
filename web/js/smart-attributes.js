@@ -80,11 +80,11 @@ const SmartAttributes = {
             let attrData = await this.fetchAttributes(hostname, serialNumber);
             let tempData = await this.fetchTemperatureHistory(hostname, serialNumber, 24);
 
-            // If API returns null, build from local drive data
-            if (!healthData && this.currentDrive) {
+            // If API returns null or empty, build from local drive data
+            if ((!healthData || Object.keys(healthData).length === 0) && this.currentDrive) {
                 healthData = this.buildHealthFromDrive(this.currentDrive);
             }
-            if (!attrData && this.currentDrive) {
+            if ((!attrData || !attrData.attributes || attrData.attributes.length === 0) && this.currentDrive) {
                 attrData = this.buildAttrsFromDrive(this.currentDrive);
             }
 
