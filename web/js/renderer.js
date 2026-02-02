@@ -61,11 +61,59 @@ const Renderer = {
         `;
     },
 
+    serverDetailSummaryCards(server) {
+        const drives = server.details?.drives || [];
+        const totalDrives = drives.length;
+        
+        // Calculate total capacity
+        const totalBytes = drives.reduce((sum, d) => sum + (d.user_capacity?.bytes || 0), 0);
+        const totalCapacity = Utils.formatSize(totalBytes);
+        
+        // Calculate average temperature
+        const temps = drives.map(d => d.temperature?.current).filter(t => t != null);
+        const avgTemp = temps.length > 0 ? Math.round(temps.reduce((a, b) => a + b, 0) / temps.length) : null;
+        
+        // Count healthy drives
+        const healthyDrives = drives.filter(d => Utils.getHealthStatus(d) === 'healthy').length;
+        
+        return `
+            ${Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
+                iconClass: 'blue',
+                value: totalDrives,
+                label: 'Total Drives',
+                onClick: null
+            })}
+            ${Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+                iconClass: 'purple',
+                value: totalCapacity,
+                label: 'Total Capacity',
+                onClick: null
+            })}
+            ${Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>`,
+                iconClass: 'yellow',
+                value: avgTemp != null ? `${avgTemp}°C` : 'N/A',
+                label: 'Avg Temperature',
+                onClick: null
+            })}
+            ${Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+                iconClass: 'green',
+                value: `${healthyDrives}/${totalDrives}`,
+                label: 'Healthy',
+                onClick: null
+            })}
+        `;
+    },
+
     serverDetail(server, serverIdx) {
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
         
-        summaryCards.innerHTML = this.serverSummaryCards();
+        // Use server-specific summary cards
+        summaryCards.innerHTML = this.serverDetailSummaryCards(server);
         
         const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
         
