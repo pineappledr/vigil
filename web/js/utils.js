@@ -46,6 +46,7 @@ const Utils = {
     getDriveName(drive) {
         if (drive._alias) return drive._alias;
         if (drive.model_name) return drive.model_name;
+        if (drive.model_number) return drive.model_number;
         if (drive.scsi_model_name) return drive.scsi_model_name;
         if (drive.model_family) return drive.model_family;
         if (drive.device?.model) return drive.device.model;
