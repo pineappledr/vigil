@@ -39,6 +39,11 @@ func main() {
 		log.Printf("⚠️  SMART migration warning: %v", err)
 	}
 
+	// Run extended schema migrations
+	if err := db.MigrateSchemaExtensions(db.DB); err != nil {
+		log.Printf("⚠️  Schema migration warning: %v", err)
+	}
+
 	if cfg.AuthEnabled {
 		log.Printf("✓ Authentication: enabled")
 	} else {
