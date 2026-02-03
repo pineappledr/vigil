@@ -1,7 +1,7 @@
 <div align="center">
 
   <h1>
-    <img src="web/img/Vigil.png" alt="Vigil Logo" width="140" style="vertical-align: middle;">
+    <img src="web/img/Vigil.png" alt="Vigil Logo" width="140" style="vertical-align: middle; margin-right: 10px;">
     Vigil
   </h1>
 
