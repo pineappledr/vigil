@@ -1,8 +1,8 @@
 <div align="center">
 
   <h1>
-    <img src="web/img/Vigil.png" alt="Vigil Logo" width="140" style="vertical-align: middle; margin-right: 10px;">
-    Vigil
+    <img src="web/img/Vigil.png" alt="Vigil Logo" width="120" style="vertical-align: middle; margin-right: 5px;">
+    <span style="vertical-align: middle;">Vigil</span>
   </h1>
 
   **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis.**
