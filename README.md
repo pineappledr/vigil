@@ -1,7 +1,10 @@
 # Vigil
 
-> **Proactive, lightweight server & drive monitoring with SMART health analysis.**
-
+<p align="center">
+  <img src="web/img/Vigil.png" alt="Vigil Logo" width="120">
+  <br>
+  <b>Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis.</b>
+</p>
 <p align="left">
   <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
   <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
@@ -290,7 +293,7 @@ Or download a specific older version:
 
 ```bash
 sudo systemctl stop vigil-agent
-sudo curl -L https://github.com/pineappledr/vigil/releases/download/v1.0.0/vigil-agent-linux-amd64 \
+sudo curl -L https://github.com/pineappledr/vigil/releases/download/v2.0.0/vigil-agent-linux-amd64 \
   -o /usr/local/bin/vigil-agent
 sudo chmod +x /usr/local/bin/vigil-agent
 sudo systemctl start vigil-agent
