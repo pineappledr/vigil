@@ -9,6 +9,12 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/variables.css">
     <style>
+        /* Override variables for the Blue Theme */
+        :root {
+            --accent-blue: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+        }
+
         body {
             font-family: var(--font-sans);
             background: var(--bg-primary);
@@ -30,23 +36,27 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         }
 
+        /* --- LOGO SECTION --- */
         .logo {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 32px;
+            gap: 1rem;
+            margin-bottom: 2rem;
         }
 
-        .logo svg { width: 40px; height: 40px; color: var(--accent-primary); }
-
         .logo-text {
-            font-size: 2rem;
+            /* Using Outfit font to match your Blue Screenshot */
+            font-family: 'Outfit', sans-serif;
             font-weight: 700;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-size: 42px;
+            
+            /* Blue Color */
+            color: var(--accent-blue);
+            text-shadow: 0 0 10px var(--accent-glow);
+            
+            letter-spacing: -0.5px;
+            line-height: 1;
         }
 
         .login-title {
@@ -56,6 +66,7 @@
             margin-bottom: 32px;
         }
 
+        /* --- FORM ELEMENTS --- */
         .form-group { margin-bottom: 20px; }
 
         .form-label {
@@ -78,14 +89,16 @@
             transition: border-color 0.2s, box-shadow 0.2s;
         }
 
+        /* Blue Focus Glow */
         .form-input:focus {
             outline: none;
-            border-color: var(--accent-primary);
+            border-color: var(--accent-blue);
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
         }
 
         .form-input::placeholder { color: var(--text-muted); }
 
+        /* --- BUTTON (Blue Theme) --- */
         .login-button {
             width: 100%;
             padding: 14px 24px;
@@ -93,7 +106,10 @@
             font-weight: 600;
             font-family: var(--font-sans);
             color: white;
-            background: var(--accent-gradient);
+            
+            /* Solid Blue Background */
+            background: var(--accent-blue);
+            
             border: none;
             border-radius: 8px;
             cursor: pointer;
@@ -102,12 +118,13 @@
 
         .login-button:hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 4px 15px var(--accent-glow);
         }
 
         .login-button:active { transform: translateY(0); }
         .login-button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
+        /* --- EXTRAS --- */
         .error-message {
             background: rgba(239, 68, 68, 0.1);
             border: 1px solid rgba(239, 68, 68, 0.3);
@@ -128,7 +145,8 @@
             font-size: 0.75rem;
         }
 
-        .footer a { color: var(--accent-primary); text-decoration: none; }
+        /* Blue Links */
+        .footer a { color: var(--accent-blue); text-decoration: none; }
         .footer a:hover { text-decoration: underline; }
 
         .spinner {
@@ -149,12 +167,11 @@
 <body>
     <div class="login-container">
         <div class="login-card">
+            
             <div class="logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
+                <img src="img/Vigil.png" alt="Vigil" style="height: 100px; width: auto;">
                 <span class="logo-text">Vigil</span>
-            </div>
+            </div>            
             
             <p class="login-title">Sign in to your dashboard</p>
             <div id="error-message" class="error-message"></div>

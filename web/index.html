@@ -12,12 +12,11 @@
 </head>
 <body>
     <div class="app">
-        <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo" onclick="resetDashboard()">
-                    <img src="img/Vigil.png" alt="Vigil" style="height: 32px; width: auto; margin-right: 8px;">                   
-                    <span class="logo-text">Vigil</span>
+            <div class="sidebar-header" style="height: 64px; padding-top: 0; padding-bottom: 0; display: flex; align-items: center; justify-content: space-between;">
+                <div class="logo" onclick="resetDashboard()" style="display: flex; align-items: center; cursor: pointer; height: 100%;">
+                    <img src="img/Vigil.png" alt="Vigil" style="height: 40px; width: auto; margin-right: 12px;">                   
+                    <span class="logo-text" style="font-family: 'Courier New', Courier, monospace; font-weight: 700; font-size: 28px; color: #3b82f6; text-shadow: 0 0 5px rgba(59, 130, 246, 0.5); letter-spacing: -1px; line-height: 1;">Vigil</span>
                 </div>
                 <div id="status-indicator" class="status-dot offline" title="Connecting..."></div>
             </div>
@@ -68,7 +67,6 @@
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
             <header class="main-header">
                 <div class="header-left">
@@ -91,7 +89,6 @@
                 </div>
             </header>
 
-            <!-- Dashboard View -->
             <div id="dashboard-view" class="view">
                 <div class="summary-grid" id="summary-cards"></div>
                 <div class="section-header"><h2>Servers</h2></div>
@@ -109,7 +106,6 @@
                 </div>
             </div>
 
-            <!-- Details View -->
             <div id="details-view" class="view hidden">
                 <button class="btn-back" onclick="goBackToContext()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -131,7 +127,6 @@
         </main>
     </div>
 
-    <!-- Modular JavaScript -->
     <script src="js/utils.js"></script>
     <script src="js/state.js"></script>
     <script src="js/api.js"></script>
