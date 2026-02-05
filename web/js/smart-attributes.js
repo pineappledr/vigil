@@ -188,30 +188,30 @@ const SmartAttributes = {
 
     // Build health summary from local drive data
     buildHealthFromDrive(drive) {
-        const status = Utils.getHealthStatus(drive); 
         const smartPassed = drive.smart_status?.passed !== false;
-    
+        const issues = [];
+        
+        // Check ATA attributes for issues
         const attrs = drive.ata_smart_attributes?.table || [];
         const criticalIds = [5, 10, 187, 188, 196, 197, 198];
-        const issues = [];
-    
+        
         attrs.forEach(attr => {
             if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
-                    issues.push({
+                issues.push({
                     attribute_id: attr.id,
                     attribute_name: attr.name,
                     severity: 'CRITICAL',
-                    message: `${attr.name} tiene un valor de ${attr.raw.value}. Reemplazo recomendado.`
+                    message: `${attr.name} has non-zero value: ${attr.raw.value}`
                 });
             }
         });
 
         return {
-            overall_health: status.charAt(0).toUpperCase() + status.slice(1),
+            overall_health: issues.length > 0 ? 'Warning' : 'Healthy',
             smart_passed: smartPassed,
-            critical_count: issues.length,
-            warning_count: 0, 
-            model_name: Utils.getDriveName(drive),
+            critical_count: issues.filter(i => i.severity === 'CRITICAL').length,
+            warning_count: issues.filter(i => i.severity === 'WARNING').length,
+            model_name: drive.model_name || drive.scsi_model_name || 'Unknown',
             drive_type: Utils.getDriveType(drive),
             issues: issues
         };

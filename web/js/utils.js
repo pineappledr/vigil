@@ -29,21 +29,19 @@ const Utils = {
     },
 
     getHealthStatus(drive) {
-    if (drive.smart_status?.passed === false) return 'critical';
-    
-    const attrs = drive.ata_smart_attributes?.table || [];
-    const criticalIds = [5, 187, 197, 198];
-    
-    for (const attr of attrs) {
-        if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
-            return 'critical'; 
+        if (!drive.smart_status?.passed) return 'critical';
+        
+        const attrs = drive.ata_smart_attributes?.table || [];
+        const criticalIds = [5, 187, 197, 198];
+        
+        for (const attr of attrs) {
+            if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
+                return 'warning';
+            }
         }
-    }
-    
-    if (drive.temperature?.current > 55) return 'warning';
-    
-    return 'healthy';
-},
+        
+        return 'healthy';
+    },
 
     getDriveName(drive) {
         if (drive._alias) return drive._alias;
