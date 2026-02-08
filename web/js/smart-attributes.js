@@ -132,6 +132,53 @@ const SmartAttributes = {
         const container = document.getElementById('smart-view-container');
         if (!container) return;
 
+        // If we have local drive data, render immediately without waiting for API
+        if (this.currentDrive) {
+            const localHealth = this.buildHealthFromDrive(this.currentDrive);
+            const localAttrs = this.buildAttrsFromDrive(this.currentDrive);
+            
+            let html = '';
+            html += this.renderTabs(isNvme);
+            html += '<div id="smart-tab-contents">';
+            html += `<div id="tab-health" class="smart-tab-content active">`;
+            html += this.renderHealthSummary(localHealth);
+            if (localHealth?.issues?.length > 0) {
+                html += this.renderIssuesList(localHealth.issues);
+            }
+            html += `</div>`;
+
+            if (isNvme) {
+                html += `<div id="tab-nvme" class="smart-tab-content">`;
+                html += this.renderNvmeHealth(localAttrs, this.currentDrive);
+                html += `</div>`;
+            }
+
+            html += `<div id="tab-attributes" class="smart-tab-content">`;
+            html += this.renderAttributesTable(localAttrs?.attributes || [], isNvme);
+            html += `</div>`;
+
+            html += `<div id="tab-temperature" class="smart-tab-content">`;
+            html += this.renderTemperatureChart(null); // Will be updated async
+            html += `</div>`;
+
+            html += '</div>';
+            container.innerHTML = html;
+            this.initTabs();
+            
+            // Fetch temperature history in background and update chart
+            this.fetchTemperatureHistory(hostname, serialNumber, 24).then(tempData => {
+                if (tempData) {
+                    const tempContainer = document.getElementById('tab-temperature');
+                    if (tempContainer) {
+                        tempContainer.innerHTML = this.renderTemperatureChart(tempData);
+                    }
+                }
+            }).catch(err => console.error('Error fetching temperature:', err));
+            
+            return;
+        }
+
+        // Fallback: No local data, show loading and fetch from API
         container.innerHTML = this.renderLoading();
 
         try {
@@ -145,32 +192,12 @@ const SmartAttributes = {
             let finalHealthData = healthData;
             let finalAttrData = attrData;
 
-            // ALWAYS build from local drive data to ensure accurate issue counts
-            // This fixes mismatch between Health tab and Attributes tab
-            if (this.currentDrive) {
-                const localHealth = this.buildHealthFromDrive(this.currentDrive);
-                const localAttrs = this.buildAttrsFromDrive(this.currentDrive);
-                
-                // If API returned empty/incomplete, use local data entirely
-                if (!finalHealthData || Object.keys(finalHealthData).length === 0) {
-                    finalHealthData = localHealth;
-                } else {
-                    // API returned data, but override issue counts with local counts
-                    // This ensures consistency with what's displayed in Attributes tab
-                    finalHealthData.critical_count = localHealth.critical_count;
-                    finalHealthData.warning_count = localHealth.warning_count;
-                    finalHealthData.issues = localHealth.issues;
-                    // Update overall health based on local analysis
-                    if (localHealth.critical_count > 0) {
-                        finalHealthData.overall_health = 'Critical';
-                    } else if (localHealth.warning_count > 0) {
-                        finalHealthData.overall_health = 'Warning';
-                    }
-                }
-                
-                if (!finalAttrData || !finalAttrData.attributes || finalAttrData.attributes.length === 0) {
-                    finalAttrData = localAttrs;
-                }
+            // Use API data or empty defaults
+            if (!finalHealthData || Object.keys(finalHealthData).length === 0) {
+                finalHealthData = { overall_health: 'Unknown', smart_passed: true, critical_count: 0, warning_count: 0 };
+            }
+            if (!finalAttrData || !finalAttrData.attributes) {
+                finalAttrData = { attributes: [] };
             }
 
             let html = '';
@@ -202,12 +229,7 @@ const SmartAttributes = {
             this.initTabs();
         } catch (error) {
             console.error('Error rendering SMART view:', error);
-            // Try to render with local data
-            if (this.currentDrive) {
-                this.renderFromLocalData(container, isNvme);
-            } else {
-                container.innerHTML = this.renderError('Failed to load SMART data');
-            }
+            container.innerHTML = this.renderError('Failed to load SMART data');
         }
     },
 

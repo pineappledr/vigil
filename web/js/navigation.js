@@ -7,6 +7,7 @@ const Navigation = {
         State.reset();
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
         document.getElementById('page-title').textContent = 'Infrastructure Overview';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
@@ -21,6 +22,10 @@ const Navigation = {
         State.setServer(index);
         const server = State.data[index];
         if (!server) return;
+        
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
         
         document.getElementById('page-title').textContent = server.hostname;
         document.getElementById('crumb-server').textContent = server.hostname;
@@ -43,6 +48,7 @@ const Navigation = {
         
         document.getElementById('dashboard-view').classList.add('hidden');
         document.getElementById('details-view').classList.remove('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
         
         document.getElementById('page-title').textContent = Utils.getDriveName(drive);
         document.getElementById('crumb-server').textContent = `${server.hostname} › ${Utils.getDriveName(drive)}`;
@@ -77,6 +83,11 @@ const Navigation = {
 
     showFilter(filter) {
         State.setFilter(filter);
+        
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
+        
         document.getElementById('page-title').textContent = 
             filter === 'attention' ? 'Drives Needing Attention' :
             filter === 'healthy' ? 'Healthy Drives' : 'All Drives';
