@@ -1,6 +1,5 @@
 /**
  * Vigil Dashboard - SMART Attributes Module
- * Phase 1.3: Enhanced S.M.A.R.T. Monitoring UI with NVMe Health
  */
 
 const SmartAttributes = {
@@ -140,12 +139,32 @@ const SmartAttributes = {
             let attrData = await this.fetchAttributes(hostname, serialNumber);
             let tempData = await this.fetchTemperatureHistory(hostname, serialNumber, 24);
 
-            // If API returns null or empty, build from local drive data
-            if ((!healthData || Object.keys(healthData).length === 0) && this.currentDrive) {
-                healthData = this.buildHealthFromDrive(this.currentDrive);
-            }
-            if ((!attrData || !attrData.attributes || attrData.attributes.length === 0) && this.currentDrive) {
-                attrData = this.buildAttrsFromDrive(this.currentDrive);
+            // ALWAYS build from local drive data to ensure accurate issue counts
+            // This fixes mismatch between Health tab and Attributes tab
+            if (this.currentDrive) {
+                const localHealth = this.buildHealthFromDrive(this.currentDrive);
+                const localAttrs = this.buildAttrsFromDrive(this.currentDrive);
+                
+                // If API returned empty/incomplete, use local data entirely
+                if (!healthData || Object.keys(healthData).length === 0) {
+                    healthData = localHealth;
+                } else {
+                    // API returned data, but override issue counts with local counts
+                    // This ensures consistency with what's displayed in Attributes tab
+                    healthData.critical_count = localHealth.critical_count;
+                    healthData.warning_count = localHealth.warning_count;
+                    healthData.issues = localHealth.issues;
+                    // Update overall health based on local analysis
+                    if (localHealth.critical_count > 0) {
+                        healthData.overall_health = 'Critical';
+                    } else if (localHealth.warning_count > 0) {
+                        healthData.overall_health = 'Warning';
+                    }
+                }
+                
+                if (!attrData || !attrData.attributes || attrData.attributes.length === 0) {
+                    attrData = localAttrs;
+                }
             }
 
             let html = '';
@@ -193,24 +212,87 @@ const SmartAttributes = {
         
         // Check ATA attributes for issues
         const attrs = drive.ata_smart_attributes?.table || [];
-        const criticalIds = [5, 10, 187, 188, 196, 197, 198];
+        
+        // Critical IDs where ANY non-zero raw value indicates a problem
+        const criticalIds = [5, 10, 181, 182, 183, 184, 187, 188, 196, 197, 198];
+        // Warning IDs (high values are concerning but not critical)
+        const warningIds = [199]; // CRC errors - often cable issues
         
         attrs.forEach(attr => {
-            if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
+            const rawValue = attr.raw?.value || 0;
+            const value = attr.value || 0;
+            const thresh = attr.thresh || 0;
+            
+            // Check if normalized value hit threshold (SMART failure imminent)
+            if (thresh > 0 && value > 0 && value <= thresh) {
                 issues.push({
                     attribute_id: attr.id,
                     attribute_name: attr.name,
                     severity: 'CRITICAL',
-                    message: `${attr.name} has non-zero value: ${attr.raw.value}`
+                    message: `${attr.name} reached failure threshold (value: ${value}, threshold: ${thresh})`
                 });
+                return;
+            }
+            
+            // Check critical IDs where raw > 0 is bad
+            if (criticalIds.includes(attr.id) && rawValue > 0) {
+                issues.push({
+                    attribute_id: attr.id,
+                    attribute_name: attr.name,
+                    severity: 'CRITICAL',
+                    message: `${attr.name} has non-zero value: ${rawValue}`
+                });
+                return;
+            }
+            
+            // Check warning IDs
+            if (warningIds.includes(attr.id) && rawValue > 0) {
+                issues.push({
+                    attribute_id: attr.id,
+                    attribute_name: attr.name,
+                    severity: 'WARNING',
+                    message: `${attr.name}: ${rawValue} (check cables)`
+                });
+                return;
+            }
+            
+            // Check temperature (ID 194, 190)
+            if ((attr.id === 194 || attr.id === 190) && rawValue > 0) {
+                if (rawValue > 65) {
+                    issues.push({
+                        attribute_id: attr.id,
+                        attribute_name: attr.name,
+                        severity: 'CRITICAL',
+                        message: `Temperature critical: ${rawValue}°C`
+                    });
+                } else if (rawValue > 55) {
+                    issues.push({
+                        attribute_id: attr.id,
+                        attribute_name: attr.name,
+                        severity: 'WARNING',
+                        message: `Temperature warning: ${rawValue}°C`
+                    });
+                }
             }
         });
 
+        // Calculate counts
+        const criticalCount = issues.filter(i => i.severity === 'CRITICAL').length;
+        const warningCount = issues.filter(i => i.severity === 'WARNING').length;
+        
+        // Determine overall health - Critical takes precedence
+        let overallHealth = 'Healthy';
+        if (!smartPassed || criticalCount > 0) {
+            overallHealth = 'Critical';
+        } else if (warningCount > 0) {
+            overallHealth = 'Warning';
+        }
+
         return {
-            overall_health: issues.length > 0 ? 'Warning' : 'Healthy',
+            overall_health: overallHealth,
             smart_passed: smartPassed,
-            critical_count: issues.filter(i => i.severity === 'CRITICAL').length,
-            warning_count: issues.filter(i => i.severity === 'WARNING').length,
+            critical_count: criticalCount,
+            warning_count: warningCount,
             model_name: drive.model_name || drive.scsi_model_name || 'Unknown',
             drive_type: Utils.getDriveType(drive),
             issues: issues
