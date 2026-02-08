@@ -1,5 +1,6 @@
 /**
  * Vigil Dashboard - SMART Attributes Module
+ * Phase 1.3: Enhanced S.M.A.R.T. Monitoring UI with NVMe Health
  */
 
 const SmartAttributes = {
@@ -134,10 +135,15 @@ const SmartAttributes = {
         container.innerHTML = this.renderLoading();
 
         try {
-            // Try to fetch from API, but use local data as fallback
-            let healthData = await this.fetchHealthSummary(hostname, serialNumber);
-            let attrData = await this.fetchAttributes(hostname, serialNumber);
-            let tempData = await this.fetchTemperatureHistory(hostname, serialNumber, 24);
+            // Fetch all API calls in parallel for faster loading
+            const [healthData, attrData, tempData] = await Promise.all([
+                this.fetchHealthSummary(hostname, serialNumber),
+                this.fetchAttributes(hostname, serialNumber),
+                this.fetchTemperatureHistory(hostname, serialNumber, 24)
+            ]);
+
+            let finalHealthData = healthData;
+            let finalAttrData = attrData;
 
             // ALWAYS build from local drive data to ensure accurate issue counts
             // This fixes mismatch between Health tab and Attributes tab
@@ -146,24 +152,24 @@ const SmartAttributes = {
                 const localAttrs = this.buildAttrsFromDrive(this.currentDrive);
                 
                 // If API returned empty/incomplete, use local data entirely
-                if (!healthData || Object.keys(healthData).length === 0) {
-                    healthData = localHealth;
+                if (!finalHealthData || Object.keys(finalHealthData).length === 0) {
+                    finalHealthData = localHealth;
                 } else {
                     // API returned data, but override issue counts with local counts
                     // This ensures consistency with what's displayed in Attributes tab
-                    healthData.critical_count = localHealth.critical_count;
-                    healthData.warning_count = localHealth.warning_count;
-                    healthData.issues = localHealth.issues;
+                    finalHealthData.critical_count = localHealth.critical_count;
+                    finalHealthData.warning_count = localHealth.warning_count;
+                    finalHealthData.issues = localHealth.issues;
                     // Update overall health based on local analysis
                     if (localHealth.critical_count > 0) {
-                        healthData.overall_health = 'Critical';
+                        finalHealthData.overall_health = 'Critical';
                     } else if (localHealth.warning_count > 0) {
-                        healthData.overall_health = 'Warning';
+                        finalHealthData.overall_health = 'Warning';
                     }
                 }
                 
-                if (!attrData || !attrData.attributes || attrData.attributes.length === 0) {
-                    attrData = localAttrs;
+                if (!finalAttrData || !finalAttrData.attributes || finalAttrData.attributes.length === 0) {
+                    finalAttrData = localAttrs;
                 }
             }
 
@@ -171,20 +177,20 @@ const SmartAttributes = {
             html += this.renderTabs(isNvme);
             html += '<div id="smart-tab-contents">';
             html += `<div id="tab-health" class="smart-tab-content active">`;
-            html += this.renderHealthSummary(healthData);
-            if (healthData?.issues?.length > 0) {
-                html += this.renderIssuesList(healthData.issues);
+            html += this.renderHealthSummary(finalHealthData);
+            if (finalHealthData?.issues?.length > 0) {
+                html += this.renderIssuesList(finalHealthData.issues);
             }
             html += `</div>`;
 
             if (isNvme) {
                 html += `<div id="tab-nvme" class="smart-tab-content">`;
-                html += this.renderNvmeHealth(attrData, this.currentDrive);
+                html += this.renderNvmeHealth(finalAttrData, this.currentDrive);
                 html += `</div>`;
             }
 
             html += `<div id="tab-attributes" class="smart-tab-content">`;
-            html += this.renderAttributesTable(attrData?.attributes || [], isNvme);
+            html += this.renderAttributesTable(finalAttrData?.attributes || [], isNvme);
             html += `</div>`;
 
             html += `<div id="tab-temperature" class="smart-tab-content">`;
@@ -463,6 +469,12 @@ const SmartAttributes = {
         const healthIcon = healthClass === 'healthy' ? this.icons.check :
                           healthClass === 'warning' ? this.icons.warning : this.icons.error;
 
+        // Truncate model name if too long to prevent layout issues
+        let modelName = healthData.model_name || 'N/A';
+        if (modelName.length > 20) {
+            modelName = modelName.substring(0, 18) + '…';
+        }
+
         return `
             <div class="health-summary-panel">
                 <div class="health-summary-header">
@@ -479,21 +491,21 @@ const SmartAttributes = {
                         <div class="health-stat-value ${healthData.critical_count > 0 ? 'critical' : 'healthy'}">
                             ${healthData.critical_count || 0}
                         </div>
-                        <div class="health-stat-label">Critical Issues</div>
+                        <div class="health-stat-label">CRITICAL ISSUES</div>
                     </div>
                     <div class="health-stat-card">
                         <div class="health-stat-value ${healthData.warning_count > 0 ? 'warning' : 'healthy'}">
                             ${healthData.warning_count || 0}
                         </div>
-                        <div class="health-stat-label">Warnings</div>
+                        <div class="health-stat-label">WARNINGS</div>
                     </div>
                     <div class="health-stat-card">
-                        <div class="health-stat-value">${healthData.model_name || 'N/A'}</div>
-                        <div class="health-stat-label">Model</div>
+                        <div class="health-stat-value model-name" title="${healthData.model_name || 'N/A'}">${modelName}</div>
+                        <div class="health-stat-label">MODEL</div>
                     </div>
                     <div class="health-stat-card">
                         <div class="health-stat-value">${healthData.drive_type || 'Unknown'}</div>
-                        <div class="health-stat-label">Type</div>
+                        <div class="health-stat-label">TYPE</div>
                     </div>
                 </div>
             </div>

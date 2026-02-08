@@ -1,6 +1,5 @@
 /* ============================================
    SMART ATTRIBUTES MODULE
-   Phase 1.3: Enhanced S.M.A.R.T. Monitoring UI
    ============================================ */
 
 /* Tab Navigation */
@@ -118,6 +117,10 @@
     padding: 16px;
     border-radius: 8px;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .health-stat-value {
@@ -125,6 +128,18 @@
     font-weight: 700;
     font-family: var(--font-mono);
     margin-bottom: 4px;
+    text-align: center;
+    word-break: break-word;
+}
+
+/* Model name specific - prevent overflow and center properly */
+.health-stat-value.model-name {
+    font-size: 1rem;
+    line-height: 1.3;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .health-stat-value.healthy { color: var(--success); }
