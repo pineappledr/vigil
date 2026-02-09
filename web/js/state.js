@@ -95,7 +95,7 @@ const State = {
      * @returns {Object} ZFS stats
      */
     getZFSStats() {
-        const pools = this.zfsPools || [];
+        const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
         
         let totalPools = pools.length;
         let healthyPools = 0;
@@ -104,6 +104,8 @@ const State = {
         let totalErrors = 0;
 
         pools.forEach(pool => {
+            if (!pool) return;
+            
             const state = (pool.state || pool.health || '').toUpperCase();
             
             if (state === 'ONLINE') {
@@ -115,13 +117,13 @@ const State = {
             }
 
             // Count device errors
-            if (pool.devices) {
-                pool.devices.forEach(device => {
-                    totalErrors += (device.read_errors || 0) + 
-                                   (device.write_errors || 0) + 
-                                   (device.checksum_errors || 0);
-                });
-            }
+            const devices = Array.isArray(pool.devices) ? pool.devices : [];
+            devices.forEach(device => {
+                if (!device) return;
+                totalErrors += (device.read_errors || 0) + 
+                               (device.write_errors || 0) + 
+                               (device.checksum_errors || 0);
+            });
         });
 
         return { 
@@ -140,8 +142,10 @@ const State = {
      */
     getPoolsByHost() {
         const grouped = {};
+        const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
         
-        (this.zfsPools || []).forEach(pool => {
+        pools.forEach(pool => {
+            if (!pool) return;
             const host = pool.hostname || 'unknown';
             if (!grouped[host]) {
                 grouped[host] = [];
@@ -158,24 +162,28 @@ const State = {
      */
     buildZFSDriveMap() {
         this.zfsDriveMap = {};
+        const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
         
-        (this.zfsPools || []).forEach(pool => {
+        pools.forEach(pool => {
+            if (!pool) return;
+            
             const hostname = pool.hostname || '';
             const poolState = (pool.state || pool.health || 'UNKNOWN').toUpperCase();
+            const devices = Array.isArray(pool.devices) ? pool.devices : [];
             
-            (pool.devices || []).forEach(device => {
-                if (device.serial) {
-                    const key = `${hostname}:${device.serial}`;
-                    this.zfsDriveMap[key] = {
-                        poolName: pool.name,
-                        poolState: poolState,
-                        vdev: device.vdev || '',
-                        deviceName: device.device_name || device.name || '',
-                        readErrors: device.read_errors || 0,
-                        writeErrors: device.write_errors || 0,
-                        checksumErrors: device.checksum_errors || 0
-                    };
-                }
+            devices.forEach(device => {
+                if (!device || !device.serial) return;
+                
+                const key = `${hostname}:${device.serial}`;
+                this.zfsDriveMap[key] = {
+                    poolName: pool.name || 'unknown',
+                    poolState: poolState,
+                    vdev: device.vdev || '',
+                    deviceName: device.device_name || device.name || '',
+                    readErrors: device.read_errors || 0,
+                    writeErrors: device.write_errors || 0,
+                    checksumErrors: device.checksum_errors || 0
+                };
             });
         });
     },

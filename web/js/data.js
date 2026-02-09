@@ -9,7 +9,8 @@ const Data = {
             const [historyResponse, zfsResponse] = await Promise.all([
                 API.getHistory(),
                 API.getZFSPools().catch(err => {
-                    console.log('ZFS fetch skipped:', err?.message || 'unavailable');
+                    // ZFS endpoint might not exist or return error - that's OK
+                    console.debug('ZFS API unavailable:', err?.message || 'endpoint not found');
                     return null;
                 })
             ]);
@@ -25,9 +26,13 @@ const Data = {
             
             // Process ZFS data if available
             if (zfsResponse && zfsResponse.ok) {
-                State.zfsPools = await zfsResponse.json() || [];
+                const zfsData = await zfsResponse.json();
+                State.zfsPools = Array.isArray(zfsData) ? zfsData : [];
                 State.buildZFSDriveMap();
-                console.log(`ZFS: ${State.zfsPools.length} pools, ${Object.keys(State.zfsDriveMap).length} drive mappings`);
+                
+                if (State.zfsPools.length > 0) {
+                    console.log(`ZFS: ${State.zfsPools.length} pool(s), ${Object.keys(State.zfsDriveMap).length} drive mapping(s)`);
+                }
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};

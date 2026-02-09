@@ -53,10 +53,12 @@ const ZFS = {
         const poolsByHost = State.getPoolsByHost();
         const hostnames = Object.keys(poolsByHost).sort();
 
+        // Show summary cards even when empty (all zeros)
         container.innerHTML = `
             ${this.renderSummaryCards(stats)}
             <div class="section-header">
                 <h2>ZFS Pools</h2>
+                ${stats.totalPools > 0 ? `<span class="section-count">${stats.totalPools} pool${stats.totalPools !== 1 ? 's' : ''}</span>` : ''}
             </div>
             <div id="zfs-pools-container" class="zfs-pools-container">
                 ${hostnames.length > 0 
@@ -175,7 +177,32 @@ const ZFS = {
             <div class="empty-state zfs-empty">
                 ${this.icons.pool}
                 <p>No ZFS pools detected</p>
-                <span class="hint">ZFS pools will appear here when agents report them</span>
+                <span class="hint">ZFS pools will appear here when agents report them.<br>
+                Make sure ZFS is installed and the Vigil agent has ZFS detection enabled.</span>
+            </div>
+        `;
+    },
+
+    // ─── Loading State ───────────────────────────────────────────────────────
+    renderLoadingState() {
+        return `
+            <div class="zfs-loading-state">
+                <div class="zfs-loading-spinner"></div>
+                <p>Loading ZFS pools...</p>
+            </div>
+        `;
+    },
+
+    // ─── Error State ─────────────────────────────────────────────────────────
+    renderErrorState(message) {
+        return `
+            <div class="empty-state zfs-error-state">
+                ${this.icons.error}
+                <p>Failed to load ZFS data</p>
+                <span class="hint">${message || 'Please try refreshing the page.'}</span>
+                <button class="btn btn-secondary" onclick="Data.fetch()" style="margin-top: 1rem;">
+                    Retry
+                </button>
             </div>
         `;
     },

@@ -171,6 +171,12 @@
     font-weight: 600;
 }
 
+.section-header .section-count {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
 /* Server Grid */
 .server-grid {
     display: flex;
