@@ -185,14 +185,15 @@ func parsePoolStatus(poolName, output string) (*Pool, error) {
 
 // parseScanLine parses scrub/resilver status
 // Example outputs:
-//   scan: scrub repaired 0B in 12:34:56 with 0 errors on Sun Feb  2 12:00:00 2025
-//   scan: scrub in progress since Sun Feb  2 10:00:00 2025
-//         1.23T scanned at 100M/s, 500G issued at 50M/s, 2.00T total
-//         0B repaired, 25.00% done, 01:30:00 to go
-//   scan: resilver in progress since Sun Feb  2 10:00:00 2025
-//         500G scanned out of 2.00T at 100M/s, 25.00% done, 04:00:00 to go
-//   scan: scrub canceled on Sun Feb  2 11:00:00 2025
-//   scan: none requested
+//
+//	scan: scrub repaired 0B in 12:34:56 with 0 errors on Sun Feb  2 12:00:00 2025
+//	scan: scrub in progress since Sun Feb  2 10:00:00 2025
+//	      1.23T scanned at 100M/s, 500G issued at 50M/s, 2.00T total
+//	      0B repaired, 25.00% done, 01:30:00 to go
+//	scan: resilver in progress since Sun Feb  2 10:00:00 2025
+//	      500G scanned out of 2.00T at 100M/s, 25.00% done, 04:00:00 to go
+//	scan: scrub canceled on Sun Feb  2 11:00:00 2025
+//	scan: none requested
 func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 	scan := &ScanInfo{}
 	fullText := strings.TrimPrefix(firstLine, "scan:")
@@ -238,12 +239,12 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 	// Parse timestamps
 	scan.StartTime = parseZFSTimestamp(fullText, "since")
 	scan.EndTime = parseZFSTimestamp(fullText, "on")
-	
+
 	// Calculate duration if we have end time (finished/canceled)
 	if !scan.EndTime.IsZero() && !scan.StartTime.IsZero() {
 		scan.Duration = int64(scan.EndTime.Sub(scan.StartTime).Seconds())
 	}
-	
+
 	// Parse duration from "in HH:MM:SS" format (for finished scans)
 	// Example: "repaired 0B in 12:34:56 with 0 errors"
 	if idx := strings.Index(lowerText, " in "); idx > 0 {
@@ -268,7 +269,7 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 
 	// Parse data scanned/examined (e.g., "1.23T scanned")
 	scan.DataExamined = parseSizeBefore(fullText, " scanned")
-	
+
 	// Parse total data (e.g., "out of 2.00T" or "2.00T total")
 	if idx := strings.Index(lowerText, "out of "); idx >= 0 {
 		rest := fullText[idx+7:]
@@ -300,10 +301,10 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 	if idx < 0 {
 		return time.Time{}
 	}
-	
+
 	// Extract the rest of the string after the keyword
 	rest := strings.TrimSpace(text[idx+len(keyword)+1:])
-	
+
 	// ZFS timestamp formats to try
 	formats := []string{
 		"Mon Jan _2 15:04:05 2006",
@@ -313,7 +314,7 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 		"Jan  2 15:04:05 2006",
 		"2006-01-02 15:04:05",
 	}
-	
+
 	// Try to find where the timestamp ends (usually before "with" or end of meaningful text)
 	endMarkers := []string{" with ", " 0b ", " 0B "}
 	for _, marker := range endMarkers {
@@ -322,10 +323,10 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 			break
 		}
 	}
-	
+
 	// Normalize multiple spaces to single space
 	rest = strings.Join(strings.Fields(rest), " ")
-	
+
 	for _, format := range formats {
 		if t, err := time.Parse(format, rest); err == nil {
 			return t
@@ -337,7 +338,7 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 			}
 		}
 	}
-	
+
 	return time.Time{}
 }
 
@@ -359,13 +360,13 @@ func parsePercentage(text, marker string) float64 {
 	if idx <= 0 {
 		return 0
 	}
-	
+
 	// Walk backwards to find the start of the number
 	start := idx - 1
 	for start > 0 && (text[start] >= '0' && text[start] <= '9' || text[start] == '.') {
 		start--
 	}
-	
+
 	if pct, err := strconv.ParseFloat(strings.TrimSpace(text[start+1:idx]), 64); err == nil {
 		return pct
 	}
@@ -378,13 +379,13 @@ func parseNumberBefore(text, marker string) int64 {
 	if idx <= 0 {
 		return 0
 	}
-	
+
 	// Walk backwards to find the start of the number
 	start := idx - 1
 	for start > 0 && text[start] >= '0' && text[start] <= '9' {
 		start--
 	}
-	
+
 	if num, err := strconv.ParseInt(strings.TrimSpace(text[start+1:idx]), 10, 64); err == nil {
 		return num
 	}
@@ -399,14 +400,14 @@ func parseSizeBefore(text, marker string) int64 {
 	if idx <= 0 {
 		return 0
 	}
-	
+
 	// Find the size value before the marker
 	before := strings.TrimSpace(text[:idx])
 	parts := strings.Fields(before)
 	if len(parts) == 0 {
 		return 0
 	}
-	
+
 	// The size should be the last word before the marker
 	return parseHumanSize(parts[len(parts)-1])
 }
@@ -418,7 +419,7 @@ func parseScanRate(text string) int64 {
 	if idx <= 0 {
 		return 0
 	}
-	
+
 	// Walk backwards to find the start of the rate value
 	start := idx - 1
 	for start > 0 && (text[start] >= '0' && text[start] <= '9' || text[start] == '.' ||
@@ -428,7 +429,7 @@ func parseScanRate(text string) int64 {
 		text[start] == 'T' || text[start] == 't') {
 		start--
 	}
-	
+
 	rateStr := strings.TrimSpace(text[start+1 : idx])
 	return parseHumanSize(rateStr)
 }
@@ -440,20 +441,20 @@ func parseTimeRemaining(text string) int64 {
 	if idx <= 0 {
 		return 0
 	}
-	
+
 	before := strings.TrimSpace(text[:idx])
 	parts := strings.Fields(before)
 	if len(parts) == 0 {
 		return 0
 	}
-	
+
 	timeStr := parts[len(parts)-1]
-	
+
 	// Try HH:MM:SS format
 	if strings.Contains(timeStr, ":") {
 		return parseHHMMSS(timeStr)
 	}
-	
+
 	// Try formats like "4h30m" or "30m" or "45s"
 	var total int64
 	current := ""
@@ -480,7 +481,7 @@ func parseTimeRemaining(text string) int64 {
 			}
 		}
 	}
-	
+
 	return total
 }
 
@@ -914,9 +915,10 @@ func GetPoolHealthSummary(pools []Pool) PoolHealthSummary {
 		summary.TotalErrors += pool.TotalErrors()
 
 		if pool.Scan != nil && pool.Scan.State == ScanStateScanning {
-			if pool.Scan.Function == ScanScrub {
+			switch pool.Scan.Function {
+			case ScanScrub:
 				summary.ActiveScrubs++
-			} else if pool.Scan.Function == ScanResilver {
+			case ScanResilver:
 				summary.ActiveResilvers++
 			}
 		}

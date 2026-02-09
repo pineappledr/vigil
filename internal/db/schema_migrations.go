@@ -145,6 +145,7 @@ func MigrateSchemaExtensions(db *sql.DB) error {
 				is_replacing    INTEGER DEFAULT 0,
 				last_seen       DATETIME DEFAULT CURRENT_TIMESTAMP,
 				created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+				UNIQUE(pool_id, device_name),
 				FOREIGN KEY (pool_id) REFERENCES zfs_pools(id) ON DELETE CASCADE
 			);`},
 		{"zfs_pool_devices indexes", `
