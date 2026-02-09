@@ -67,18 +67,31 @@ Manage your password and account settings.
 
 ```bash
 # Ubuntu / Debian / Proxmox
-sudo apt update && sudo apt install smartmontools nvme-cli -y
+sudo apt update && sudo apt install smartmontools nvme-cli zfsutils-linux -y
 ```
 
 ```bash
 # Fedora / CentOS / RHEL
-sudo dnf install smartmontools nvme-cli
+sudo dnf install -y https://zfsonlinux.org/fedora/zfs-release-latest.noarch.rpm
+sudo dnf install -y smartmontools nvme-cli zfs
 ```
 
 ```bash
 # Arch Linux
 sudo pacman -S smartmontools nvme-cli
+sudo yay -S zfs-dkms
 ```
+**optional**
+
+**Arch Linux** using the archzfs Repository
+Follow the instructions on the [archzfs website](https://github.com/archzfs/archzfs) to add their GPG key and repository URL.
+
+Once added, you can then run:
+
+```bash
+sudo pacman -S zfs-linux 
+```
+or the version matching your kernel).
 
 ---
 
@@ -180,13 +193,15 @@ sudo systemctl start vigil-agent
 ```bash
 docker run -d \
   --name vigil-agent \
-  --net=host \
-  --privileged \
-  -v /dev:/dev \
   --restart unless-stopped \
+  --network host \
+  --privileged \
+  -v /dev:/dev:ro \
+  -v /sys:/sys:ro \
+  -v /proc:/proc:ro \
+  -v /dev/zfs:/dev/zfs \
   ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:9080 \
-  --interval 60
+  --server http://localhost:9080 --interval 60
 ```
 
 ---

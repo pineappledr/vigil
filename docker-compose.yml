@@ -24,19 +24,25 @@ services:
         reservations:
           cpus: "0.10"
           memory: "128M"
-          
+
   vigil-agent:
     container_name: vigil-agent
     image: ghcr.io/pineappledr/vigil-agent:latest
     restart: unless-stopped
     network_mode: host
     depends_on:
-      server:
+      vigil-server:
         condition: service_healthy
     privileged: true
     command: ["--server", "http://localhost:9080", "--interval", "60"]
     volumes:
+      # Required for SMART monitoring
       - /dev:/dev:ro
+      # Required for ZFS detection
+      - /sys:/sys:ro            
+      - /proc:/proc:ro
+      # ZFS kernel device (required for zpool commands)
+      - /dev/zfs:/dev/zfs
     deploy:
       resources:
         limits:
@@ -45,6 +51,7 @@ services:
         reservations:
           cpus: "0.10"
           memory: "128M"
+
 volumes:
   vigil_data:
     name: vigil_data

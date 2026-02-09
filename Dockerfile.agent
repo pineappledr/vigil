@@ -21,8 +21,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:3.19
 WORKDIR /app
 
-# Install smartmontools (required for reading disk health)
-RUN apk add --no-cache smartmontools nvme-cli ca-certificates
+# Install smartmontools, nvme-cli, and ZFS tools
+RUN apk add --no-cache \
+    smartmontools \
+    nvme-cli \
+    ca-certificates \
+    zfs
 
 # Copy the binary
 COPY --from=builder /app/vigil-agent .
