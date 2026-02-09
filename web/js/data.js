@@ -8,7 +8,10 @@ const Data = {
             // Fetch drives and ZFS pools in parallel
             const [historyResponse, zfsResponse] = await Promise.all([
                 API.getHistory(),
-                API.getZFSPools().catch(() => null)  // Don't fail if ZFS unavailable
+                API.getZFSPools().catch(err => {
+                    console.log('ZFS fetch skipped:', err?.message || 'unavailable');
+                    return null;
+                })
             ]);
             
             if (!historyResponse.ok) {
@@ -24,6 +27,7 @@ const Data = {
             if (zfsResponse && zfsResponse.ok) {
                 State.zfsPools = await zfsResponse.json() || [];
                 State.buildZFSDriveMap();
+                console.log(`ZFS: ${State.zfsPools.length} pools, ${Object.keys(State.zfsDriveMap).length} drive mappings`);
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
@@ -124,21 +128,25 @@ const Data = {
 
     updateStats() {
         const stats = State.getStats();
+        const zfsStats = State.getZFSStats();
+        
         document.getElementById('total-drives').textContent = stats.totalDrives;
         document.getElementById('healthy-count').textContent = stats.healthyDrives;
-        document.getElementById('warning-count').textContent = stats.attentionDrives;
-
-        // Update ZFS stats if elements exist
-        const zfsStats = State.getZFSStats();
-        const zfsPoolsEl = document.getElementById('zfs-pools-count');
-        const zfsAttentionEl = document.getElementById('zfs-attention-count');
         
-        if (zfsPoolsEl) {
-            zfsPoolsEl.textContent = zfsStats.totalPools;
-        }
-        if (zfsAttentionEl) {
-            zfsAttentionEl.textContent = zfsStats.attentionPools;
-            zfsAttentionEl.closest('.summary-card')?.classList.toggle('hidden', zfsStats.totalPools === 0);
+        // Combine drive warnings with ZFS pool issues
+        const totalWarnings = stats.attentionDrives + zfsStats.attentionPools;
+        const warningEl = document.getElementById('warning-count');
+        warningEl.textContent = totalWarnings;
+        
+        // Change color to critical if ZFS pools are faulted
+        if (zfsStats.faultedPools > 0) {
+            warningEl.classList.remove('warning');
+            warningEl.classList.add('critical');
+        } else if (totalWarnings > 0) {
+            warningEl.classList.remove('critical');
+            warningEl.classList.add('warning');
+        } else {
+            warningEl.classList.remove('warning', 'critical');
         }
     },
 

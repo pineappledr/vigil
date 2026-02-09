@@ -22,6 +22,8 @@ const Renderer = {
 
     serverSummaryCards() {
         const stats = State.getStats();
+        const zfsStats = State.getZFSStats();
+        const showZFS = zfsStats.totalPools > 0;
         
         return `
             ${Components.summaryCard({
@@ -58,6 +60,17 @@ const Renderer = {
                 active: State.activeFilter === 'attention',
                 title: stats.attentionDrives > 0 ? 'Click to view drives needing attention' : 'All drives healthy'
             })}
+            ${showZFS ? Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="7" cy="6" r="1" fill="currentColor"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="7" cy="18" r="1" fill="currentColor"/></svg>`,
+                iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan',
+                value: `${zfsStats.healthyPools}/${zfsStats.totalPools}`,
+                label: 'ZFS Pools',
+                onClick: "Navigation.showZFS()",
+                active: State.activeView === 'zfs',
+                title: zfsStats.attentionPools > 0 
+                    ? `${zfsStats.attentionPools} pool(s) need attention` 
+                    : 'Click to view ZFS pools'
+            }) : ''}
         `;
     },
 

@@ -142,6 +142,8 @@
 .summary-card .icon.yellow { background: var(--warning-soft); color: var(--warning); }
 .summary-card .icon.red { background: var(--danger-soft); color: var(--danger); }
 .summary-card .icon.purple { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
+.summary-card .icon.cyan { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
+.summary-card .icon.accent { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); }
 
 .summary-card .value {
     font-size: 2rem;
