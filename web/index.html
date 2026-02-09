@@ -6,6 +6,7 @@
     <title>Vigil · Infrastructure Monitor</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/smart-attributes.css">
+    <link rel="stylesheet" href="css/zfs.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -38,6 +39,20 @@
                 <div class="nav-section">
                     <span class="nav-label">Servers <span id="server-count" class="count-badge">0</span></span>
                     <div id="server-nav-list" class="server-list-nav"></div>
+                </div>
+
+                <div id="zfs-nav-section" class="nav-section hidden">
+                    <span class="nav-label">Storage</span>
+                    <a href="#" class="nav-item" onclick="showZFSPools(); return false;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 6h16M4 12h16M4 18h16"/>
+                            <circle cx="7" cy="6" r="1" fill="currentColor"/>
+                            <circle cx="7" cy="12" r="1" fill="currentColor"/>
+                            <circle cx="7" cy="18" r="1" fill="currentColor"/>
+                        </svg>
+                        ZFS Pools
+                        <span id="zfs-pool-count" class="count-badge">0</span>
+                    </a>
                 </div>
             </nav>
             
@@ -133,6 +148,7 @@
     <script src="js/components.js"></script>
     <script src="js/modals.js"></script>
     <script src="js/smart-attributes.js"></script>
+    <script src="js/zfs.js"></script>
     <script src="js/renderer.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/data.js"></script>

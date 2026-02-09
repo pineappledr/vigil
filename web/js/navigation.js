@@ -11,9 +11,8 @@ const Navigation = {
         document.getElementById('page-title').textContent = 'Infrastructure Overview';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        this.clearNavSelection();
         document.querySelector('.nav-item[onclick*="resetDashboard"]')?.classList.add('active');
-        document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
         
         Data.updateViews();
     },
@@ -31,7 +30,7 @@ const Navigation = {
         document.getElementById('crumb-server').textContent = server.hostname;
         document.getElementById('breadcrumbs').classList.remove('hidden');
         
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        this.clearNavSelection();
         document.querySelectorAll('.server-nav-item').forEach((el, i) => {
             el.classList.toggle('active', i === index);
         });
@@ -93,10 +92,33 @@ const Navigation = {
             filter === 'healthy' ? 'Healthy Drives' : 'All Drives';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+        this.clearNavSelection();
         
         Data.updateViews();
+    },
+
+    showZFS() {
+        State.setView('zfs');
+        
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
+        
+        document.getElementById('page-title').textContent = 'ZFS Pools';
+        document.getElementById('breadcrumbs').classList.add('hidden');
+        
+        this.clearNavSelection();
+        document.querySelector('#zfs-nav-section .nav-item')?.classList.add('active');
+        
+        if (typeof ZFS !== 'undefined' && ZFS.render) {
+            ZFS.render();
+        }
+    },
+
+    clearNavSelection() {
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
     }
 };
 
@@ -116,4 +138,8 @@ function goBackToContext() {
 
 function fetchData() {
     Data.fetch();
+}
+
+function showZFSPools() {
+    Navigation.showZFS();
 }
