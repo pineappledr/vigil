@@ -40,7 +40,20 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		driveCount = len(drives)
 	}
 
-	log.Printf("💾 Report: %s (%d drives)", hostname, driveCount)
+	// Process ZFS data if present
+	poolCount := 0
+	if zfsData, ok := payload["zfs"].(map[string]interface{}); ok {
+		if pools, ok := zfsData["pools"].([]interface{}); ok {
+			poolCount = len(pools)
+		}
+		ProcessZFSFromReport(hostname, payload)
+	}
+
+	if poolCount > 0 {
+		log.Printf("💾 Report: %s (%d drives, %d ZFS pools)", hostname, driveCount, poolCount)
+	} else {
+		log.Printf("💾 Report: %s (%d drives)", hostname, driveCount)
+	}
 	JSONResponse(w, map[string]string{"status": "ok"})
 }
 
