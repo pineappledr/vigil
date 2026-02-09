@@ -5,13 +5,27 @@
 const Data = {
     async fetch() {
         try {
-            const response = await API.getHistory();
+            // Fetch drives and ZFS pools in parallel
+            const [historyResponse, zfsResponse] = await Promise.all([
+                API.getHistory(),
+                API.getZFSPools().catch(() => null)  // Don't fail if ZFS unavailable
+            ]);
             
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            if (!historyResponse.ok) {
+                throw new Error(`HTTP ${historyResponse.status}`);
             }
             
-            State.data = await response.json() || [];
+            State.data = await historyResponse.json() || [];
+            
+            // Process ZFS data if available
+            if (zfsResponse && zfsResponse.ok) {
+                State.zfsPools = await zfsResponse.json() || [];
+                State.buildZFSDriveMap();
+            } else {
+                State.zfsPools = [];
+                State.zfsDriveMap = {};
+            }
+            
             this.updateViews();
             this.updateSidebar();
             this.updateStats();
@@ -28,6 +42,15 @@ const Data = {
         const dashboardView = document.getElementById('dashboard-view');
         if (dashboardView.classList.contains('hidden')) return;
 
+        // Handle ZFS view
+        if (State.activeView === 'zfs') {
+            if (typeof ZFS !== 'undefined' && ZFS.render) {
+                ZFS.render();
+            }
+            return;
+        }
+
+        // Handle drive views
         if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
         } else if (State.activeFilter === 'attention') {
@@ -64,6 +87,36 @@ const Data = {
                 </div>
             `;
         }).join('');
+
+        // Update ZFS sidebar if pools exist
+        this.updateZFSSidebar();
+    },
+
+    updateZFSSidebar() {
+        const zfsNav = document.getElementById('zfs-nav-section');
+        if (!zfsNav) return;
+
+        const stats = State.getZFSStats();
+        
+        if (stats.totalPools === 0) {
+            zfsNav.classList.add('hidden');
+            return;
+        }
+
+        zfsNav.classList.remove('hidden');
+        
+        // Update pool count
+        const poolCount = document.getElementById('zfs-pool-count');
+        if (poolCount) {
+            poolCount.textContent = stats.totalPools;
+        }
+
+        // Update attention indicator
+        const zfsNavItem = zfsNav.querySelector('.nav-item');
+        if (zfsNavItem) {
+            zfsNavItem.classList.toggle('has-warning', stats.degradedPools > 0);
+            zfsNavItem.classList.toggle('has-critical', stats.faultedPools > 0);
+        }
     },
 
     updateStats() {
@@ -71,6 +124,19 @@ const Data = {
         document.getElementById('total-drives').textContent = stats.totalDrives;
         document.getElementById('healthy-count').textContent = stats.healthyDrives;
         document.getElementById('warning-count').textContent = stats.attentionDrives;
+
+        // Update ZFS stats if elements exist
+        const zfsStats = State.getZFSStats();
+        const zfsPoolsEl = document.getElementById('zfs-pools-count');
+        const zfsAttentionEl = document.getElementById('zfs-attention-count');
+        
+        if (zfsPoolsEl) {
+            zfsPoolsEl.textContent = zfsStats.totalPools;
+        }
+        if (zfsAttentionEl) {
+            zfsAttentionEl.textContent = zfsStats.attentionPools;
+            zfsAttentionEl.closest('.summary-card')?.classList.toggle('hidden', zfsStats.totalPools === 0);
+        }
     },
 
     setOnlineStatus(online) {
@@ -102,5 +168,23 @@ const Data = {
         } catch (e) {
             console.warn('Could not fetch version:', e);
         }
+    },
+
+    /**
+     * Fetch detailed ZFS pool data (for modal)
+     * @param {string} hostname
+     * @param {string} poolName
+     * @returns {Promise<Object|null>}
+     */
+    async fetchZFSPoolDetail(hostname, poolName) {
+        try {
+            const response = await API.getZFSPool(hostname, poolName);
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (e) {
+            console.error('Failed to fetch ZFS pool detail:', e);
+        }
+        return null;
     }
 };
