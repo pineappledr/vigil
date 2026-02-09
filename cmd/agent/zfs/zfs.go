@@ -193,7 +193,6 @@ func parsePoolStatus(poolName, output string) (*Pool, error) {
 //         500G scanned out of 2.00T at 100M/s, 25.00% done, 04:00:00 to go
 //   scan: scrub canceled on Sun Feb  2 11:00:00 2025
 //   scan: none requested
-
 func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 	scan := &ScanInfo{}
 	fullText := strings.TrimPrefix(firstLine, "scan:")
@@ -717,6 +716,9 @@ func CollectZFSData(hostname string) (*ZFSReport, error) {
 		return report, fmt.Errorf("failed to list pools: %w", err)
 	}
 
+	// Build device serial map once for efficiency
+	serialMap := BuildDeviceSerialMap()
+
 	// Get detailed status for each pool
 	for i := range pools {
 		status, err := GetPoolStatus(pools[i].Name)
@@ -735,6 +737,9 @@ func CollectZFSData(hostname string) (*ZFSReport, error) {
 		pools[i].ReadErrors = status.ReadErrors
 		pools[i].WriteErrors = status.WriteErrors
 		pools[i].ChecksumErrors = status.ChecksumErrors
+
+		// Map device serial numbers
+		MapPoolDevicesToSerials(&pools[i], serialMap)
 
 		// Calculate total errors from devices
 		for _, dev := range pools[i].Devices {
