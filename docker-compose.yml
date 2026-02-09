@@ -24,27 +24,27 @@ services:
         reservations:
           cpus: "0.10"
           memory: "128M"
-
-  # Uncomment below to run agent alongside server
-  # vigil-agent:
-  #   container_name: vigil-agent
-  #   image: ghcr.io/pineappledr/vigil-agent:latest
-  #   restart: unless-stopped
-  #   network_mode: host
-  #   depends_on:
-  #     server:
-  #       condition: service_healthy
-  #   privileged: true
-  #   command: ["--server", "http://localhost:9080", "--interval", "60"]
-  #   volumes:
-  #     - /dev:/dev:rodeploy:
-  #   resources:
-  #     limits:
-  #       cpus: '0.20'
-  #       memory: 128M
-  #     reservations:
-  #       memory: 64M
-
+          
+  vigil-agent:
+    container_name: vigil-agent
+    image: ghcr.io/pineappledr/vigil-agent:latest
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      server:
+        condition: service_healthy
+    privileged: true
+    command: ["--server", "http://localhost:9080", "--interval", "60"]
+    volumes:
+      - /dev:/dev:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: "512M"
+        reservations:
+          cpus: "0.10"
+          memory: "128M"
 volumes:
   vigil_data:
     name: vigil_data
