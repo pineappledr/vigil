@@ -594,3 +594,96 @@
         font-size: 0.8rem;
     }
 }
+
+/* ─── Drive Card ZFS Badge ────────────────────────────────────────────────── */
+
+.drive-card-zfs-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0 -0.25rem;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: 1px solid var(--border-color);
+}
+
+.drive-card-zfs-badge:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+}
+
+.zfs-badge-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.zfs-badge-pool {
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.zfs-badge-vdev {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.zfs-badge-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: var(--danger);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-left: auto;
+}
+
+/* Badge state colors */
+.drive-card-zfs-badge.zfs-online {
+    border-left: 3px solid var(--success);
+}
+
+.drive-card-zfs-badge.zfs-online .zfs-badge-icon {
+    color: var(--success);
+}
+
+.drive-card-zfs-badge.zfs-degraded {
+    border-left: 3px solid var(--warning);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.drive-card-zfs-badge.zfs-degraded .zfs-badge-icon {
+    color: var(--warning);
+}
+
+.drive-card-zfs-badge.zfs-faulted {
+    border-left: 3px solid var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.drive-card-zfs-badge.zfs-faulted .zfs-badge-icon {
+    color: var(--danger);
+}
+
+.drive-card-zfs-badge.zfs-offline,
+.drive-card-zfs-badge.zfs-unknown {
+    border-left: 3px solid var(--text-muted);
+    opacity: 0.7;
+}
+
+.drive-card-zfs-badge.zfs-offline .zfs-badge-icon,
+.drive-card-zfs-badge.zfs-unknown .zfs-badge-icon {
+    color: var(--text-muted);
+}

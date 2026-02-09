@@ -17,6 +17,9 @@ const Data = {
             
             State.data = await historyResponse.json() || [];
             
+            // Resolve active server by hostname after data refresh
+            State.resolveActiveServer();
+            
             // Process ZFS data if available
             if (zfsResponse && zfsResponse.ok) {
                 State.zfsPools = await zfsResponse.json() || [];

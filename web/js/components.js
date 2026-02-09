@@ -32,6 +32,10 @@ const Components = {
         const serial = drive.serial_number || '';
         const alias = drive._alias || '';
 
+        // Get ZFS pool info for this drive
+        const zfsInfo = State.getZFSInfoForDrive(hostname, serial);
+        const zfsBadge = zfsInfo ? this.zfsPoolBadge(zfsInfo, hostname) : '';
+
         return `
             <div class="drive-card ${status}" onclick="Navigation.showDriveDetails(${serverIdx}, ${drive._idx})">
                 <div class="drive-card-header">
@@ -57,6 +61,7 @@ const Components = {
                     <div class="drive-card-model">${driveName}</div>
                     <div class="drive-card-serial">${serial || 'N/A'}</div>
                 </div>
+                ${zfsBadge}
                 <div class="drive-card-stats">
                     <div class="drive-card-stat">
                         <span class="stat-value">${Utils.formatSize(drive.user_capacity?.bytes)}</span>
@@ -76,6 +81,51 @@ const Components = {
                 </div>
             </div>
         `;
+    },
+
+    /**
+     * Render ZFS pool badge for drive card
+     * @param {Object} zfsInfo - Pool info from State.getZFSInfoForDrive()
+     * @param {string} hostname - Server hostname
+     * @returns {string} HTML for badge
+     */
+    zfsPoolBadge(zfsInfo, hostname) {
+        const stateClass = this.getZFSStateClass(zfsInfo.poolState);
+        const hasErrors = zfsInfo.readErrors > 0 || zfsInfo.writeErrors > 0 || zfsInfo.checksumErrors > 0;
+        const errorIndicator = hasErrors ? '<span class="zfs-badge-error">!</span>' : '';
+        
+        return `
+            <div class="drive-card-zfs-badge ${stateClass}" 
+                 onclick="event.stopPropagation(); ZFS.showPoolDetail('${hostname}', '${zfsInfo.poolName}')"
+                 title="ZFS Pool: ${zfsInfo.poolName} (${zfsInfo.poolState})${zfsInfo.vdev ? ' - ' + zfsInfo.vdev : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="zfs-badge-icon">
+                    <path d="M4 6h16M4 12h16M4 18h16"/>
+                    <circle cx="7" cy="6" r="1" fill="currentColor"/>
+                    <circle cx="7" cy="12" r="1" fill="currentColor"/>
+                    <circle cx="7" cy="18" r="1" fill="currentColor"/>
+                </svg>
+                <span class="zfs-badge-pool">${zfsInfo.poolName}</span>
+                ${zfsInfo.vdev ? `<span class="zfs-badge-vdev">${zfsInfo.vdev}</span>` : ''}
+                ${errorIndicator}
+            </div>
+        `;
+    },
+
+    /**
+     * Get CSS class for ZFS state
+     * @param {string} state - Pool state (ONLINE, DEGRADED, FAULTED, etc.)
+     * @returns {string} CSS class
+     */
+    getZFSStateClass(state) {
+        const stateMap = {
+            'ONLINE': 'zfs-online',
+            'DEGRADED': 'zfs-degraded',
+            'FAULTED': 'zfs-faulted',
+            'UNAVAIL': 'zfs-faulted',
+            'OFFLINE': 'zfs-offline',
+            'REMOVED': 'zfs-offline'
+        };
+        return stateMap[state] || 'zfs-unknown';
     },
 
     emptyState(type) {

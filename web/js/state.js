@@ -5,6 +5,7 @@
 const State = {
     data: [],
     activeServerIndex: null,
+    activeServerHostname: null,  // Track by hostname to survive refresh
     activeFilter: null,
     refreshTimer: null,
     currentUser: null,
@@ -20,18 +21,22 @@ const State = {
 
     reset() {
         this.activeServerIndex = null;
+        this.activeServerHostname = null;
         this.activeFilter = null;
         this.activeView = 'drives';
     },
 
     setFilter(filter) {
         this.activeServerIndex = null;
+        this.activeServerHostname = null;
         this.activeFilter = filter;
         this.activeView = 'drives';
     },
 
     setServer(index) {
         this.activeServerIndex = index;
+        // Also store hostname for persistence across refreshes
+        this.activeServerHostname = this.data[index]?.hostname || null;
         this.activeFilter = null;
         this.activeView = 'drives';
     },
@@ -40,7 +45,25 @@ const State = {
         this.activeView = view;
         if (view !== 'drives') {
             this.activeServerIndex = null;
+            this.activeServerHostname = null;
             this.activeFilter = null;
+        }
+    },
+
+    /**
+     * Resolve active server index after data refresh
+     * Uses hostname to find correct index even if order changed
+     */
+    resolveActiveServer() {
+        if (this.activeServerHostname) {
+            const newIndex = this.data.findIndex(s => s.hostname === this.activeServerHostname);
+            if (newIndex !== -1) {
+                this.activeServerIndex = newIndex;
+            } else {
+                // Server no longer exists, reset
+                this.activeServerIndex = null;
+                this.activeServerHostname = null;
+            }
         }
     },
 
