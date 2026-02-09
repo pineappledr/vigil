@@ -15,15 +15,18 @@ import (
 	"time"
 
 	"vigil/cmd/agent/smart"
+	"vigil/cmd/agent/zfs"
 )
 
 var version = "dev"
 
+// DriveReport contains SMART data for drives
 type DriveReport struct {
 	Hostname  string                   `json:"hostname"`
 	Timestamp time.Time                `json:"timestamp"`
 	Version   string                   `json:"agent_version"`
 	Drives    []map[string]interface{} `json:"drives"`
+	ZFS       *zfs.ZFSReport           `json:"zfs,omitempty"`
 }
 
 func main() {
@@ -36,6 +39,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Check for ZFS availability (optional, non-fatal)
+	zfsAvailable := zfs.IsZFSAvailable()
+	if zfsAvailable {
+		log.Println("✓ ZFS detected")
+	} else {
+		log.Println("ℹ️  ZFS not available (optional)")
+	}
+
 	hostname := getHostname(cfg.hostnameOverride)
 	log.Printf("✓ Hostname: %s", hostname)
 	log.Printf("✓ Server: %s", cfg.serverURL)
@@ -46,14 +57,14 @@ func main() {
 	setupSignalHandler(cancel)
 
 	// Run immediately
-	sendReport(ctx, cfg.serverURL, hostname)
+	sendReport(ctx, cfg.serverURL, hostname, zfsAvailable)
 
 	if cfg.interval <= 0 {
 		log.Println("✅ Single run complete")
 		return
 	}
 
-	runInterval(ctx, cfg.serverURL, hostname, cfg.interval)
+	runInterval(ctx, cfg.serverURL, hostname, cfg.interval, zfsAvailable)
 }
 
 type agentConfig struct {
@@ -111,7 +122,7 @@ func setupSignalHandler(cancel context.CancelFunc) {
 	}()
 }
 
-func runInterval(ctx context.Context, serverURL, hostname string, interval int) {
+func runInterval(ctx context.Context, serverURL, hostname string, interval int, zfsAvailable bool) {
 	log.Printf("📊 Reporting every %d seconds", interval)
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
@@ -122,12 +133,12 @@ func runInterval(ctx context.Context, serverURL, hostname string, interval int) 
 			log.Println("👋 Agent stopped")
 			return
 		case <-ticker.C:
-			sendReport(ctx, serverURL, hostname)
+			sendReport(ctx, serverURL, hostname, zfsAvailable)
 		}
 	}
 }
 
-func sendReport(ctx context.Context, serverURL, hostname string) {
+func sendReport(ctx context.Context, serverURL, hostname string, zfsAvailable bool) {
 	report := DriveReport{
 		Hostname:  hostname,
 		Timestamp: time.Now().UTC(),
@@ -135,12 +146,28 @@ func sendReport(ctx context.Context, serverURL, hostname string) {
 		Drives:    collectDriveData(ctx),
 	}
 
+	// Collect ZFS data if available
+	if zfsAvailable {
+		zfsReport, err := collectZFSData(hostname)
+		if err != nil {
+			log.Printf("⚠️  ZFS collection failed: %v", err)
+		} else if zfsReport != nil && len(zfsReport.Pools) > 0 {
+			report.ZFS = zfsReport
+			log.Printf("📦 ZFS: %d pool(s) detected", len(zfsReport.Pools))
+		}
+	}
+
 	if err := postReport(ctx, serverURL, report); err != nil {
 		log.Printf("❌ %v", err)
 		return
 	}
 
-	log.Printf("✅ Report sent (%d drives)", len(report.Drives))
+	logMsg := fmt.Sprintf("✅ Report sent (%d drives", len(report.Drives))
+	if report.ZFS != nil && len(report.ZFS.Pools) > 0 {
+		logMsg += fmt.Sprintf(", %d ZFS pools", len(report.ZFS.Pools))
+	}
+	logMsg += ")"
+	log.Println(logMsg)
 }
 
 func collectDriveData(ctx context.Context) []map[string]interface{} {
@@ -163,6 +190,11 @@ func collectDriveData(ctx context.Context) []map[string]interface{} {
 	}
 
 	return drives
+}
+
+// collectZFSData gathers ZFS pool information
+func collectZFSData(hostname string) (*zfs.ZFSReport, error) {
+	return zfs.CollectZFSData(hostname)
 }
 
 func postReport(ctx context.Context, serverURL string, report DriveReport) error {
