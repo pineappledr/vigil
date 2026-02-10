@@ -5,7 +5,6 @@
 const Data = {
     async fetch() {
         try {
-            // Fetch drives and ZFS pools in parallel
             const [historyResponse, zfsResponse] = await Promise.all([
                 API.getHistory(),
                 API.getZFSPools().catch(err => {
@@ -19,11 +18,8 @@ const Data = {
             }
             
             State.data = await historyResponse.json() || [];
-            
-            // Resolve active server by hostname after data refresh
             State.resolveActiveServer();
             
-            // Process ZFS data if available
             if (zfsResponse && zfsResponse.ok) {
                 const zfsData = await zfsResponse.json();
                 State.zfsPools = Array.isArray(zfsData) ? zfsData : [];
@@ -53,7 +49,6 @@ const Data = {
         const dashboardView = document.getElementById('dashboard-view');
         if (dashboardView.classList.contains('hidden')) return;
 
-        // Handle ZFS view
         if (State.activeView === 'zfs') {
             if (typeof ZFS !== 'undefined' && ZFS.render) {
                 ZFS.render();
@@ -61,7 +56,6 @@ const Data = {
             return;
         }
 
-        // Handle drive views
         if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
         } else if (State.activeFilter === 'attention') {
@@ -81,17 +75,14 @@ const Data = {
         
         serverCount.textContent = State.data.length;
         
-        // Use sorted data for display
         const sortedData = State.getSortedData();
         
-        serverNav.innerHTML = sortedData.map((server, idx) => {
+        serverNav.innerHTML = sortedData.map((server, sortedIdx) => {
             const drives = server.details?.drives || [];
             const hasWarning = drives.some(d => Utils.getHealthStatus(d) === 'warning');
             const hasCritical = drives.some(d => Utils.getHealthStatus(d) === 'critical');
             const isOffline = State.isServerOffline(server);
             const timeSince = State.getTimeSinceUpdate(server);
-            
-            // Check if this is the active server by hostname
             const isActive = State.activeServerHostname === server.hostname;
             
             let statusClass = '';
@@ -112,7 +103,7 @@ const Data = {
             
             return `
                 <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}" 
-                     onclick="Navigation.showServer(${idx})"
+                     onclick="Navigation.showServer(${sortedIdx})"
                      title="${statusTitle}">
                     <span class="status-indicator ${statusClass}"></span>
                     <span class="server-name">${server.hostname}</span>
@@ -121,10 +112,7 @@ const Data = {
             `;
         }).join('');
 
-        // Update ZFS sidebar if pools exist
         this.updateZFSSidebar();
-        
-        // Update sort indicator
         this.updateSortIndicator();
     },
     
@@ -132,7 +120,10 @@ const Data = {
         const sortBtn = document.getElementById('server-sort-btn');
         if (sortBtn) {
             const isAsc = State.serverSortOrder === 'asc';
-            sortBtn.innerHTML = isAsc ? '↑ A-Z' : '↓ Z-A';
+            const iconEl = sortBtn.querySelector('.sort-icon');
+            const textEl = sortBtn.querySelector('.sort-text');
+            if (iconEl) iconEl.textContent = isAsc ? '↑' : '↓';
+            if (textEl) textEl.textContent = isAsc ? 'A-Z' : 'Z-A';
             sortBtn.title = isAsc ? 'Sorted A to Z (click to reverse)' : 'Sorted Z to A (click to reverse)';
         }
     },
@@ -150,13 +141,11 @@ const Data = {
 
         zfsNav.classList.remove('hidden');
         
-        // Update pool count
         const poolCount = document.getElementById('zfs-pool-count');
         if (poolCount) {
             poolCount.textContent = stats.totalPools;
         }
 
-        // Update attention indicator
         const zfsNavItem = zfsNav.querySelector('.nav-item');
         if (zfsNavItem) {
             zfsNavItem.classList.toggle('has-warning', stats.degradedPools > 0);
@@ -171,12 +160,10 @@ const Data = {
         document.getElementById('total-drives').textContent = stats.totalDrives;
         document.getElementById('healthy-count').textContent = stats.healthyDrives;
         
-        // Combine drive warnings with ZFS pool issues
         const totalWarnings = stats.attentionDrives + zfsStats.attentionPools;
         const warningEl = document.getElementById('warning-count');
         warningEl.textContent = totalWarnings;
         
-        // Change color to critical if ZFS pools are faulted or servers offline
         if (zfsStats.faultedPools > 0 || stats.offlineServers > 0) {
             warningEl.classList.remove('warning');
             warningEl.classList.add('critical');

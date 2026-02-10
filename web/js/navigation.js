@@ -4,7 +4,9 @@
 
 const Navigation = {
     showDashboard() {
+        // Reset all state
         State.reset();
+        
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
         document.getElementById('settings-view')?.classList.add('hidden');
@@ -14,26 +16,25 @@ const Navigation = {
         this.clearNavSelection();
         document.querySelector('.nav-item[onclick*="resetDashboard"]')?.classList.add('active');
         
-        Data.updateViews();
+        // Render dashboard with sorted servers
+        Renderer.dashboard(State.data);
     },
 
     showServer(sortedIndex) {
-        // Get the server from sorted data
         const sortedData = State.getSortedData();
         const server = sortedData[sortedIndex];
         if (!server) return;
         
-        // Find actual index in original data
         const actualIndex = State.data.findIndex(s => s.hostname === server.hostname);
         if (actualIndex === -1) return;
         
-        // IMPORTANT: Reset all state properly
+        // Update state
         State.activeServerIndex = actualIndex;
         State.activeServerHostname = server.hostname;
         State.activeFilter = null;
-        State.activeView = 'drives';  // Force back to drives view
+        State.activeView = 'drives';
         
-        // Make sure views are properly toggled
+        // Update UI
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
         document.getElementById('settings-view')?.classList.add('hidden');
@@ -44,13 +45,12 @@ const Navigation = {
         
         this.clearNavSelection();
         
-        // Highlight the correct server in sidebar (by hostname match)
+        // Highlight correct server in sidebar
         document.querySelectorAll('.server-nav-item').forEach((el, i) => {
-            const itemServer = sortedData[i];
-            el.classList.toggle('active', itemServer?.hostname === server.hostname);
+            el.classList.toggle('active', i === sortedIndex);
         });
         
-        // Force re-render to show server drives (not ZFS)
+        // Render server detail directly (not through updateViews to avoid ZFS check)
         Renderer.serverDetail(server, actualIndex);
     },
 
@@ -146,7 +146,6 @@ function resetDashboard() {
 
 function goBackToContext() {
     if (State.activeServerIndex !== null) {
-        // Find the sorted index for the active server
         const sortedData = State.getSortedData();
         const sortedIdx = sortedData.findIndex(s => s.hostname === State.activeServerHostname);
         if (sortedIdx !== -1) {

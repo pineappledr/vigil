@@ -83,12 +83,6 @@ const Components = {
         `;
     },
 
-    /**
-     * Render ZFS pool badge for drive card
-     * @param {Object} zfsInfo - Pool info from State.getZFSInfoForDrive()
-     * @param {string} hostname - Server hostname
-     * @returns {string} HTML for badge
-     */
     zfsPoolBadge(zfsInfo, hostname) {
         const stateClass = this.getZFSStateClass(zfsInfo.poolState);
         const hasErrors = zfsInfo.readErrors > 0 || zfsInfo.writeErrors > 0 || zfsInfo.checksumErrors > 0;
@@ -111,11 +105,6 @@ const Components = {
         `;
     },
 
-    /**
-     * Get CSS class for ZFS state
-     * @param {string} state - Pool state (ONLINE, DEGRADED, FAULTED, etc.)
-     * @returns {string} CSS class
-     */
     getZFSStateClass(state) {
         const stateMap = {
             'ONLINE': 'zfs-online',
@@ -190,13 +179,23 @@ const Components = {
         `;
     },
 
+    /**
+     * Server section for dashboard
+     * @param {Object} server - Server data
+     * @param {number} serverIdx - Index in original State.data array
+     * @param {Array} drives - Array of drives
+     */
     serverSection(server, serverIdx, drives) {
         const driveCount = drives.length;
         const countText = `${driveCount} drive${driveCount !== 1 ? 's' : ''}`;
+        
+        // Find sorted index for navigation (sidebar uses sorted order)
+        const sortedData = State.getSortedData();
+        const sortedIdx = sortedData.findIndex(s => s.hostname === server.hostname);
 
         return `
             <div class="drive-section">
-                <div class="drive-section-header clickable" onclick="Navigation.showServer(${serverIdx})">
+                <div class="drive-section-header clickable" onclick="Navigation.showServer(${sortedIdx >= 0 ? sortedIdx : serverIdx})">
                     <div class="drive-section-title">
                         ${this.icons.server}
                         <span>${server.hostname}</span>

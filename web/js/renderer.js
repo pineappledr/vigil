@@ -14,11 +14,11 @@ const Renderer = {
             return;
         }
         
-        // Use sorted data for display
+        // Use sorted data for display order
         const sortedServers = State.getSortedData();
         
         serverList.innerHTML = sortedServers.map((server) => {
-            // Find actual index in original data for onclick handlers
+            // Find actual index in original State.data for drive card onclick handlers
             const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
             return Components.serverSection(server, actualIdx, drives);
@@ -163,14 +163,15 @@ const Renderer = {
                         ...drive,
                         _serverIdx: actualIdx,
                         _driveIdx: driveIdx,
-                        _hostname: server.hostname
+                        _hostname: server.hostname,
+                        _idx: driveIdx
                     });
                 }
             });
         });
         
         if (matchingDrives.length === 0) {
-            serverList.innerHTML = Components.emptyState(filterType === 'attention' ? 'noAttention' : 'noDrives');
+            serverList.innerHTML = Components.emptyState(filterType === 'attention' ? 'attention' : 'noDrives');
             return;
         }
         
@@ -188,7 +189,7 @@ const Renderer = {
                         <span class="drive-type-count">${drives.length}</span>
                     </div>
                     <div class="drives-grid">
-                        ${drives.map(d => Components.driveCard(d, d._serverIdx, d._driveIdx, d._hostname)).join('')}
+                        ${drives.map(d => Components.driveCard(d, d._serverIdx)).join('')}
                     </div>
                 </div>
             `;

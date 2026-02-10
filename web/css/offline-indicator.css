@@ -1,6 +1,79 @@
+/* ─── Servers Section Header ─────────────────────────────────────────────── */
+
+.servers-section {
+    margin-top: 8px;
+}
+
+.servers-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px 8px 16px;
+    margin-bottom: 4px;
+}
+
+.servers-header .nav-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.servers-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.server-count-badge {
+    background: var(--accent);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    min-width: 22px;
+    text-align: center;
+}
+
+.sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.sort-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.sort-btn:active {
+    transform: scale(0.95);
+}
+
+.sort-btn .sort-icon {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.sort-btn .sort-text {
+    font-size: 10px;
+}
+
 /* ─── Offline Server Styles ─────────────────────────────────────────────── */
 
-/* Offline status indicator (pulsing red) */
 .status-indicator.offline {
     background: var(--danger);
     animation: pulse-offline 2s ease-in-out infinite;
@@ -17,7 +90,6 @@
     }
 }
 
-/* Server nav item when offline */
 .server-nav-item.server-offline {
     opacity: 0.7;
 }
@@ -30,7 +102,6 @@
     color: var(--text-secondary);
 }
 
-/* Offline badge */
 .offline-badge {
     font-size: 9px;
     font-weight: 600;
@@ -49,7 +120,6 @@
     50% { opacity: 0.5; }
 }
 
-/* Server nav item layout for badge */
 .server-nav-item {
     display: flex;
     align-items: center;
@@ -63,7 +133,6 @@
     white-space: nowrap;
 }
 
-/* Warning count critical state */
 .stat-value.critical {
     color: var(--danger) !important;
     animation: pulse-text 2s ease-in-out infinite;
@@ -72,79 +141,6 @@
 @keyframes pulse-text {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
-}
-
-/* Dashboard server card offline state */
-.server-card.offline {
-    border-color: var(--danger);
-    opacity: 0.8;
-}
-
-.server-card.offline::before {
-    content: 'OFFLINE';
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 3px;
-    background: var(--danger);
-    color: white;
-}
-
-/* Offline server in main dashboard grid */
-.server-section.offline .server-header::after {
-    content: ' (OFFLINE)';
-    color: var(--danger);
-    font-size: 12px;
-    font-weight: 500;
-}
-
-/* ─── Sort Toggle Button Styles ─────────────────────────────────────────── */
-
-.nav-section-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 16px;
-    margin-bottom: 8px;
-}
-
-.sort-toggle-btn {
-    margin-left: auto;
-    background: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    font-size: 10px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-family: inherit;
-}
-
-.sort-toggle-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-color: var(--accent);
-}
-
-.sort-toggle-btn:active {
-    transform: scale(0.95);
-}
-
-/* Nav count badge next to SERVERS */
-.nav-count {
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 2px 6px;
-    border-radius: 10px;
-    min-width: 20px;
-    text-align: center;
 }
 
 /* ─── ZFS Clickable Device Styles ─────────────────────────────────────── */

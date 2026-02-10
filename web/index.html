@@ -37,13 +37,16 @@
                     </a>
                 </div>
                 
-                <div class="nav-section">
-                    <div class="nav-section-header">
+                <div class="nav-section servers-section">
+                    <div class="servers-header">
                         <span class="nav-label">SERVERS</span>
-                        <span id="server-count" class="nav-count">0</span>
-                        <button id="server-sort-btn" class="sort-toggle-btn" onclick="toggleServerSort()" title="Sort servers">
-                            ↑ A-Z
-                        </button>
+                        <div class="servers-controls">
+                            <span id="server-count" class="server-count-badge">0</span>
+                            <button id="server-sort-btn" class="sort-btn" onclick="toggleServerSort()" title="Sort servers">
+                                <span class="sort-icon">↑</span>
+                                <span class="sort-text">A-Z</span>
+                            </button>
+                        </div>
                     </div>
                     <div id="server-nav-list" class="server-list-nav"></div>
                 </div>
@@ -162,7 +165,6 @@
     <script src="js/navigation.js"></script>
     <script src="js/main.js"></script>
     <script>
-        // Initialize state (load sort preference from localStorage)
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof State !== 'undefined' && State.init) {
                 State.init();
