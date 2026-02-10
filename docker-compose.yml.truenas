@@ -35,6 +35,7 @@ services:
     image: ghcr.io/pineappledr/vigil-agent:debian  # Debian variant for TrueNAS
     restart: unless-stopped
     network_mode: host
+    pid: host
     depends_on:
       vigil-server:
         condition: service_healthy
@@ -46,7 +47,6 @@ services:
       
       # Required for ZFS detection - kernel interfaces
       - /sys:/sys:ro
-      - /proc:/proc:ro
       
       # ZFS kernel device (required for zpool commands)
       - /dev/zfs:/dev/zfs
