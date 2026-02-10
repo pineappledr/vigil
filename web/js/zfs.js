@@ -225,6 +225,9 @@ const ZFS = {
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const capacity = this.parseCapacity(pool);
 
+        // Store hostname for device click handlers
+        this._currentHostname = hostname;
+
         return `
             <div class="zfs-detail-tabs">
                 <button class="zfs-tab active" onclick="ZFS.switchTab(this, 'overview')">Overview</button>
@@ -237,7 +240,7 @@ const ZFS = {
             </div>
 
             <div id="zfs-tab-devices" class="zfs-tab-content">
-                ${this.renderDevicesTab(devices)}
+                ${this.renderDevicesTab(devices, hostname)}
             </div>
 
             <div id="zfs-tab-scrubs" class="zfs-tab-content">
@@ -290,14 +293,19 @@ const ZFS = {
         `;
     },
 
-    renderDevicesTab(devices) {
+    renderDevicesTab(devices, hostname) {
         if (!devices || devices.length === 0) {
             return `<p class="zfs-no-data">No device information available</p>`;
         }
 
         return `
             <div class="zfs-devices-list">
-                ${devices.map(dev => `
+                ${devices.map(dev => {
+                    const serial = dev.serial_number || '';
+                    const hasSerial = serial && serial.length > 0;
+                    const driveLink = hasSerial ? this.findDriveBySerial(hostname, serial) : null;
+                    
+                    return `
                     <div class="zfs-device-item ${this.getStateClass(dev.state || 'ONLINE')}">
                         <div class="zfs-device-header">
                             <span class="zfs-device-name">${dev.device_name || dev.name || 'Unknown'}</span>
@@ -306,15 +314,50 @@ const ZFS = {
                         </div>
                         <div class="zfs-device-details">
                             ${dev.device_path || dev.path ? `<span class="zfs-device-path">${dev.device_path || dev.path}</span>` : ''}
-                            ${dev.serial_number ? `<span class="zfs-device-serial">S/N: ${dev.serial_number}</span>` : ''}
+                            ${hasSerial ? `
+                                <span class="zfs-device-serial ${driveLink ? 'clickable' : ''}" 
+                                      ${driveLink ? `onclick="ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="Click to view drive details"` : ''}>
+                                    S/N: ${serial}
+                                    ${driveLink ? '<svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' : ''}
+                                </span>
+                            ` : ''}
                             <span class="zfs-device-errors">
                                 R: ${dev.read_errors || 0} / W: ${dev.write_errors || 0} / C: ${dev.checksum_errors || 0}
                             </span>
                         </div>
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
         `;
+    },
+
+    /**
+     * Find a drive in State.data by hostname and serial number
+     * @returns {Object|null} { serverIdx, driveIdx } or null
+     */
+    findDriveBySerial(hostname, serial) {
+        if (!serial || !hostname) return null;
+        
+        for (let serverIdx = 0; serverIdx < State.data.length; serverIdx++) {
+            const server = State.data[serverIdx];
+            if (server.hostname !== hostname) continue;
+            
+            const drives = server.details?.drives || [];
+            for (let driveIdx = 0; driveIdx < drives.length; driveIdx++) {
+                if (drives[driveIdx].serial_number === serial) {
+                    return { serverIdx, driveIdx };
+                }
+            }
+        }
+        return null;
+    },
+
+    /**
+     * Navigate to drive details from ZFS pool view
+     */
+    navigateToDrive(serverIdx, driveIdx) {
+        this.closeModal();
+        Navigation.showDriveDetails(serverIdx, driveIdx);
     },
 
     renderScrubsTab(history) {

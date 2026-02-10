@@ -27,12 +27,13 @@ const Navigation = {
         const actualIndex = State.data.findIndex(s => s.hostname === server.hostname);
         if (actualIndex === -1) return;
         
-        // Set server (this resets activeView to 'drives')
+        // IMPORTANT: Reset all state properly
         State.activeServerIndex = actualIndex;
         State.activeServerHostname = server.hostname;
         State.activeFilter = null;
-        State.activeView = 'drives';
+        State.activeView = 'drives';  // Force back to drives view
         
+        // Make sure views are properly toggled
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
         document.getElementById('settings-view')?.classList.add('hidden');
@@ -49,7 +50,8 @@ const Navigation = {
             el.classList.toggle('active', itemServer?.hostname === server.hostname);
         });
         
-        Data.updateViews();
+        // Force re-render to show server drives (not ZFS)
+        Renderer.serverDetail(server, actualIndex);
     },
 
     showDriveDetails(serverIdx, driveIdx) {

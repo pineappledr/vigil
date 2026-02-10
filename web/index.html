@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/smart-attributes.css">
     <link rel="stylesheet" href="css/zfs.css">
+    <link rel="stylesheet" href="css/offline-indicator.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -38,7 +39,7 @@
                 
                 <div class="nav-section">
                     <div class="nav-section-header">
-                        <span>SERVERS</span>
+                        <span class="nav-label">SERVERS</span>
                         <span id="server-count" class="nav-count">0</span>
                         <button id="server-sort-btn" class="sort-toggle-btn" onclick="toggleServerSort()" title="Sort servers">
                             ↑ A-Z
@@ -160,9 +161,8 @@
     <script src="js/data.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/main.js"></script>
-    
     <script>
-        // Initialize state (load sort preference)
+        // Initialize state (load sort preference from localStorage)
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof State !== 'undefined' && State.init) {
                 State.init();

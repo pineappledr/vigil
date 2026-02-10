@@ -146,3 +146,32 @@
     min-width: 20px;
     text-align: center;
 }
+
+/* ─── ZFS Clickable Device Styles ─────────────────────────────────────── */
+
+.zfs-device-serial.clickable {
+    cursor: pointer;
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.zfs-device-serial.clickable:hover {
+    background: var(--bg-tertiary);
+    color: var(--accent-light, #60a5fa);
+    text-decoration: underline;
+}
+
+.zfs-device-serial .link-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.7;
+}
+
+.zfs-device-serial.clickable:hover .link-icon {
+    opacity: 1;
+}
