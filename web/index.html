@@ -37,7 +37,13 @@
                 </div>
                 
                 <div class="nav-section">
-                    <span class="nav-label">Servers <span id="server-count" class="count-badge">0</span></span>
+                    <div class="nav-section-header">
+                        <span>SERVERS</span>
+                        <span id="server-count" class="nav-count">0</span>
+                        <button id="server-sort-btn" class="sort-toggle-btn" onclick="toggleServerSort()" title="Sort servers">
+                            ↑ A-Z
+                        </button>
+                    </div>
                     <div id="server-nav-list" class="server-list-nav"></div>
                 </div>
 
@@ -154,5 +160,14 @@
     <script src="js/data.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/main.js"></script>
+    
+    <script>
+        // Initialize state (load sort preference)
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof State !== 'undefined' && State.init) {
+                State.init();
+            }
+        });
+    </script>
 </body>
 </html>

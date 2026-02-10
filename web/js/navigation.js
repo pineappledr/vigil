@@ -17,10 +17,21 @@ const Navigation = {
         Data.updateViews();
     },
 
-    showServer(index) {
-        State.setServer(index);
-        const server = State.data[index];
+    showServer(sortedIndex) {
+        // Get the server from sorted data
+        const sortedData = State.getSortedData();
+        const server = sortedData[sortedIndex];
         if (!server) return;
+        
+        // Find actual index in original data
+        const actualIndex = State.data.findIndex(s => s.hostname === server.hostname);
+        if (actualIndex === -1) return;
+        
+        // Set server (this resets activeView to 'drives')
+        State.activeServerIndex = actualIndex;
+        State.activeServerHostname = server.hostname;
+        State.activeFilter = null;
+        State.activeView = 'drives';
         
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
@@ -31,8 +42,11 @@ const Navigation = {
         document.getElementById('breadcrumbs').classList.remove('hidden');
         
         this.clearNavSelection();
+        
+        // Highlight the correct server in sidebar (by hostname match)
         document.querySelectorAll('.server-nav-item').forEach((el, i) => {
-            el.classList.toggle('active', i === index);
+            const itemServer = sortedData[i];
+            el.classList.toggle('active', itemServer?.hostname === server.hostname);
         });
         
         Data.updateViews();
@@ -43,7 +57,9 @@ const Navigation = {
         const drive = server?.details?.drives?.[driveIdx];
         if (!drive) return;
         
-        State.setServer(serverIdx);
+        State.activeServerIndex = serverIdx;
+        State.activeServerHostname = server.hostname;
+        State.activeView = 'drives';
         
         document.getElementById('dashboard-view').classList.add('hidden');
         document.getElementById('details-view').classList.remove('hidden');
@@ -128,9 +144,14 @@ function resetDashboard() {
 
 function goBackToContext() {
     if (State.activeServerIndex !== null) {
-        Navigation.showServer(State.activeServerIndex);
-        document.getElementById('dashboard-view').classList.remove('hidden');
-        document.getElementById('details-view').classList.add('hidden');
+        // Find the sorted index for the active server
+        const sortedData = State.getSortedData();
+        const sortedIdx = sortedData.findIndex(s => s.hostname === State.activeServerHostname);
+        if (sortedIdx !== -1) {
+            Navigation.showServer(sortedIdx);
+        } else {
+            Navigation.showDashboard();
+        }
     } else {
         Navigation.showDashboard();
     }
@@ -142,4 +163,8 @@ function fetchData() {
 
 function showZFSPools() {
     Navigation.showZFS();
+}
+
+function toggleServerSort() {
+    State.toggleSortOrder();
 }

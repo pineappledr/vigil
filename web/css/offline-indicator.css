@@ -100,3 +100,49 @@
     font-size: 12px;
     font-weight: 500;
 }
+
+/* ─── Sort Toggle Button Styles ─────────────────────────────────────────── */
+
+.nav-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    margin-bottom: 8px;
+}
+
+.sort-toggle-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.sort-toggle-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.sort-toggle-btn:active {
+    transform: scale(0.95);
+}
+
+/* Nav count badge next to SERVERS */
+.nav-count {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}

@@ -15,12 +15,48 @@ const State = {
     zfsPools: [],
     zfsDriveMap: {},
     activeView: 'drives',   // 'drives' | 'zfs' | 'settings'
+    
+    // Sorting State (persisted to localStorage)
+    serverSortOrder: 'asc',  // 'asc' (A-Z) or 'desc' (Z-A)
 
     API_URL: '/api/history',
     REFRESH_INTERVAL: 5000,
     
     // Offline threshold in minutes
     OFFLINE_THRESHOLD_MINUTES: 5,
+
+    init() {
+        // Load sort preference from localStorage
+        const savedSort = localStorage.getItem('vigil_server_sort');
+        if (savedSort === 'asc' || savedSort === 'desc') {
+            this.serverSortOrder = savedSort;
+        }
+    },
+
+    toggleSortOrder() {
+        this.serverSortOrder = this.serverSortOrder === 'asc' ? 'desc' : 'asc';
+        localStorage.setItem('vigil_server_sort', this.serverSortOrder);
+        // Trigger UI update
+        if (typeof Data !== 'undefined') {
+            Data.updateSidebar();
+            Data.updateViews();
+        }
+    },
+
+    getSortedData() {
+        if (!this.data || this.data.length === 0) return [];
+        
+        return [...this.data].sort((a, b) => {
+            const nameA = (a.hostname || '').toLowerCase();
+            const nameB = (b.hostname || '').toLowerCase();
+            
+            if (this.serverSortOrder === 'asc') {
+                return nameA.localeCompare(nameB);
+            } else {
+                return nameB.localeCompare(nameA);
+            }
+        });
+    },
 
     reset() {
         this.activeServerIndex = null;
@@ -37,8 +73,15 @@ const State = {
     },
 
     setServer(index) {
-        this.activeServerIndex = index;
-        this.activeServerHostname = this.data[index]?.hostname || null;
+        // Get sorted data to find correct server
+        const sortedData = this.getSortedData();
+        const server = sortedData[index];
+        
+        // Find the actual index in unsorted data
+        const actualIndex = this.data.findIndex(s => s.hostname === server?.hostname);
+        
+        this.activeServerIndex = actualIndex >= 0 ? actualIndex : index;
+        this.activeServerHostname = server?.hostname || this.data[index]?.hostname || null;
         this.activeFilter = null;
         this.activeView = 'drives';  // Always reset to drives view
     },

@@ -81,12 +81,18 @@ const Data = {
         
         serverCount.textContent = State.data.length;
         
-        serverNav.innerHTML = State.data.map((server, idx) => {
+        // Use sorted data for display
+        const sortedData = State.getSortedData();
+        
+        serverNav.innerHTML = sortedData.map((server, idx) => {
             const drives = server.details?.drives || [];
             const hasWarning = drives.some(d => Utils.getHealthStatus(d) === 'warning');
             const hasCritical = drives.some(d => Utils.getHealthStatus(d) === 'critical');
             const isOffline = State.isServerOffline(server);
             const timeSince = State.getTimeSinceUpdate(server);
+            
+            // Check if this is the active server by hostname
+            const isActive = State.activeServerHostname === server.hostname;
             
             let statusClass = '';
             let statusTitle = '';
@@ -105,7 +111,7 @@ const Data = {
             }
             
             return `
-                <div class="server-nav-item ${State.activeServerIndex === idx ? 'active' : ''} ${isOffline ? 'server-offline' : ''}" 
+                <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}" 
                      onclick="Navigation.showServer(${idx})"
                      title="${statusTitle}">
                     <span class="status-indicator ${statusClass}"></span>
@@ -117,6 +123,18 @@ const Data = {
 
         // Update ZFS sidebar if pools exist
         this.updateZFSSidebar();
+        
+        // Update sort indicator
+        this.updateSortIndicator();
+    },
+    
+    updateSortIndicator() {
+        const sortBtn = document.getElementById('server-sort-btn');
+        if (sortBtn) {
+            const isAsc = State.serverSortOrder === 'asc';
+            sortBtn.innerHTML = isAsc ? '↑ A-Z' : '↓ Z-A';
+            sortBtn.title = isAsc ? 'Sorted A to Z (click to reverse)' : 'Sorted Z to A (click to reverse)';
+        }
     },
 
     updateZFSSidebar() {
