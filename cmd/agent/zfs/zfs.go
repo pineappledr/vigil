@@ -4,18 +4,85 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// ─── ZFS Availability Check ──────────────────────────────────────────────────
+// ─── ZFS Binary Path Detection ───────────────────────────────────────────────
+
+// Common paths where zpool might be located
+var zpoolPaths = []string{
+	"zpool",           // In PATH
+	"/sbin/zpool",     // TrueNAS, FreeBSD
+	"/usr/sbin/zpool", // Linux standard
+	"/usr/local/sbin/zpool",
+	"/usr/local/bin/zpool",
+}
+
+var zfsPaths = []string{
+	"zfs",
+	"/sbin/zfs",
+	"/usr/sbin/zfs",
+	"/usr/local/sbin/zfs",
+	"/usr/local/bin/zfs",
+}
+
+// Cached paths (found once, reused)
+var zpoolCmd string
+var zfsCmd string
+
+// findZpoolCommand locates the zpool binary
+func findZpoolCommand() string {
+	if zpoolCmd != "" {
+		return zpoolCmd
+	}
+
+	for _, path := range zpoolPaths {
+		if path == "zpool" {
+			// Check in PATH
+			if p, err := exec.LookPath("zpool"); err == nil {
+				zpoolCmd = p
+				return zpoolCmd
+			}
+		} else {
+			// Check absolute path
+			if _, err := os.Stat(path); err == nil {
+				zpoolCmd = path
+				return zpoolCmd
+			}
+		}
+	}
+	return ""
+}
+
+// findZfsCommand locates the zfs binary
+func findZfsCommand() string {
+	if zfsCmd != "" {
+		return zfsCmd
+	}
+
+	for _, path := range zfsPaths {
+		if path == "zfs" {
+			if p, err := exec.LookPath("zfs"); err == nil {
+				zfsCmd = p
+				return zfsCmd
+			}
+		} else {
+			if _, err := os.Stat(path); err == nil {
+				zfsCmd = path
+				return zfsCmd
+			}
+		}
+	}
+	return ""
+}
 
 // IsZFSAvailable checks if ZFS tools are installed and accessible
 func IsZFSAvailable() bool {
-	_, err := exec.LookPath("zpool")
-	return err == nil
+	return findZpoolCommand() != ""
 }
 
 // ─── Pool List Parsing ───────────────────────────────────────────────────────
@@ -23,13 +90,14 @@ func IsZFSAvailable() bool {
 // ListPools returns all ZFS pools with basic information
 // Uses: zpool list -H -p -o name,size,alloc,free,frag,cap,dedup,health,altroot
 func ListPools() ([]Pool, error) {
-	if !IsZFSAvailable() {
+	zpoolPath := findZpoolCommand()
+	if zpoolPath == "" {
 		return nil, fmt.Errorf("zpool command not found")
 	}
 
 	// -H: no header, -p: parseable (exact bytes)
 	// Fields: name, size, alloc, free, frag, cap, dedup, health, altroot
-	cmd := exec.Command("zpool", "list", "-H", "-p", "-o",
+	cmd := exec.Command(zpoolPath, "list", "-H", "-p", "-o",
 		"name,size,alloc,free,frag,cap,dedup,health,altroot,guid")
 
 	var stdout, stderr bytes.Buffer
@@ -107,11 +175,12 @@ func parsePoolList(output string) ([]Pool, error) {
 // GetPoolStatus retrieves detailed status for a specific pool
 // Uses: zpool status -v <poolname>
 func GetPoolStatus(poolName string) (*Pool, error) {
-	if !IsZFSAvailable() {
+	zpoolPath := findZpoolCommand()
+	if zpoolPath == "" {
 		return nil, fmt.Errorf("zpool command not found")
 	}
 
-	cmd := exec.Command("zpool", "status", "-v", "-p", poolName)
+	cmd := exec.Command(zpoolPath, "status", "-v", "-p", poolName)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -284,10 +353,10 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 	// Parse bytes repaired (e.g., "0B repaired" or "123K repaired")
 	scan.BytesRepaired = parseSizeBefore(fullText, " repaired")
 
-	// Parse scan rate (e.g., "100M/s" or "at 100M/s")
+	// Parse scan rate (e.g., "100M/s" or "at 100M/s") - returns int64
 	scan.Rate = parseScanRate(fullText)
 
-	// Parse time remaining (e.g., "01:30:00 to go" or "4h30m to go")
+	// Parse time remaining (e.g., "01:30:00 to go" or "4h30m to go") - returns int64
 	scan.TimeRemaining = parseTimeRemaining(lowerText)
 
 	return scan
@@ -544,6 +613,7 @@ func parseDeviceLine(line string) *Device {
 		device.IsCache = true
 	case strings.HasPrefix(nameLower, "replacing"):
 		device.IsReplacing = true
+		device.VdevType = VdevTypeDisk
 	default:
 		device.VdevType = VdevTypeDisk
 	}
@@ -778,12 +848,13 @@ func sumDeviceErrors(dev Device, errType string) int64 {
 // GetScrubHistory retrieves scrub history using zpool history (if available)
 // This provides historical scrub records beyond the last scan shown in zpool status
 func GetScrubHistory(poolName string, limit int) ([]ScrubRecord, error) {
-	if !IsZFSAvailable() {
+	zpoolPath := findZpoolCommand()
+	if zpoolPath == "" {
 		return nil, fmt.Errorf("zpool command not found")
 	}
 
 	// zpool history shows all pool operations including scrubs
-	cmd := exec.Command("zpool", "history", "-i", poolName)
+	cmd := exec.Command(zpoolPath, "history", "-i", poolName)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
