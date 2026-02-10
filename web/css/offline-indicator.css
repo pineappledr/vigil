@@ -1,0 +1,102 @@
+/* ─── Offline Server Styles ─────────────────────────────────────────────── */
+
+/* Offline status indicator (pulsing red) */
+.status-indicator.offline {
+    background: var(--danger);
+    animation: pulse-offline 2s ease-in-out infinite;
+}
+
+@keyframes pulse-offline {
+    0%, 100% { 
+        opacity: 1; 
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% { 
+        opacity: 0.6; 
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+}
+
+/* Server nav item when offline */
+.server-nav-item.server-offline {
+    opacity: 0.7;
+}
+
+.server-nav-item.server-offline:hover {
+    opacity: 1;
+}
+
+.server-nav-item.server-offline .server-name {
+    color: var(--text-secondary);
+}
+
+/* Offline badge */
+.offline-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: var(--danger);
+    color: white;
+    margin-left: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    animation: blink-badge 3s ease-in-out infinite;
+}
+
+@keyframes blink-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Server nav item layout for badge */
+.server-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.server-nav-item .server-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Warning count critical state */
+.stat-value.critical {
+    color: var(--danger) !important;
+    animation: pulse-text 2s ease-in-out infinite;
+}
+
+@keyframes pulse-text {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Dashboard server card offline state */
+.server-card.offline {
+    border-color: var(--danger);
+    opacity: 0.8;
+}
+
+.server-card.offline::before {
+    content: 'OFFLINE';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--danger);
+    color: white;
+}
+
+/* Offline server in main dashboard grid */
+.server-section.offline .server-header::after {
+    content: ' (OFFLINE)';
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 500;
+}

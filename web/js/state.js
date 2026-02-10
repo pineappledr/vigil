@@ -5,7 +5,7 @@
 const State = {
     data: [],
     activeServerIndex: null,
-    activeServerHostname: null,  // Track by hostname to survive refresh
+    activeServerHostname: null,
     activeFilter: null,
     refreshTimer: null,
     currentUser: null,
@@ -13,11 +13,14 @@ const State = {
 
     // ZFS State
     zfsPools: [],
-    zfsDriveMap: {},        // Map of serial -> pool info for badge display
+    zfsDriveMap: {},
     activeView: 'drives',   // 'drives' | 'zfs' | 'settings'
 
     API_URL: '/api/history',
     REFRESH_INTERVAL: 5000,
+    
+    // Offline threshold in minutes
+    OFFLINE_THRESHOLD_MINUTES: 5,
 
     reset() {
         this.activeServerIndex = null;
@@ -35,10 +38,9 @@ const State = {
 
     setServer(index) {
         this.activeServerIndex = index;
-        // Also store hostname for persistence across refreshes
         this.activeServerHostname = this.data[index]?.hostname || null;
         this.activeFilter = null;
-        this.activeView = 'drives';
+        this.activeView = 'drives';  // Always reset to drives view
     },
 
     setView(view) {
@@ -50,21 +52,46 @@ const State = {
         }
     },
 
-    /**
-     * Resolve active server index after data refresh
-     * Uses hostname to find correct index even if order changed
-     */
     resolveActiveServer() {
         if (this.activeServerHostname) {
             const newIndex = this.data.findIndex(s => s.hostname === this.activeServerHostname);
             if (newIndex !== -1) {
                 this.activeServerIndex = newIndex;
             } else {
-                // Server no longer exists, reset
                 this.activeServerIndex = null;
                 this.activeServerHostname = null;
             }
         }
+    },
+
+    /**
+     * Check if a server is offline based on last_seen timestamp
+     */
+    isServerOffline(server) {
+        if (!server || !server.last_seen) return false;
+        const lastSeen = new Date(server.last_seen);
+        const now = new Date();
+        const diffMinutes = (now - lastSeen) / (1000 * 60);
+        return diffMinutes > this.OFFLINE_THRESHOLD_MINUTES;
+    },
+
+    /**
+     * Get time since last update for a server
+     */
+    getTimeSinceUpdate(server) {
+        if (!server || !server.last_seen) return 'Unknown';
+        const lastSeen = new Date(server.last_seen);
+        const now = new Date();
+        const diffMs = now - lastSeen;
+        const diffSeconds = Math.floor(diffMs / 1000);
+        const diffMinutes = Math.floor(diffSeconds / 60);
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        if (diffDays > 0) return `${diffDays}d ago`;
+        if (diffHours > 0) return `${diffHours}h ago`;
+        if (diffMinutes > 0) return `${diffMinutes}m ago`;
+        return 'Just now';
     },
 
     getStats() {
@@ -72,10 +99,16 @@ const State = {
         let totalDrives = 0;
         let healthyDrives = 0;
         let attentionDrives = 0;
+        let offlineServers = 0;
 
         this.data.forEach(server => {
             const drives = server.details?.drives || [];
             totalDrives += drives.length;
+            
+            if (this.isServerOffline(server)) {
+                offlineServers++;
+            }
+            
             drives.forEach(drive => {
                 if (Utils.getHealthStatus(drive) === 'healthy') {
                     healthyDrives++;
@@ -85,15 +118,11 @@ const State = {
             });
         });
 
-        return { totalServers, totalDrives, healthyDrives, attentionDrives };
+        return { totalServers, totalDrives, healthyDrives, attentionDrives, offlineServers };
     },
 
     // ─── ZFS State Methods ───────────────────────────────────────────────────
 
-    /**
-     * Get ZFS statistics for display
-     * @returns {Object} ZFS stats
-     */
     getZFSStats() {
         const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
         
@@ -105,8 +134,7 @@ const State = {
 
         pools.forEach(pool => {
             if (!pool) return;
-            
-            const state = (pool.state || pool.health || '').toUpperCase();
+            const state = (pool.status || pool.health || pool.state || '').toUpperCase();
             
             if (state === 'ONLINE') {
                 healthyPools++;
@@ -116,13 +144,12 @@ const State = {
                 faultedPools++;
             }
 
-            // Count device errors
+            totalErrors += (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
+
             const devices = Array.isArray(pool.devices) ? pool.devices : [];
             devices.forEach(device => {
                 if (!device) return;
-                totalErrors += (device.read_errors || 0) + 
-                               (device.write_errors || 0) + 
-                               (device.checksum_errors || 0);
+                totalErrors += (device.read_errors || 0) + (device.write_errors || 0) + (device.checksum_errors || 0);
             });
         });
 
@@ -136,10 +163,6 @@ const State = {
         };
     },
 
-    /**
-     * Get pools grouped by hostname
-     * @returns {Object} Pools grouped by hostname
-     */
     getPoolsByHost() {
         const grouped = {};
         const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
@@ -156,10 +179,6 @@ const State = {
         return grouped;
     },
 
-    /**
-     * Build drive-to-pool mapping for badge display
-     * Called after ZFS data is fetched
-     */
     buildZFSDriveMap() {
         this.zfsDriveMap = {};
         const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
@@ -168,17 +187,20 @@ const State = {
             if (!pool) return;
             
             const hostname = pool.hostname || '';
-            const poolState = (pool.state || pool.health || 'UNKNOWN').toUpperCase();
+            const poolName = pool.name || pool.pool_name || 'unknown';
+            const poolState = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
             const devices = Array.isArray(pool.devices) ? pool.devices : [];
             
             devices.forEach(device => {
-                if (!device || !device.serial) return;
+                if (!device) return;
+                const serial = device.serial_number || device.serial;
+                if (!serial) return;
                 
-                const key = `${hostname}:${device.serial}`;
+                const key = `${hostname}:${serial}`;
                 this.zfsDriveMap[key] = {
-                    poolName: pool.name || 'unknown',
+                    poolName: poolName,
                     poolState: poolState,
-                    vdev: device.vdev || '',
+                    vdev: device.vdev_parent || device.vdev || '',
                     deviceName: device.device_name || device.name || '',
                     readErrors: device.read_errors || 0,
                     writeErrors: device.write_errors || 0,
@@ -188,21 +210,11 @@ const State = {
         });
     },
 
-    /**
-     * Get ZFS pool info for a specific drive
-     * @param {string} hostname
-     * @param {string} serial
-     * @returns {Object|null} Pool info or null
-     */
     getZFSInfoForDrive(hostname, serial) {
         const key = `${hostname}:${serial}`;
         return this.zfsDriveMap[key] || null;
     },
 
-    /**
-     * Check if any ZFS pools need attention
-     * @returns {boolean}
-     */
     hasZFSAlerts() {
         const stats = this.getZFSStats();
         return stats.attentionPools > 0 || stats.totalErrors > 0;

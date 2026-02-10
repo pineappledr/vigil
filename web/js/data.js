@@ -9,7 +9,6 @@ const Data = {
             const [historyResponse, zfsResponse] = await Promise.all([
                 API.getHistory(),
                 API.getZFSPools().catch(err => {
-                    // ZFS endpoint might not exist or return error - that's OK
                     console.debug('ZFS API unavailable:', err?.message || 'endpoint not found');
                     return null;
                 })
@@ -86,16 +85,32 @@ const Data = {
             const drives = server.details?.drives || [];
             const hasWarning = drives.some(d => Utils.getHealthStatus(d) === 'warning');
             const hasCritical = drives.some(d => Utils.getHealthStatus(d) === 'critical');
+            const isOffline = State.isServerOffline(server);
+            const timeSince = State.getTimeSinceUpdate(server);
             
             let statusClass = '';
-            if (hasCritical) statusClass = 'critical';
-            else if (hasWarning) statusClass = 'warning';
+            let statusTitle = '';
+            
+            if (isOffline) {
+                statusClass = 'offline';
+                statusTitle = `Offline - last seen ${timeSince}`;
+            } else if (hasCritical) {
+                statusClass = 'critical';
+                statusTitle = 'Critical issues detected';
+            } else if (hasWarning) {
+                statusClass = 'warning';
+                statusTitle = 'Warnings detected';
+            } else {
+                statusTitle = `Online - updated ${timeSince}`;
+            }
             
             return `
-                <div class="server-nav-item ${State.activeServerIndex === idx ? 'active' : ''}" 
-                     onclick="Navigation.showServer(${idx})">
+                <div class="server-nav-item ${State.activeServerIndex === idx ? 'active' : ''} ${isOffline ? 'server-offline' : ''}" 
+                     onclick="Navigation.showServer(${idx})"
+                     title="${statusTitle}">
                     <span class="status-indicator ${statusClass}"></span>
-                    ${server.hostname}
+                    <span class="server-name">${server.hostname}</span>
+                    ${isOffline ? `<span class="offline-badge" title="Last seen ${timeSince}">OFFLINE</span>` : ''}
                 </div>
             `;
         }).join('');
@@ -143,8 +158,8 @@ const Data = {
         const warningEl = document.getElementById('warning-count');
         warningEl.textContent = totalWarnings;
         
-        // Change color to critical if ZFS pools are faulted
-        if (zfsStats.faultedPools > 0) {
+        // Change color to critical if ZFS pools are faulted or servers offline
+        if (zfsStats.faultedPools > 0 || stats.offlineServers > 0) {
             warningEl.classList.remove('warning');
             warningEl.classList.add('critical');
         } else if (totalWarnings > 0) {
@@ -186,12 +201,6 @@ const Data = {
         }
     },
 
-    /**
-     * Fetch detailed ZFS pool data (for modal)
-     * @param {string} hostname
-     * @param {string} poolName
-     * @returns {Promise<Object|null>}
-     */
     async fetchZFSPoolDetail(hostname, poolName) {
         try {
             const response = await API.getZFSPool(hostname, poolName);
