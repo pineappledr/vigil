@@ -135,6 +135,9 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// Admin: cleanup old SMART data
 	mux.HandleFunc("POST /api/smart/cleanup", auth(handlers.CleanupOldSmartData))
 
+	// ─── ZFS Endpoints (Phase 1.4) ───────────────────────────────────────
+	handlers.RegisterZFSRoutes(mux, auth)
+
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))
 
