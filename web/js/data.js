@@ -1,9 +1,12 @@
 /**
  * Vigil Dashboard - Data Management
+ * DEBUG VERSION
  */
 
 const Data = {
     async fetch() {
+        console.log('[Data] fetch called, activeView:', State.activeView);
+        
         try {
             const [historyResponse, zfsResponse] = await Promise.all([
                 API.getHistory(),
@@ -18,13 +21,15 @@ const Data = {
             State.resolveActiveServer();
             
             if (zfsResponse && zfsResponse.ok) {
-                const zfsData = await zfsResponse.json();
-                State.zfsPools = Array.isArray(zfsData) ? zfsData : [];
+                State.zfsPools = await zfsResponse.json() || [];
                 State.buildZFSDriveMap();
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
             }
+            
+            console.log('[Data] Data loaded:', State.data.length, 'servers,', State.zfsPools.length, 'pools');
+            console.log('[Data] Before updateCurrentView, activeView:', State.activeView);
             
             this.updateCurrentView();
             this.updateSidebar();
@@ -33,25 +38,40 @@ const Data = {
             this.updateLastRefresh();
             
         } catch (error) {
-            console.error('Fetch error:', error);
+            console.error('[Data] Fetch error:', error);
             this.setOnlineStatus(false);
         }
     },
 
     updateCurrentView() {
+        console.log('[Data] updateCurrentView, activeView:', State.activeView);
+        
         const dashboardView = document.getElementById('dashboard-view');
         const detailsView = document.getElementById('details-view');
         
-        if (!detailsView.classList.contains('hidden')) return;
-        if (dashboardView.classList.contains('hidden')) return;
+        // Don't update if details view is showing
+        if (detailsView && !detailsView.classList.contains('hidden')) {
+            console.log('[Data] Details view is showing, skipping update');
+            return;
+        }
         
+        // Don't update if dashboard is hidden
+        if (dashboardView && dashboardView.classList.contains('hidden')) {
+            console.log('[Data] Dashboard view is hidden, skipping update');
+            return;
+        }
+        
+        // Update based on current view
         if (State.activeView === 'zfs') {
+            console.log('[Data] Rendering ZFS view');
             if (typeof ZFS !== 'undefined' && ZFS.render) {
                 ZFS.render();
             }
         } else if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
+            console.log('[Data] Rendering server detail:', State.activeServerHostname);
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
         } else if (State.activeFilter) {
+            console.log('[Data] Rendering filter:', State.activeFilter);
             const filterFn = State.activeFilter === 'attention' 
                 ? d => Utils.getHealthStatus(d) !== 'healthy'
                 : State.activeFilter === 'healthy'
@@ -59,6 +79,7 @@ const Data = {
                 : () => true;
             Renderer.filteredDrives(filterFn, State.activeFilter);
         } else {
+            console.log('[Data] Rendering main dashboard');
             Renderer.dashboard(State.data);
         }
     },
@@ -85,7 +106,7 @@ const Data = {
             const hasCritical = drives.some(d => Utils.getHealthStatus(d) === 'critical');
             const isOffline = State.isServerOffline(server);
             const timeSince = State.getTimeSinceUpdate(server);
-            const isActive = State.activeServerHostname === server.hostname && State.activeView !== 'zfs';
+            const isActive = State.activeServerHostname === server.hostname && State.activeView === 'drives';
             
             let statusClass = '';
             if (isOffline) statusClass = 'offline';
@@ -95,10 +116,10 @@ const Data = {
             return `
                 <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}" 
                      onclick="navShowServer(${sortedIdx})"
-                     title="${isOffline ? 'Offline - last seen ' + timeSince : 'Online'}">
+                     title="${isOffline ? 'Offline' : 'Online'}">
                     <span class="status-indicator ${statusClass}"></span>
                     <span class="server-name">${server.hostname}</span>
-                    ${isOffline ? `<span class="offline-badge">OFFLINE</span>` : ''}
+                    ${isOffline ? '<span class="offline-badge">OFFLINE</span>' : ''}
                 </div>
             `;
         }).join('');
@@ -130,9 +151,7 @@ const Data = {
         zfsNav.classList.remove('hidden');
         
         const poolCount = document.getElementById('zfs-pool-count');
-        if (poolCount) {
-            poolCount.textContent = stats.totalPools;
-        }
+        if (poolCount) poolCount.textContent = stats.totalPools;
 
         const navZfs = document.getElementById('nav-zfs');
         if (navZfs) {
@@ -141,42 +160,39 @@ const Data = {
             navZfs.classList.toggle('active', State.activeView === 'zfs');
         }
 
-        // Build ZFS pool list - same format as servers
+        // ZFS pool list - same format as servers
         if (zfsNavList) {
             const poolsByHost = State.getPoolsByHost();
-            
-            // Sort hosts same as servers
             const sortedHosts = Object.keys(poolsByHost).sort((a, b) => {
                 const cmp = a.toLowerCase().localeCompare(b.toLowerCase());
                 return State.serverSortOrder === 'asc' ? cmp : -cmp;
             });
 
             zfsNavList.innerHTML = sortedHosts.flatMap(hostname => {
-                // Sort pools within host
-                const pools = poolsByHost[hostname].sort((a, b) => {
-                    const nameA = (a.name || a.pool_name || '').toLowerCase();
-                    const nameB = (b.name || b.pool_name || '').toLowerCase();
-                    const cmp = nameA.localeCompare(nameB);
-                    return State.serverSortOrder === 'asc' ? cmp : -cmp;
-                });
-                
-                return pools.map(pool => {
-                    const poolName = pool.name || pool.pool_name || 'Unknown';
-                    const state = (pool.status || pool.health || pool.state || 'UNKNOWN').toUpperCase();
-                    let statusClass = '';
-                    if (state === 'DEGRADED') statusClass = 'warning';
-                    else if (state === 'FAULTED' || state === 'UNAVAIL') statusClass = 'critical';
-                    
-                    return `
-                        <div class="server-nav-item ${statusClass}" 
-                             onclick="navShowZFSPool('${hostname}', '${poolName}')"
-                             title="${hostname} - ${poolName} (${state})">
-                            <span class="status-indicator ${statusClass}"></span>
-                            <span class="server-name">${poolName}</span>
-                            <span class="pool-host-label">${hostname}</span>
-                        </div>
-                    `;
-                });
+                return poolsByHost[hostname]
+                    .sort((a, b) => {
+                        const nameA = (a.name || a.pool_name || '').toLowerCase();
+                        const nameB = (b.name || b.pool_name || '').toLowerCase();
+                        const cmp = nameA.localeCompare(nameB);
+                        return State.serverSortOrder === 'asc' ? cmp : -cmp;
+                    })
+                    .map(pool => {
+                        const poolName = pool.name || pool.pool_name || 'Unknown';
+                        const state = (pool.status || pool.health || 'UNKNOWN').toUpperCase();
+                        let statusClass = '';
+                        if (state === 'DEGRADED') statusClass = 'warning';
+                        else if (state === 'FAULTED' || state === 'UNAVAIL') statusClass = 'critical';
+                        
+                        return `
+                            <div class="server-nav-item ${statusClass}" 
+                                 onclick="navShowZFSPool('${hostname}', '${poolName}')"
+                                 title="${hostname} - ${poolName}">
+                                <span class="status-indicator ${statusClass}"></span>
+                                <span class="server-name">${poolName}</span>
+                                <span class="pool-host-label">${hostname}</span>
+                            </div>
+                        `;
+                    });
             }).join('');
         }
     },
@@ -185,38 +201,37 @@ const Data = {
         const stats = State.getStats();
         const zfsStats = State.getZFSStats();
         
-        document.getElementById('total-drives').textContent = stats.totalDrives;
-        document.getElementById('healthy-count').textContent = stats.healthyDrives;
+        const totalDrives = document.getElementById('total-drives');
+        const healthyCount = document.getElementById('healthy-count');
+        const warningCount = document.getElementById('warning-count');
         
-        const totalWarnings = stats.attentionDrives + zfsStats.attentionPools;
-        const warningEl = document.getElementById('warning-count');
-        warningEl.textContent = totalWarnings;
+        if (totalDrives) totalDrives.textContent = stats.totalDrives;
+        if (healthyCount) healthyCount.textContent = stats.healthyDrives;
         
-        if (zfsStats.faultedPools > 0 || stats.offlineServers > 0) {
-            warningEl.classList.remove('warning');
-            warningEl.classList.add('critical');
-        } else if (totalWarnings > 0) {
-            warningEl.classList.remove('critical');
-            warningEl.classList.add('warning');
-        } else {
-            warningEl.classList.remove('warning', 'critical');
+        if (warningCount) {
+            const total = stats.attentionDrives + zfsStats.attentionPools;
+            warningCount.textContent = total;
+            warningCount.classList.toggle('critical', zfsStats.faultedPools > 0);
+            warningCount.classList.toggle('warning', total > 0 && zfsStats.faultedPools === 0);
         }
     },
 
     setOnlineStatus(online) {
         const indicator = document.getElementById('status-indicator');
-        indicator.classList.toggle('online', online);
-        indicator.classList.toggle('offline', !online);
-        indicator.title = online ? 'Connected' : 'Connection Lost';
+        if (indicator) {
+            indicator.classList.toggle('online', online);
+            indicator.classList.toggle('offline', !online);
+            indicator.title = online ? 'Connected' : 'Disconnected';
+        }
     },
 
     updateLastRefresh() {
-        document.getElementById('last-update-time').textContent = 
-            new Date().toLocaleTimeString([], { 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
+        const el = document.getElementById('last-update-time');
+        if (el) {
+            el.textContent = new Date().toLocaleTimeString([], { 
+                hour: '2-digit', minute: '2-digit', second: '2-digit' 
             });
+        }
     },
 
     async fetchVersion() {
@@ -224,9 +239,9 @@ const Data = {
             const resp = await API.getVersion();
             if (resp.ok) {
                 const data = await resp.json();
-                const versionEl = document.getElementById('app-version');
-                if (versionEl && data.version) {
-                    versionEl.textContent = data.version.startsWith('v') ? data.version : `v${data.version}`;
+                const el = document.getElementById('app-version');
+                if (el && data.version) {
+                    el.textContent = data.version.startsWith('v') ? data.version : `v${data.version}`;
                 }
             }
         } catch (e) {}
@@ -235,9 +250,7 @@ const Data = {
     async fetchZFSPoolDetail(hostname, poolName) {
         try {
             const response = await API.getZFSPool(hostname, poolName);
-            if (response.ok) {
-                return await response.json();
-            }
+            if (response.ok) return await response.json();
         } catch (e) {}
         return null;
     }

@@ -1,5 +1,4 @@
-/* ─── Nav Section Header ────────────────────────────────────────────────── */
-
+/* Nav Section Header */
 .nav-section-header {
     display: flex;
     align-items: center;
@@ -25,7 +24,6 @@
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-family: inherit;
 }
 
 .sort-btn:hover {
@@ -34,8 +32,7 @@
     border-color: var(--accent);
 }
 
-/* ─── Sidebar Header ─────────────────────────────────────────────────────── */
-
+/* Sidebar Header */
 .sidebar-header {
     height: 64px;
     padding: 0 16px;
@@ -66,8 +63,7 @@
     letter-spacing: -1px;
 }
 
-/* ─── Pool Host Label ────────────────────────────────────────────────────── */
-
+/* Pool Host Label */
 .pool-host-label {
     font-size: 10px;
     color: var(--text-tertiary);
@@ -79,8 +75,7 @@
     white-space: nowrap;
 }
 
-/* ─── Offline Styles ─────────────────────────────────────────────────────── */
-
+/* Offline Styles */
 .status-indicator.offline {
     background: var(--danger);
     animation: pulse-offline 2s ease-in-out infinite;
@@ -122,8 +117,7 @@
     white-space: nowrap;
 }
 
-/* ─── ZFS Clickable Device ───────────────────────────────────────────────── */
-
+/* ZFS Clickable Device */
 .zfs-device-serial.clickable {
     cursor: pointer;
     color: var(--accent);

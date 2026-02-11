@@ -1,24 +1,58 @@
 /**
  * Vigil Dashboard - View Renderer
+ * FIXED: Restores dashboard structure after ZFS view
  */
 
 const Renderer = {
+    // Template for the dashboard structure
+    dashboardTemplate: `
+        <div class="summary-grid" id="summary-cards"></div>
+        <div class="section-header"><h2>Servers</h2></div>
+        <div id="server-list" class="server-grid"></div>
+    `,
+
+    /**
+     * Ensure dashboard structure exists (ZFS.render destroys it)
+     */
+    ensureDashboardStructure() {
+        const container = document.getElementById('dashboard-view');
+        if (!container) return false;
+        
+        // Check if structure exists
+        const summaryCards = document.getElementById('summary-cards');
+        const serverList = document.getElementById('server-list');
+        
+        if (!summaryCards || !serverList) {
+            console.log('[Renderer] Restoring dashboard structure');
+            container.innerHTML = this.dashboardTemplate;
+        }
+        return true;
+    },
+
     dashboard(servers) {
+        console.log('[Renderer] dashboard() called with', servers?.length || 0, 'servers');
+        
+        // CRITICAL: Restore structure if destroyed by ZFS.render()
+        this.ensureDashboardStructure();
+        
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
         
+        if (!serverList || !summaryCards) {
+            console.error('[Renderer] Dashboard elements not found!');
+            return;
+        }
+        
         summaryCards.innerHTML = this.serverSummaryCards();
         
-        if (servers.length === 0) {
+        if (!servers || servers.length === 0) {
             serverList.innerHTML = Components.emptyState('noServers');
             return;
         }
         
-        // Use sorted data for display order
         const sortedServers = State.getSortedData();
         
         serverList.innerHTML = sortedServers.map((server) => {
-            // Find actual index in original State.data for drive card onclick handlers
             const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
             return Components.serverSection(server, actualIdx, drives);
@@ -121,8 +155,13 @@ const Renderer = {
     },
 
     serverDetail(server, serverIdx) {
+        // Restore structure first
+        this.ensureDashboardStructure();
+        
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
+        
+        if (!serverList || !summaryCards) return;
         
         summaryCards.innerHTML = this.serverDetailSummaryCards(server);
         
@@ -147,8 +186,13 @@ const Renderer = {
     },
 
     filteredDrives(filterFn, filterType) {
+        // Restore structure first
+        this.ensureDashboardStructure();
+        
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
+        
+        if (!serverList || !summaryCards) return;
         
         summaryCards.innerHTML = this.serverSummaryCards();
         

@@ -1,67 +1,85 @@
 /**
  * Vigil Dashboard - Application Initialization
- * All event listeners are set up here to avoid inline onclick issues
+ * DEBUG VERSION - with extensive logging
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[Main] Initializing Vigil Dashboard');
+    console.log('[Main] DOM loaded, initializing...');
     
-    // Initialize state
-    State.init();
+    // Initialize state first
+    if (typeof State !== 'undefined' && State.init) {
+        State.init();
+    }
     
-    // Set up all navigation event listeners
-    setupNavigationListeners();
+    // Set up event listeners BEFORE auth check
+    setupEventListeners();
     
-    // Check authentication
+    // Check auth
     const isAuth = await Auth.checkStatus();
-    if (!isAuth) return;
+    if (!isAuth) {
+        console.log('[Main] Not authenticated');
+        return;
+    }
+    
+    console.log('[Main] Authenticated, fetching data...');
     
     // Fetch initial data
     Data.fetchVersion();
-    Data.fetch();
+    await Data.fetch();
     
-    // Set up refresh timer
-    State.refreshTimer = setInterval(() => Data.fetch(), State.REFRESH_INTERVAL);
+    // Start refresh timer
+    State.refreshTimer = setInterval(() => {
+        console.log('[Main] Auto-refresh, activeView:', State.activeView);
+        Data.fetch();
+    }, State.REFRESH_INTERVAL);
     
     console.log('[Main] Initialization complete');
 });
 
-/**
- * Set up all click event listeners for navigation
- */
-function setupNavigationListeners() {
-    // Logo click -> Dashboard
+function setupEventListeners() {
+    console.log('[Main] Setting up event listeners...');
+    
+    // Logo
     const logo = document.getElementById('logo-link');
     if (logo) {
-        logo.addEventListener('click', (e) => {
+        logo.style.cursor = 'pointer';
+        logo.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            console.log('[Click] Logo clicked');
             Navigation.showDashboard();
         });
     }
     
-    // Dashboard nav item
+    // Dashboard nav
     const navDashboard = document.getElementById('nav-dashboard');
     if (navDashboard) {
-        navDashboard.addEventListener('click', (e) => {
+        navDashboard.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            console.log('[Click] Dashboard nav clicked, current activeView:', State.activeView);
             Navigation.showDashboard();
         });
     }
     
-    // Servers nav item
+    // Servers nav
     const navServers = document.getElementById('nav-servers');
     if (navServers) {
-        navServers.addEventListener('click', (e) => {
+        navServers.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            console.log('[Click] Servers nav clicked');
             Navigation.showDashboard();
         });
     }
     
-    // ZFS nav item
+    // ZFS nav
     const navZfs = document.getElementById('nav-zfs');
     if (navZfs) {
-        navZfs.addEventListener('click', (e) => {
+        navZfs.addEventListener('click', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            console.log('[Click] ZFS nav clicked');
             Navigation.showZFS();
         });
     }
@@ -69,9 +87,10 @@ function setupNavigationListeners() {
     // Sort button
     const sortBtn = document.getElementById('server-sort-btn');
     if (sortBtn) {
-        sortBtn.addEventListener('click', (e) => {
+        sortBtn.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
+            console.log('[Click] Sort button clicked');
             State.toggleSortOrder();
         });
     }
@@ -79,7 +98,8 @@ function setupNavigationListeners() {
     // Refresh button
     const refreshBtn = document.getElementById('btn-refresh');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => {
+        refreshBtn.addEventListener('click', function(e) {
+            console.log('[Click] Refresh clicked');
             Data.fetch();
         });
     }
@@ -87,40 +107,45 @@ function setupNavigationListeners() {
     // Back button
     const backBtn = document.getElementById('btn-back');
     if (backBtn) {
-        backBtn.addEventListener('click', () => {
+        backBtn.addEventListener('click', function(e) {
+            console.log('[Click] Back clicked');
             Navigation.goBack();
         });
     }
     
-    // Breadcrumb home link
+    // Breadcrumb
     const breadcrumbHome = document.getElementById('breadcrumb-home');
     if (breadcrumbHome) {
-        breadcrumbHome.addEventListener('click', (e) => {
+        breadcrumbHome.addEventListener('click', function(e) {
             e.preventDefault();
+            console.log('[Click] Breadcrumb home clicked');
             Navigation.showDashboard();
         });
     }
     
-    console.log('[Main] Navigation listeners set up');
+    console.log('[Main] Event listeners set up complete');
 }
 
-// Cleanup on page unload
+// Cleanup
 window.addEventListener('beforeunload', () => {
     if (State.refreshTimer) {
         clearInterval(State.refreshTimer);
     }
 });
 
-// Global functions for dynamically created elements (server list, etc.)
-window.navShowServer = function(index) {
-    Navigation.showServer(index);
+// Global navigation functions for dynamically created elements
+window.navShowServer = function(idx) {
+    console.log('[Global] navShowServer:', idx);
+    Navigation.showServer(idx);
 };
 
 window.navShowDriveDetails = function(serverIdx, driveIdx) {
+    console.log('[Global] navShowDriveDetails:', serverIdx, driveIdx);
     Navigation.showDriveDetails(serverIdx, driveIdx);
 };
 
 window.navShowZFSPool = function(hostname, poolName) {
+    console.log('[Global] navShowZFSPool:', hostname, poolName);
     if (typeof ZFS !== 'undefined' && ZFS.showPoolDetail) {
         ZFS.showPoolDetail(hostname, poolName);
     }
