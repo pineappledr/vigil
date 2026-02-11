@@ -11,42 +11,35 @@ const State = {
     currentUser: null,
     mustChangePassword: false,
 
-    // ZFS State
     zfsPools: [],
     zfsDriveMap: {},
-    activeView: 'drives',   // 'drives' | 'zfs' | 'settings'
-    
-    // Sorting State (persisted to localStorage)
-    serverSortOrder: 'asc',  // 'asc' (A-Z) or 'desc' (Z-A)
+    activeView: 'drives',
+    serverSortOrder: 'asc',
 
     API_URL: '/api/history',
     REFRESH_INTERVAL: 5000,
-    
-    // Offline threshold in minutes
     OFFLINE_THRESHOLD_MINUTES: 5,
 
     init() {
-        // Load sort preference from localStorage
         const savedSort = localStorage.getItem('vigil_server_sort');
         if (savedSort === 'asc' || savedSort === 'desc') {
             this.serverSortOrder = savedSort;
         }
-        console.log('[State] Initialized, sort order:', this.serverSortOrder);
+        console.log('[State] Initialized');
     },
 
     toggleSortOrder() {
         this.serverSortOrder = this.serverSortOrder === 'asc' ? 'desc' : 'asc';
         localStorage.setItem('vigil_server_sort', this.serverSortOrder);
-        console.log('[State] Sort order changed to:', this.serverSortOrder);
+        console.log('[State] Sort:', this.serverSortOrder);
         
-        // Update sidebar (includes ZFS pools)
         if (typeof Data !== 'undefined') {
             Data.updateSidebar();
-        }
-        
-        // Re-render current view if on dashboard
-        if (this.activeView === 'drives' && this.activeServerIndex === null && this.activeFilter === null) {
-            Renderer.dashboard(this.data);
+            
+            // Re-render dashboard if showing it
+            if (this.activeView === 'drives' && this.activeServerIndex === null && !this.activeFilter) {
+                Renderer.dashboard(this.data);
+            }
         }
     },
 
@@ -56,12 +49,8 @@ const State = {
         return [...this.data].sort((a, b) => {
             const nameA = (a.hostname || '').toLowerCase();
             const nameB = (b.hostname || '').toLowerCase();
-            
-            if (this.serverSortOrder === 'asc') {
-                return nameA.localeCompare(nameB);
-            } else {
-                return nameB.localeCompare(nameA);
-            }
+            const cmp = nameA.localeCompare(nameB);
+            return this.serverSortOrder === 'asc' ? cmp : -cmp;
         });
     },
 
@@ -115,8 +104,7 @@ const State = {
         if (!server || !server.last_seen) return false;
         const lastSeen = new Date(server.last_seen);
         const now = new Date();
-        const diffMinutes = (now - lastSeen) / (1000 * 60);
-        return diffMinutes > this.OFFLINE_THRESHOLD_MINUTES;
+        return (now - lastSeen) / (1000 * 60) > this.OFFLINE_THRESHOLD_MINUTES;
     },
 
     getTimeSinceUpdate(server) {
@@ -124,8 +112,7 @@ const State = {
         const lastSeen = new Date(server.last_seen);
         const now = new Date();
         const diffMs = now - lastSeen;
-        const diffSeconds = Math.floor(diffMs / 1000);
-        const diffMinutes = Math.floor(diffSeconds / 60);
+        const diffMinutes = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMinutes / 60);
         const diffDays = Math.floor(diffHours / 24);
         
@@ -136,19 +123,12 @@ const State = {
     },
 
     getStats() {
-        let totalServers = this.data.length;
-        let totalDrives = 0;
-        let healthyDrives = 0;
-        let attentionDrives = 0;
-        let offlineServers = 0;
+        let totalDrives = 0, healthyDrives = 0, attentionDrives = 0, offlineServers = 0;
 
         this.data.forEach(server => {
             const drives = server.details?.drives || [];
             totalDrives += drives.length;
-            
-            if (this.isServerOffline(server)) {
-                offlineServers++;
-            }
+            if (this.isServerOffline(server)) offlineServers++;
             
             drives.forEach(drive => {
                 if (Utils.getHealthStatus(drive) === 'healthy') {
@@ -159,43 +139,26 @@ const State = {
             });
         });
 
-        return { totalServers, totalDrives, healthyDrives, attentionDrives, offlineServers };
+        return { totalServers: this.data.length, totalDrives, healthyDrives, attentionDrives, offlineServers };
     },
-
-    // ─── ZFS State Methods ───────────────────────────────────────────────────
 
     getZFSStats() {
         const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
-        
-        let totalPools = pools.length;
-        let healthyPools = 0;
-        let degradedPools = 0;
-        let faultedPools = 0;
-        let totalErrors = 0;
+        let healthyPools = 0, degradedPools = 0, faultedPools = 0, totalErrors = 0;
 
         pools.forEach(pool => {
             if (!pool) return;
             const state = (pool.status || pool.health || pool.state || '').toUpperCase();
             
-            if (state === 'ONLINE') {
-                healthyPools++;
-            } else if (state === 'DEGRADED') {
-                degradedPools++;
-            } else if (state === 'FAULTED' || state === 'UNAVAIL') {
-                faultedPools++;
-            }
+            if (state === 'ONLINE') healthyPools++;
+            else if (state === 'DEGRADED') degradedPools++;
+            else if (state === 'FAULTED' || state === 'UNAVAIL') faultedPools++;
 
             totalErrors += (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
-
-            const devices = Array.isArray(pool.devices) ? pool.devices : [];
-            devices.forEach(device => {
-                if (!device) return;
-                totalErrors += (device.read_errors || 0) + (device.write_errors || 0) + (device.checksum_errors || 0);
-            });
         });
 
         return { 
-            totalPools, 
+            totalPools: pools.length, 
             healthyPools, 
             degradedPools, 
             faultedPools,
@@ -206,41 +169,30 @@ const State = {
 
     getPoolsByHost() {
         const grouped = {};
-        const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
-        
-        pools.forEach(pool => {
+        (this.zfsPools || []).forEach(pool => {
             if (!pool) return;
             const host = pool.hostname || 'unknown';
-            if (!grouped[host]) {
-                grouped[host] = [];
-            }
+            if (!grouped[host]) grouped[host] = [];
             grouped[host].push(pool);
         });
-
         return grouped;
     },
 
     buildZFSDriveMap() {
         this.zfsDriveMap = {};
-        const pools = Array.isArray(this.zfsPools) ? this.zfsPools : [];
-        
-        pools.forEach(pool => {
+        (this.zfsPools || []).forEach(pool => {
             if (!pool) return;
-            
             const hostname = pool.hostname || '';
             const poolName = pool.name || pool.pool_name || 'unknown';
             const poolState = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
-            const devices = Array.isArray(pool.devices) ? pool.devices : [];
             
-            devices.forEach(device => {
+            (pool.devices || []).forEach(device => {
                 if (!device) return;
                 const serial = device.serial_number || device.serial;
                 if (!serial) return;
                 
-                const key = `${hostname}:${serial}`;
-                this.zfsDriveMap[key] = {
-                    poolName: poolName,
-                    poolState: poolState,
+                this.zfsDriveMap[`${hostname}:${serial}`] = {
+                    poolName, poolState,
                     vdev: device.vdev_parent || device.vdev || '',
                     deviceName: device.device_name || device.name || '',
                     readErrors: device.read_errors || 0,
@@ -252,8 +204,7 @@ const State = {
     },
 
     getZFSInfoForDrive(hostname, serial) {
-        const key = `${hostname}:${serial}`;
-        return this.zfsDriveMap[key] || null;
+        return this.zfsDriveMap[`${hostname}:${serial}`] || null;
     },
 
     hasZFSAlerts() {
@@ -261,8 +212,3 @@ const State = {
         return stats.attentionPools > 0 || stats.totalErrors > 0;
     }
 };
-
-// Initialize state when loaded
-document.addEventListener('DOMContentLoaded', () => {
-    State.init();
-});

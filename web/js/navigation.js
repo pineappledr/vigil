@@ -1,53 +1,51 @@
 /**
  * Vigil Dashboard - Navigation Controller
- * Handles all view transitions and state management
  */
 
 const Navigation = {
-    /**
-     * Show main dashboard with all servers
-     */
     showDashboard() {
-        console.log('[Nav] showDashboard called');
+        console.log('[Nav] showDashboard');
         
-        // Reset state
+        // Reset state completely
         State.activeServerIndex = null;
         State.activeServerHostname = null;
         State.activeFilter = null;
         State.activeView = 'drives';
         
-        // Update DOM
-        this._showView('dashboard-view');
+        // Show correct view
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        const settingsView = document.getElementById('settings-view');
+        if (settingsView) settingsView.classList.add('hidden');
+        
+        // Update header
         document.getElementById('page-title').textContent = 'Infrastructure Overview';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
         // Update nav highlighting
         this._clearNavSelection();
-        document.getElementById('nav-dashboard')?.classList.add('active');
+        const navDashboard = document.getElementById('nav-dashboard');
+        if (navDashboard) navDashboard.classList.add('active');
         
-        // Render
+        // Render dashboard
         Renderer.dashboard(State.data);
+        
+        // Update sidebar
+        Data.updateSidebar();
     },
 
-    /**
-     * Show individual server detail
-     * @param {number} sortedIndex - Index in sorted server list
-     */
     showServer(sortedIndex) {
-        console.log('[Nav] showServer called with index:', sortedIndex);
+        console.log('[Nav] showServer:', sortedIndex);
         
         const sortedData = State.getSortedData();
         const server = sortedData[sortedIndex];
         if (!server) {
-            console.error('[Nav] Server not found at index:', sortedIndex);
+            console.error('[Nav] No server at index:', sortedIndex);
             return;
         }
         
         const actualIndex = State.data.findIndex(s => s.hostname === server.hostname);
-        if (actualIndex === -1) {
-            console.error('[Nav] Could not find actual index for:', server.hostname);
-            return;
-        }
+        if (actualIndex === -1) return;
         
         // Update state
         State.activeServerIndex = actualIndex;
@@ -55,55 +53,48 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'drives';
         
-        // Update DOM
-        this._showView('dashboard-view');
+        // Show correct view
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        
+        // Update header
         document.getElementById('page-title').textContent = server.hostname;
         document.getElementById('crumb-server').textContent = server.hostname;
         document.getElementById('breadcrumbs').classList.remove('hidden');
         
         // Update nav highlighting
         this._clearNavSelection();
-        this._highlightServer(sortedIndex);
+        document.querySelectorAll('.server-nav-item').forEach((el, i) => {
+            el.classList.toggle('active', i === sortedIndex);
+        });
         
         // Render
         Renderer.serverDetail(server, actualIndex);
     },
 
-    /**
-     * Show drive details
-     * @param {number} serverIdx - Server index in State.data
-     * @param {number} driveIdx - Drive index in server's drives array
-     */
     showDriveDetails(serverIdx, driveIdx) {
-        console.log('[Nav] showDriveDetails called:', serverIdx, driveIdx);
+        console.log('[Nav] showDriveDetails:', serverIdx, driveIdx);
         
         const server = State.data[serverIdx];
         const drive = server?.details?.drives?.[driveIdx];
-        if (!drive) {
-            console.error('[Nav] Drive not found');
-            return;
-        }
+        if (!drive) return;
         
-        // Update state
         State.activeServerIndex = serverIdx;
         State.activeServerHostname = server.hostname;
         State.activeView = 'drives';
         
-        // Update DOM
-        this._showView('details-view');
+        document.getElementById('dashboard-view').classList.add('hidden');
+        document.getElementById('details-view').classList.remove('hidden');
+        
         document.getElementById('page-title').textContent = Utils.getDriveName(drive);
         document.getElementById('crumb-server').textContent = `${server.hostname} › ${Utils.getDriveName(drive)}`;
         document.getElementById('breadcrumbs').classList.remove('hidden');
         
-        // Render
         Renderer.driveDetails(serverIdx, driveIdx);
     },
 
-    /**
-     * Show ZFS pools view
-     */
     showZFS() {
-        console.log('[Nav] showZFS called');
+        console.log('[Nav] showZFS');
         
         // Update state
         State.activeServerIndex = null;
@@ -111,45 +102,46 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'zfs';
         
-        // Update DOM
-        this._showView('dashboard-view');
+        // Show correct view
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        
+        // Update header
         document.getElementById('page-title').textContent = 'ZFS Pools';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
         // Update nav highlighting
         this._clearNavSelection();
-        document.getElementById('nav-zfs')?.classList.add('active');
+        const navZfs = document.getElementById('nav-zfs');
+        if (navZfs) navZfs.classList.add('active');
         
-        // Render
+        // Render ZFS
         if (typeof ZFS !== 'undefined' && ZFS.render) {
             ZFS.render();
         }
+        
+        // Update sidebar
+        Data.updateSidebar();
     },
 
-    /**
-     * Show filtered drives view
-     * @param {string} filter - 'all', 'healthy', or 'attention'
-     */
     showFilter(filter) {
-        console.log('[Nav] showFilter called:', filter);
+        console.log('[Nav] showFilter:', filter);
         
-        // Update state
         State.activeServerIndex = null;
         State.activeServerHostname = null;
         State.activeFilter = filter;
         State.activeView = 'drives';
         
-        // Update DOM
-        this._showView('dashboard-view');
+        document.getElementById('dashboard-view').classList.remove('hidden');
+        document.getElementById('details-view').classList.add('hidden');
+        
         document.getElementById('page-title').textContent = 
             filter === 'attention' ? 'Drives Needing Attention' :
             filter === 'healthy' ? 'Healthy Drives' : 'All Drives';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
-        // Update nav highlighting
         this._clearNavSelection();
         
-        // Render
         const filterFn = filter === 'attention' 
             ? d => Utils.getHealthStatus(d) !== 'healthy'
             : filter === 'healthy'
@@ -159,27 +151,19 @@ const Navigation = {
         Renderer.filteredDrives(filterFn, filter);
     },
 
-    /**
-     * Show settings page
-     */
     showSettings() {
-        console.log('[Nav] showSettings called');
-        
         document.getElementById('dropdown-menu')?.classList.remove('show');
         State.activeView = 'settings';
         
-        const dashboardView = document.getElementById('dashboard-view');
-        const detailsView = document.getElementById('details-view');
-        
-        dashboardView.classList.add('hidden');
-        detailsView.classList.add('hidden');
+        document.getElementById('dashboard-view').classList.add('hidden');
+        document.getElementById('details-view').classList.add('hidden');
         
         let settingsView = document.getElementById('settings-view');
         if (!settingsView) {
             settingsView = document.createElement('div');
             settingsView.id = 'settings-view';
             settingsView.className = 'view settings-view';
-            dashboardView.parentNode.appendChild(settingsView);
+            document.getElementById('dashboard-view').parentNode.appendChild(settingsView);
         }
         
         settingsView.classList.remove('hidden');
@@ -189,9 +173,6 @@ const Navigation = {
         document.getElementById('breadcrumbs').classList.add('hidden');
     },
 
-    /**
-     * Go back to appropriate context
-     */
     goBack() {
         if (State.activeServerIndex !== null) {
             const sortedData = State.getSortedData();
@@ -206,29 +187,15 @@ const Navigation = {
         }
     },
 
-    // ─── Private Helpers ─────────────────────────────────────────────────────
-
-    _showView(viewId) {
-        document.getElementById('dashboard-view').classList.toggle('hidden', viewId !== 'dashboard-view');
-        document.getElementById('details-view').classList.toggle('hidden', viewId !== 'details-view');
-        document.getElementById('settings-view')?.classList.add('hidden');
-    },
-
     _clearNavSelection() {
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.server-nav-item').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.zfs-pool-nav-item').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.summary-card').forEach(el => el.classList.remove('active'));
-    },
-
-    _highlightServer(sortedIndex) {
-        document.querySelectorAll('.server-nav-item').forEach((el, i) => {
-            el.classList.toggle('active', i === sortedIndex);
-        });
     }
 };
 
-// Legacy function aliases for backwards compatibility
+// Legacy aliases
 function resetDashboard() { Navigation.showDashboard(); }
 function goBackToContext() { Navigation.goBack(); }
 function fetchData() { Data.fetch(); }

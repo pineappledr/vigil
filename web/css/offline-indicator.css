@@ -1,4 +1,4 @@
-/* ─── Nav Section Header with Sort Button ────────────────────────────────── */
+/* ─── Nav Section Header ────────────────────────────────────────────────── */
 
 .nav-section-header {
     display: flex;
@@ -34,82 +34,52 @@
     border-color: var(--accent);
 }
 
-.sort-btn:active {
-    transform: scale(0.95);
-}
+/* ─── Sidebar Header ─────────────────────────────────────────────────────── */
 
-.sort-btn .sort-icon {
-    font-size: 10px;
-    line-height: 1;
-}
-
-.sort-btn .sort-text {
-    font-size: 10px;
-}
-
-/* ─── ZFS Pool Navigation List ───────────────────────────────────────────── */
-
-.zfs-list-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px 8px 4px 16px;
-}
-
-.zfs-pool-nav-item {
+.sidebar-header {
+    height: 64px;
+    padding: 0 16px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: 6px;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
     cursor: pointer;
-    transition: background 0.15s ease;
-    font-size: 13px;
 }
 
-.zfs-pool-nav-item:hover {
-    background: var(--bg-hover);
+.logo-img {
+    height: 40px;
+    width: auto;
+    margin-right: 12px;
 }
 
-.zfs-pool-nav-item.active {
-    background: var(--accent-bg);
+.logo-text {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    font-size: 28px;
+    color: #3b82f6;
+    text-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+    letter-spacing: -1px;
 }
 
-.zfs-pool-nav-item .status-indicator {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--success);
-    flex-shrink: 0;
-}
+/* ─── Pool Host Label ────────────────────────────────────────────────────── */
 
-.zfs-pool-nav-item.warning .status-indicator {
-    background: var(--warning);
-}
-
-.zfs-pool-nav-item.critical .status-indicator {
-    background: var(--danger);
-}
-
-.zfs-pool-nav-item .pool-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-primary);
-    font-weight: 500;
-}
-
-.zfs-pool-nav-item .pool-host {
+.pool-host-label {
     font-size: 10px;
     color: var(--text-tertiary);
+    margin-left: auto;
+    padding-left: 8px;
+    max-width: 60px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 60px;
 }
 
-/* ─── Offline Server Styles ─────────────────────────────────────────────── */
+/* ─── Offline Styles ─────────────────────────────────────────────────────── */
 
 .status-indicator.offline {
     background: var(--danger);
@@ -117,14 +87,8 @@
 }
 
 @keyframes pulse-offline {
-    0%, 100% { 
-        opacity: 1; 
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-    }
-    50% { 
-        opacity: 0.6; 
-        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
-    }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 .server-nav-item.server-offline {
@@ -135,10 +99,6 @@
     opacity: 1;
 }
 
-.server-nav-item.server-offline .server-name {
-    color: var(--text-secondary);
-}
-
 .offline-badge {
     font-size: 9px;
     font-weight: 600;
@@ -147,8 +107,6 @@
     background: var(--danger);
     color: white;
     margin-left: auto;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
 
 .server-nav-item {
@@ -164,14 +122,11 @@
     white-space: nowrap;
 }
 
-/* ─── ZFS Clickable Device Styles ─────────────────────────────────────── */
+/* ─── ZFS Clickable Device ───────────────────────────────────────────────── */
 
 .zfs-device-serial.clickable {
     cursor: pointer;
     color: var(--accent);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
     padding: 2px 6px;
     border-radius: 4px;
     transition: all 0.2s ease;
@@ -179,16 +134,5 @@
 
 .zfs-device-serial.clickable:hover {
     background: var(--bg-tertiary);
-    color: var(--accent-light, #60a5fa);
     text-decoration: underline;
-}
-
-.zfs-device-serial .link-icon {
-    width: 12px;
-    height: 12px;
-    opacity: 0.7;
-}
-
-.zfs-device-serial.clickable:hover .link-icon {
-    opacity: 1;
 }
