@@ -4,11 +4,15 @@
 
 const Navigation = {
     showDashboard() {
-        // Reset all state - important to clear ZFS view
+        console.log('showDashboard called, current activeView:', State.activeView);
+        
+        // CRITICAL: Reset ALL state before anything else
         State.activeServerIndex = null;
         State.activeServerHostname = null;
         State.activeFilter = null;
-        State.activeView = 'drives';  // Reset from 'zfs' to 'drives'
+        State.activeView = 'drives';  // MUST reset from 'zfs' to 'drives'
+        
+        console.log('State after reset, activeView:', State.activeView);
         
         // Show dashboard view, hide others
         document.getElementById('dashboard-view').classList.remove('hidden');
@@ -21,12 +25,13 @@ const Navigation = {
         
         // Clear all nav selections and mark Dashboard as active
         this.clearNavSelection();
-        document.querySelector('.nav-item[onclick*="resetDashboard"]')?.classList.add('active');
+        document.querySelector('.nav-section .nav-item[onclick*="resetDashboard"]')?.classList.add('active');
         
-        // Re-render the dashboard with servers (not ZFS)
+        // IMPORTANT: Directly render dashboard, don't call updateViews()
+        // This prevents the ZFS check in updateViews from interfering
         Renderer.dashboard(State.data);
         
-        // Update sidebar to clear any active server selection
+        // Update sidebar
         Data.updateSidebar();
     },
 
@@ -38,11 +43,11 @@ const Navigation = {
         const actualIndex = State.data.findIndex(s => s.hostname === server.hostname);
         if (actualIndex === -1) return;
         
-        // Update state - reset from ZFS view
+        // Reset state - exit from ZFS view
         State.activeServerIndex = actualIndex;
         State.activeServerHostname = server.hostname;
         State.activeFilter = null;
-        State.activeView = 'drives';
+        State.activeView = 'drives';  // Exit ZFS view
         
         // Update UI
         document.getElementById('dashboard-view').classList.remove('hidden');
@@ -60,7 +65,7 @@ const Navigation = {
             el.classList.toggle('active', i === sortedIndex);
         });
         
-        // Render server detail directly (not through updateViews to avoid ZFS check)
+        // Directly render server detail
         Renderer.serverDetail(server, actualIndex);
     },
 
@@ -87,6 +92,8 @@ const Navigation = {
     showSettings() {
         document.getElementById('dropdown-menu')?.classList.remove('show');
         
+        State.activeView = 'settings';
+        
         const dashboardView = document.getElementById('dashboard-view');
         const detailsView = document.getElementById('details-view');
         
@@ -109,7 +116,10 @@ const Navigation = {
     },
 
     showFilter(filter) {
-        State.setFilter(filter);
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = filter;
+        State.activeView = 'drives';  // Exit ZFS view
         
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
@@ -122,11 +132,23 @@ const Navigation = {
         
         this.clearNavSelection();
         
-        Data.updateViews();
+        // Render filtered drives directly
+        if (filter === 'attention') {
+            Renderer.filteredDrives(d => Utils.getHealthStatus(d) !== 'healthy', 'attention');
+        } else if (filter === 'healthy') {
+            Renderer.filteredDrives(d => Utils.getHealthStatus(d) === 'healthy', 'healthy');
+        } else {
+            Renderer.filteredDrives(() => true, 'all');
+        }
     },
 
     showZFS() {
-        State.setView('zfs');
+        console.log('showZFS called');
+        
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = null;
+        State.activeView = 'zfs';  // Set to ZFS view
         
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
