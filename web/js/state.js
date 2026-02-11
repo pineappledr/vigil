@@ -31,20 +31,22 @@ const State = {
         if (savedSort === 'asc' || savedSort === 'desc') {
             this.serverSortOrder = savedSort;
         }
+        console.log('[State] Initialized, sort order:', this.serverSortOrder);
     },
 
     toggleSortOrder() {
         this.serverSortOrder = this.serverSortOrder === 'asc' ? 'desc' : 'asc';
         localStorage.setItem('vigil_server_sort', this.serverSortOrder);
+        console.log('[State] Sort order changed to:', this.serverSortOrder);
         
-        // Update UI without going through updateViews (which checks activeView)
+        // Update sidebar (includes ZFS pools)
         if (typeof Data !== 'undefined') {
             Data.updateSidebar();
-            
-            // Only re-render if we're on the dashboard (not ZFS, not server detail, not filter)
-            if (this.activeView === 'drives' && this.activeServerIndex === null && this.activeFilter === null) {
-                Renderer.dashboard(this.data);
-            }
+        }
+        
+        // Re-render current view if on dashboard
+        if (this.activeView === 'drives' && this.activeServerIndex === null && this.activeFilter === null) {
+            Renderer.dashboard(this.data);
         }
     },
 
@@ -78,17 +80,14 @@ const State = {
     },
 
     setServer(index) {
-        // Get sorted data to find correct server
         const sortedData = this.getSortedData();
         const server = sortedData[index];
-        
-        // Find the actual index in unsorted data
         const actualIndex = this.data.findIndex(s => s.hostname === server?.hostname);
         
         this.activeServerIndex = actualIndex >= 0 ? actualIndex : index;
         this.activeServerHostname = server?.hostname || this.data[index]?.hostname || null;
         this.activeFilter = null;
-        this.activeView = 'drives';  // Always reset to drives view
+        this.activeView = 'drives';
     },
 
     setView(view) {
@@ -112,9 +111,6 @@ const State = {
         }
     },
 
-    /**
-     * Check if a server is offline based on last_seen timestamp
-     */
     isServerOffline(server) {
         if (!server || !server.last_seen) return false;
         const lastSeen = new Date(server.last_seen);
@@ -123,9 +119,6 @@ const State = {
         return diffMinutes > this.OFFLINE_THRESHOLD_MINUTES;
     },
 
-    /**
-     * Get time since last update for a server
-     */
     getTimeSinceUpdate(server) {
         if (!server || !server.last_seen) return 'Unknown';
         const lastSeen = new Date(server.last_seen);
@@ -268,3 +261,8 @@ const State = {
         return stats.attentionPools > 0 || stats.totalErrors > 0;
     }
 };
+
+// Initialize state when loaded
+document.addEventListener('DOMContentLoaded', () => {
+    State.init();
+});
