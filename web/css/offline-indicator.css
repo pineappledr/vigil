@@ -1,40 +1,13 @@
-/* ─── Servers Section Header ─────────────────────────────────────────────── */
+/* ─── Servers Header Row ─────────────────────────────────────────────────── */
 
-.servers-section {
-    margin-top: 8px;
-}
-
-.servers-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 16px 8px 16px;
-    margin-bottom: 4px;
-}
-
-.servers-header .nav-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-tertiary);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.servers-controls {
+.servers-header-row {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.server-count-badge {
-    background: var(--accent);
-    color: white;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 12px;
-    min-width: 22px;
-    text-align: center;
+.servers-header-row .nav-item {
+    flex: 1;
 }
 
 .sort-btn {
@@ -46,11 +19,12 @@
     color: var(--text-secondary);
     font-size: 10px;
     font-weight: 500;
-    padding: 3px 8px;
+    padding: 4px 8px;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: inherit;
+    margin-right: 12px;
 }
 
 .sort-btn:hover {
@@ -64,7 +38,7 @@
 }
 
 .sort-btn .sort-icon {
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1;
 }
 
