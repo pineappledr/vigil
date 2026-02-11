@@ -4,20 +4,30 @@
 
 const Navigation = {
     showDashboard() {
-        // Reset all state
-        State.reset();
+        // Reset all state - important to clear ZFS view
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = null;
+        State.activeView = 'drives';  // Reset from 'zfs' to 'drives'
         
+        // Show dashboard view, hide others
         document.getElementById('dashboard-view').classList.remove('hidden');
         document.getElementById('details-view').classList.add('hidden');
         document.getElementById('settings-view')?.classList.add('hidden');
+        
+        // Update header
         document.getElementById('page-title').textContent = 'Infrastructure Overview';
         document.getElementById('breadcrumbs').classList.add('hidden');
         
+        // Clear all nav selections and mark Dashboard as active
         this.clearNavSelection();
         document.querySelector('.nav-item[onclick*="resetDashboard"]')?.classList.add('active');
         
-        // Render dashboard with sorted servers
+        // Re-render the dashboard with servers (not ZFS)
         Renderer.dashboard(State.data);
+        
+        // Update sidebar to clear any active server selection
+        Data.updateSidebar();
     },
 
     showServer(sortedIndex) {
@@ -28,7 +38,7 @@ const Navigation = {
         const actualIndex = State.data.findIndex(s => s.hostname === server.hostname);
         if (actualIndex === -1) return;
         
-        // Update state
+        // Update state - reset from ZFS view
         State.activeServerIndex = actualIndex;
         State.activeServerHostname = server.hostname;
         State.activeFilter = null;

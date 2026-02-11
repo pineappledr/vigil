@@ -40,7 +40,7 @@
                 <div class="nav-section">
                     <span class="nav-label">SERVERS</span>
                     <div class="servers-header-row">
-                        <a href="#" class="nav-item" onclick="resetDashboard(); return false;">
+                        <div class="nav-item-static">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="2" width="20" height="8" rx="2"/>
                                 <rect x="2" y="14" width="20" height="8" rx="2"/>
@@ -49,7 +49,7 @@
                             </svg>
                             Servers
                             <span id="server-count" class="count-badge">0</span>
-                        </a>
+                        </div>
                         <button id="server-sort-btn" class="sort-btn" onclick="event.stopPropagation(); toggleServerSort()" title="Sort servers">
                             <span class="sort-icon">↑</span>
                             <span class="sort-text">A-Z</span>

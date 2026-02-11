@@ -4,10 +4,24 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    padding: 0 12px;
 }
 
-.servers-header-row .nav-item {
+.nav-item-static {
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.nav-item-static svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
 }
 
 .sort-btn {
@@ -24,7 +38,6 @@
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: inherit;
-    margin-right: 12px;
 }
 
 .sort-btn:hover {
