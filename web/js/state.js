@@ -36,10 +36,15 @@ const State = {
     toggleSortOrder() {
         this.serverSortOrder = this.serverSortOrder === 'asc' ? 'desc' : 'asc';
         localStorage.setItem('vigil_server_sort', this.serverSortOrder);
-        // Trigger UI update
+        
+        // Update UI without going through updateViews (which checks activeView)
         if (typeof Data !== 'undefined') {
             Data.updateSidebar();
-            Data.updateViews();
+            
+            // Only re-render if we're on the dashboard (not ZFS, not server detail, not filter)
+            if (this.activeView === 'drives' && this.activeServerIndex === null && this.activeFilter === null) {
+                Renderer.dashboard(this.data);
+            }
         }
     },
 

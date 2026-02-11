@@ -1,14 +1,15 @@
-/* ─── Servers Header Row ─────────────────────────────────────────────────── */
+/* ─── Nav Section Header with Sort Button ────────────────────────────────── */
 
-.servers-header-row {
+.nav-section-header {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 0 12px 0 0;
+    justify-content: space-between;
+    padding: 8px 16px 4px 16px;
 }
 
-.servers-header-row .nav-item {
-    flex: 1;
+.nav-section-header .nav-label {
+    margin: 0;
+    padding: 0;
 }
 
 .sort-btn {
@@ -20,12 +21,11 @@
     color: var(--text-secondary);
     font-size: 10px;
     font-weight: 500;
-    padding: 4px 8px;
+    padding: 3px 6px;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: inherit;
-    flex-shrink: 0;
 }
 
 .sort-btn:hover {
@@ -39,7 +39,7 @@
 }
 
 .sort-btn .sort-icon {
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1;
 }
 
