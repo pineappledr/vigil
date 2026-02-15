@@ -9,61 +9,67 @@ import (
 // ─── Pool CRUD Operations ────────────────────────────────────────────────────
 
 // UpsertZFSPool inserts or updates a ZFS pool record
+// Uses SELECT + INSERT/UPDATE pattern for SQLite compatibility
 func UpsertZFSPool(pool *ZFSPool) (int64, error) {
 	now := NowString()
 
-	result, err := DB.Exec(`
-		INSERT INTO zfs_pools (
-			hostname, pool_name, pool_guid, status, health,
-			size_bytes, allocated_bytes, free_bytes,
-			fragmentation, capacity_pct, dedup_ratio, altroot,
-			read_errors, write_errors, checksum_errors,
-			scan_function, scan_state, scan_progress, last_scan_time,
-			last_seen, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(hostname, pool_name) DO UPDATE SET
-			pool_guid = excluded.pool_guid,
-			status = excluded.status,
-			health = excluded.health,
-			size_bytes = excluded.size_bytes,
-			allocated_bytes = excluded.allocated_bytes,
-			free_bytes = excluded.free_bytes,
-			fragmentation = excluded.fragmentation,
-			capacity_pct = excluded.capacity_pct,
-			dedup_ratio = excluded.dedup_ratio,
-			altroot = excluded.altroot,
-			read_errors = excluded.read_errors,
-			write_errors = excluded.write_errors,
-			checksum_errors = excluded.checksum_errors,
-			scan_function = excluded.scan_function,
-			scan_state = excluded.scan_state,
-			scan_progress = excluded.scan_progress,
-			last_scan_time = excluded.last_scan_time,
-			last_seen = excluded.last_seen
+	// Check if pool exists
+	existingID, err := GetID(
+		"SELECT id FROM zfs_pools WHERE hostname = ? AND pool_name = ?",
+		pool.Hostname, pool.PoolName,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("check pool exists: %w", err)
+	}
+
+	if existingID == 0 {
+		// Insert new pool
+		result, err := DB.Exec(`
+			INSERT INTO zfs_pools (
+				hostname, pool_name, pool_guid, status, health,
+				size_bytes, allocated_bytes, free_bytes,
+				fragmentation, capacity_pct, dedup_ratio, altroot,
+				read_errors, write_errors, checksum_errors,
+				scan_function, scan_state, scan_progress, last_scan_time,
+				last_seen, created_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			pool.Hostname, pool.PoolName, pool.PoolGUID, pool.Status, pool.Health,
+			pool.SizeBytes, pool.AllocatedBytes, pool.FreeBytes,
+			pool.Fragmentation, pool.CapacityPct, pool.DedupRatio, pool.Altroot,
+			pool.ReadErrors, pool.WriteErrors, pool.ChecksumErrors,
+			pool.ScanFunction, pool.ScanState, pool.ScanProgress, NullTimeString(pool.LastScanTime),
+			now, now,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("insert ZFS pool: %w", err)
+		}
+		return result.LastInsertId()
+	}
+
+	// Update existing pool
+	_, err = DB.Exec(`
+		UPDATE zfs_pools SET
+			pool_guid = ?, status = ?, health = ?,
+			size_bytes = ?, allocated_bytes = ?, free_bytes = ?,
+			fragmentation = ?, capacity_pct = ?, dedup_ratio = ?, altroot = ?,
+			read_errors = ?, write_errors = ?, checksum_errors = ?,
+			scan_function = ?, scan_state = ?, scan_progress = ?, last_scan_time = ?,
+			last_seen = ?
+		WHERE id = ?
 	`,
-		pool.Hostname, pool.PoolName, pool.PoolGUID, pool.Status, pool.Health,
+		pool.PoolGUID, pool.Status, pool.Health,
 		pool.SizeBytes, pool.AllocatedBytes, pool.FreeBytes,
 		pool.Fragmentation, pool.CapacityPct, pool.DedupRatio, pool.Altroot,
 		pool.ReadErrors, pool.WriteErrors, pool.ChecksumErrors,
 		pool.ScanFunction, pool.ScanState, pool.ScanProgress, NullTimeString(pool.LastScanTime),
-		now, now,
+		now, existingID,
 	)
-
 	if err != nil {
-		return 0, fmt.Errorf("upsert ZFS pool: %w", err)
+		return 0, fmt.Errorf("update ZFS pool: %w", err)
 	}
 
-	// Get pool ID (either inserted or existing)
-	id, err := result.LastInsertId()
-	if err != nil || id == 0 {
-		id, err = GetID("SELECT id FROM zfs_pools WHERE hostname = ? AND pool_name = ?",
-			pool.Hostname, pool.PoolName)
-		if err != nil {
-			return 0, fmt.Errorf("get pool ID: %w", err)
-		}
-	}
-
-	return id, nil
+	return existingID, nil
 }
 
 // GetZFSPool retrieves a single ZFS pool by hostname and name

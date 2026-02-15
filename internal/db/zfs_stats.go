@@ -42,7 +42,43 @@ func GetZFSPoolSummary(hostname string) (*ZFSPoolSummary, error) {
 	return summary, nil
 }
 
-// GetZFSGlobalStats returns system-wide ZFS statistics
+// GetGlobalZFSSummary returns system-wide ZFS summary (all hosts combined)
+// This is the function called by the handler
+func GetGlobalZFSSummary() (*ZFSPoolSummary, error) {
+	summary := &ZFSPoolSummary{Hostname: "all"}
+
+	err := DB.QueryRow(`
+		SELECT 
+			COUNT(*) as total_pools,
+			SUM(CASE WHEN health = 'ONLINE' THEN 1 ELSE 0 END) as healthy,
+			SUM(CASE WHEN health = 'DEGRADED' THEN 1 ELSE 0 END) as degraded,
+			SUM(CASE WHEN health = 'FAULTED' THEN 1 ELSE 0 END) as faulted,
+			COALESCE(SUM(size_bytes), 0) as total_size,
+			COALESCE(SUM(allocated_bytes), 0) as total_used,
+			COALESCE(SUM(free_bytes), 0) as total_free,
+			COALESCE(SUM(read_errors + write_errors + checksum_errors), 0) as total_errors,
+			SUM(CASE WHEN scan_state = 'scanning' THEN 1 ELSE 0 END) as active_scrubs
+		FROM zfs_pools
+	`).Scan(
+		&summary.TotalPools,
+		&summary.HealthyPools,
+		&summary.DegradedPools,
+		&summary.FaultedPools,
+		&summary.TotalSizeBytes,
+		&summary.TotalUsedBytes,
+		&summary.TotalFreeBytes,
+		&summary.TotalErrors,
+		&summary.ActiveScrubs,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("get global ZFS summary: %w", err)
+	}
+
+	return summary, nil
+}
+
+// GetZFSGlobalStats returns system-wide ZFS statistics (alternative format)
 func GetZFSGlobalStats() (*ZFSGlobalStats, error) {
 	stats := &ZFSGlobalStats{}
 

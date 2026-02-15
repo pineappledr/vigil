@@ -10,7 +10,7 @@ import (
 
 // InsertZFSScrubHistory adds a new scrub/resilver history record
 func InsertZFSScrubHistory(record *ZFSScrubHistory) (int64, error) {
-	// Validate start_time - use current time if not set (NOT NULL constraint)
+	// CRITICAL: Validate start_time - use current time if not set (NOT NULL constraint)
 	startTime := record.StartTime
 	if startTime.IsZero() {
 		startTime = time.Now()
@@ -27,7 +27,7 @@ func InsertZFSScrubHistory(record *ZFSScrubHistory) (int64, error) {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		record.PoolID, record.Hostname, record.PoolName, record.ScanType, record.State,
-		TimeString(startTime), NullTimeString(record.EndTime), record.DurationSecs,
+		startTime.Format(timeFormat), NullTimeString(record.EndTime), record.DurationSecs,
 		record.DataExamined, record.DataTotal, record.ErrorsFound,
 		record.BytesRepaired, record.BlocksRepaired,
 		record.ProgressPct, record.RateBytesPerSec, record.TimeRemaining,
@@ -113,7 +113,7 @@ func ScrubRecordExists(poolID int64, startTime time.Time) (bool, error) {
 
 	return ExistsQuery(
 		"SELECT 1 FROM zfs_scrub_history WHERE pool_id = ? AND start_time = ?",
-		poolID, TimeString(startTime),
+		poolID, startTime.Format(timeFormat),
 	)
 }
 
