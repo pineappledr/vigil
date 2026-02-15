@@ -491,12 +491,16 @@ const ZFS = {
     },
 
     getDeviceStats(pool) {
-        const devices = pool.devices || [];
+        const deviceCount = pool.device_count !== undefined ? pool.device_count : (pool.devices || []).length;
+        
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
-        devices.forEach(d => {
+        
+        // Add device errors if devices array is present
+        (pool.devices || []).forEach(d => {
             errors += (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0);
         });
-        return { total: devices.length, errors };
+        
+        return { total: deviceCount, errors };
     },
 
     formatStorageSize(size) {

@@ -9,6 +9,14 @@ import (
 	"vigil/internal/db"
 )
 
+// ─── Response Types ─────────────────────────────────────────────────────────
+
+// ZFSPoolResponse extends ZFSPool with device count for list views
+type ZFSPoolResponse struct {
+	db.ZFSPool
+	DeviceCount int `json:"device_count"`
+}
+
 // ─── ZFS Pool Endpoints ──────────────────────────────────────────────────────
 
 // ZFSPools returns all ZFS pools or pools for a specific hostname
@@ -36,7 +44,15 @@ func ZFSPools(w http.ResponseWriter, r *http.Request) {
 		pools = []db.ZFSPool{}
 	}
 
-	JSONResponse(w, pools)
+	// Add device count to each pool
+	response := make([]ZFSPoolResponse, len(pools))
+	for i, pool := range pools {
+		response[i].ZFSPool = pool
+		count, _ := db.CountZFSDevices(pool.ID)
+		response[i].DeviceCount = count
+	}
+
+	JSONResponse(w, response)
 }
 
 // ZFSPool returns a single ZFS pool with its devices
