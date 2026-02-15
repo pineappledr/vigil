@@ -1,144 +1,242 @@
-/* ZFS Modal Improvements - Add to your CSS file */
+/* ============================================
+   USER MENU & DROPDOWN
+   ============================================ */
 
-/* Full width detail item */
-.zfs-detail-item.full-width {
-    grid-column: 1 / -1;
-}
+.user-dropdown { position: relative; }
 
-/* Topology value styling */
-.topology-value {
-    font-family: 'Monaco', 'Consolas', monospace;
-    background: rgba(0, 255, 170, 0.1);
-    padding: 4px 8px;
-    border-radius: 4px;
-    color: var(--accent-color, #00ffaa);
-}
-
-/* Detail sections */
-.zfs-detail-section {
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.zfs-detail-section h4 {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.7);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Errors grid */
-.errors-grid {
-    grid-template-columns: repeat(3, 1fr) !important;
-}
-
-/* Device groups */
-.zfs-device-group {
-    margin-bottom: 8px;
-}
-
-.zfs-device-children {
-    margin-left: 20px;
-    border-left: 2px solid rgba(255, 255, 255, 0.1);
-    padding-left: 12px;
-}
-
-.zfs-device-item.child {
-    background: rgba(0, 0, 0, 0.2);
-}
-
-.zfs-device-indent {
-    color: rgba(255, 255, 255, 0.4);
-    margin-right: 8px;
-    font-family: monospace;
-}
-
-/* Devices hint */
-.zfs-devices-hint {
-    margin-top: 16px;
+.user-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.5);
-    text-align: center;
-}
-
-/* Scrub history improvements */
-.zfs-scrub-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
 }
 
-.zfs-scrub-item.has-errors {
-    border-left: 3px solid var(--danger-color, #ff4444);
+.user-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
 }
 
-.zfs-scrub-date {
-    font-weight: 500;
+.user-btn svg { width: 18px; height: 18px; }
+.user-btn .chevron { width: 14px; height: 14px; color: var(--text-muted); }
+
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 160px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all var(--transition-fast);
+    z-index: 1000;
 }
 
-.zfs-scrub-details {
+.dropdown-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-menu button {
     display: flex;
-    gap: 16px;
     align-items: center;
-    color: rgba(255, 255, 255, 0.7);
+    gap: 10px;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
 }
 
-.zfs-scrub-duration {
-    font-family: monospace;
-}
+.dropdown-menu button:hover { background: var(--bg-hover); }
+.dropdown-menu button:first-child { border-radius: 8px 8px 0 0; }
+.dropdown-menu button:last-child { border-radius: 0 0 8px 8px; }
+.dropdown-menu button svg { width: 16px; height: 16px; color: var(--text-muted); }
 
-.zfs-scrub-errors {
-    padding: 2px 8px;
-    background: rgba(0, 255, 170, 0.2);
-    border-radius: 12px;
-    font-size: 12px;
-}
+/* ============================================
+   MODALS
+   ============================================ */
 
-.zfs-scrub-errors.error-text {
-    background: rgba(255, 68, 68, 0.2);
-    color: var(--danger-color, #ff4444);
-}
-
-/* Loading spinner */
-.loading-spinner {
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px;
-    color: rgba(255, 255, 255, 0.6);
+    z-index: 2000;
+    padding: 20px;
 }
 
-.spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: var(--accent-color, #00ffaa);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 12px;
+.modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--shadow-lg);
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
 }
 
-/* Device type badge */
-.zfs-device-type {
-    font-size: 11px;
-    padding: 2px 6px;
-    background: rgba(100, 100, 255, 0.2);
-    color: #aaaaff;
-    border-radius: 4px;
-    text-transform: uppercase;
+.modal-header h3 { font-size: 1.125rem; font-weight: 600; }
+
+.modal-close {
+    padding: 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.modal-close svg { width: 20px; height: 20px; }
+
+.modal-body { padding: 24px; }
+
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.modal-message {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* ============================================
+   FORMS
+   ============================================ */
+
+.form-group { margin-bottom: 16px; }
+
+.form-group label {
+    display: block;
+    font-size: 0.875rem;
     font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
 }
+
+.form-input {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.form-input::placeholder { color: var(--text-muted); }
+
+.form-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+.form-error {
+    color: var(--danger);
+    font-size: 0.875rem;
+    margin-top: 8px;
+}
+
+.alias-drive-info {
+    background: var(--bg-elevated);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+}
+
+.alias-drive-info div { margin-bottom: 4px; }
+.alias-drive-info div:last-child { margin-bottom: 0; }
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+
+.btn {
+    padding: 10px 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-primary {
+    background: var(--accent-gradient);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-secondary {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover { background: var(--bg-hover); }
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover { background: #dc2626; }
