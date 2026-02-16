@@ -9,17 +9,15 @@ import (
 	"vigil/internal/db"
 )
 
-// ─── Response Types ─────────────────────────────────────────────────────────
-
-// ZFSPoolResponse extends ZFSPool with device count for list views
-type ZFSPoolResponse struct {
+// ZFSPoolWithCount extends ZFSPool with device count for list views
+type ZFSPoolWithCount struct {
 	db.ZFSPool
 	DeviceCount int `json:"device_count"`
 }
 
 // ─── ZFS Pool Endpoints ──────────────────────────────────────────────────────
 
-// ZFSPools returns all ZFS pools or pools for a specific hostname
+// ZFSPools returns all ZFS pools with device counts
 // GET /api/zfs/pools
 // GET /api/zfs/pools?hostname=server1
 func ZFSPools(w http.ResponseWriter, r *http.Request) {
@@ -44,11 +42,16 @@ func ZFSPools(w http.ResponseWriter, r *http.Request) {
 		pools = []db.ZFSPool{}
 	}
 
-	// Add device count to each pool
-	response := make([]ZFSPoolResponse, len(pools))
+	// Add device count for each pool (deduplicated by position)
+	response := make([]ZFSPoolWithCount, len(pools))
 	for i, pool := range pools {
 		response[i].ZFSPool = pool
-		count, _ := db.CountZFSDevices(pool.ID)
+		// Use CountZFSDisks which deduplicates by vdev_parent:vdev_index
+		count, err := db.CountZFSDisks(pool.ID)
+		if err != nil {
+			log.Printf("⚠️  Failed to count disks for pool %d: %v", pool.ID, err)
+			count = 0
+		}
 		response[i].DeviceCount = count
 	}
 
@@ -78,14 +81,12 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get devices for this pool
 	devices, err := db.GetZFSPoolDevices(pool.ID)
 	if err != nil {
 		log.Printf("⚠️  Failed to get pool devices: %v", err)
 		devices = []db.ZFSPoolDevice{}
 	}
 
-	// Get recent scrub history
 	scrubHistory, err := db.GetZFSScrubHistory(pool.ID, 5)
 	if err != nil {
 		log.Printf("⚠️  Failed to get scrub history: %v", err)
@@ -103,7 +104,6 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 
 // ZFSPoolSummary returns aggregate ZFS stats
 // GET /api/zfs/summary
-// GET /api/zfs/summary?hostname=server1
 func ZFSPoolSummary(w http.ResponseWriter, r *http.Request) {
 	hostname := r.URL.Query().Get("hostname")
 
@@ -187,7 +187,6 @@ func ZFSDeviceBySerial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Also get the pool info for context
 	pool, _ := db.GetZFSPoolByID(device.PoolID)
 
 	response := map[string]interface{}{
@@ -202,7 +201,6 @@ func ZFSDeviceBySerial(w http.ResponseWriter, r *http.Request) {
 
 // ZFSScrubHistory returns scrub history for a pool
 // GET /api/zfs/pools/{hostname}/{poolname}/scrubs
-// GET /api/zfs/pools/{hostname}/{poolname}/scrubs?limit=10
 func ZFSScrubHistory(w http.ResponseWriter, r *http.Request) {
 	hostname := r.PathValue("hostname")
 	poolName := r.PathValue("poolname")
@@ -298,7 +296,6 @@ func DeleteZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if pool exists
 	pool, err := db.GetZFSPool(hostname, poolName)
 	if err != nil {
 		log.Printf("❌ Failed to check ZFS pool: %v", err)
@@ -311,7 +308,6 @@ func DeleteZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete the pool (cascades to devices and scrub history)
 	if err := db.DeleteZFSPool(hostname, poolName); err != nil {
 		log.Printf("❌ Failed to delete ZFS pool: %v", err)
 		JSONError(w, "Failed to delete pool", http.StatusInternalServerError)
@@ -328,9 +324,8 @@ func DeleteZFSPool(w http.ResponseWriter, r *http.Request) {
 
 // ─── ZFS Health Check Endpoint ───────────────────────────────────────────────
 
-// ZFSHealthCheck returns pools that need attention (degraded, faulted, errors)
+// ZFSHealthCheck returns pools that need attention
 // GET /api/zfs/health
-// GET /api/zfs/health?hostname=server1
 func ZFSHealthCheck(w http.ResponseWriter, r *http.Request) {
 	hostname := r.URL.Query().Get("hostname")
 
@@ -349,12 +344,10 @@ func ZFSHealthCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Filter to pools that need attention
 	var needsAttention []map[string]interface{}
 	for _, pool := range pools {
 		issues := []string{}
 
-		// Check health status
 		if pool.Health == "DEGRADED" {
 			issues = append(issues, "Pool is degraded")
 		} else if pool.Health == "FAULTED" {
@@ -363,7 +356,6 @@ func ZFSHealthCheck(w http.ResponseWriter, r *http.Request) {
 			issues = append(issues, "Pool status: "+pool.Health)
 		}
 
-		// Check for errors
 		if pool.ReadErrors > 0 {
 			issues = append(issues, "Read errors detected")
 		}
@@ -374,14 +366,12 @@ func ZFSHealthCheck(w http.ResponseWriter, r *http.Request) {
 			issues = append(issues, "Checksum errors detected")
 		}
 
-		// Check capacity
 		if pool.CapacityPct >= 90 {
 			issues = append(issues, "Capacity above 90%")
 		} else if pool.CapacityPct >= 80 {
 			issues = append(issues, "Capacity above 80%")
 		}
 
-		// Check fragmentation
 		if pool.Fragmentation >= 75 {
 			issues = append(issues, "High fragmentation")
 		}
@@ -415,7 +405,6 @@ func ZFSHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // ZFSDriveInfo returns ZFS info for a drive by serial number
 // GET /api/zfs/drive/{hostname}/{serial}
-// This endpoint allows cross-referencing SMART data with ZFS pool membership
 func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 	hostname := r.PathValue("hostname")
 	serial := r.PathValue("serial")
@@ -433,7 +422,6 @@ func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if device == nil {
-		// Drive is not part of any ZFS pool
 		JSONResponse(w, map[string]interface{}{
 			"in_zfs_pool": false,
 			"hostname":    hostname,
@@ -442,7 +430,6 @@ func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get pool info
 	pool, _ := db.GetZFSPoolByID(device.PoolID)
 
 	response := map[string]interface{}{
@@ -466,17 +453,15 @@ func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, response)
 }
 
-// ─── Report Handler Update ───────────────────────────────────────────────────
+// ─── Report Handler ──────────────────────────────────────────────────────────
 
 // ProcessZFSFromReport extracts and processes ZFS data from an agent report
-// This should be called from the main Report handler
 func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 	zfsData, ok := payload["zfs"]
 	if !ok || zfsData == nil {
 		return
 	}
 
-	// Convert to JSON for processing
 	zfsJSON, err := json.Marshal(zfsData)
 	if err != nil {
 		log.Printf("⚠️  Failed to marshal ZFS data: %v", err)
@@ -488,28 +473,22 @@ func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 	}
 }
 
-// ─── Route Registration Helper ───────────────────────────────────────────────
+// ─── Route Registration ──────────────────────────────────────────────────────
 
 // RegisterZFSRoutes registers all ZFS API routes
-// Call this from your main router setup
 func RegisterZFSRoutes(mux *http.ServeMux, authMiddleware func(http.HandlerFunc) http.HandlerFunc) {
-	// Pool endpoints
 	mux.HandleFunc("GET /api/zfs/pools", authMiddleware(ZFSPools))
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}", authMiddleware(ZFSPool))
 	mux.HandleFunc("DELETE /api/zfs/pools/{hostname}/{poolname}", authMiddleware(DeleteZFSPool))
 
-	// Device endpoints
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}/devices", authMiddleware(ZFSPoolDevices))
 	mux.HandleFunc("GET /api/zfs/devices/serial/{hostname}/{serial}", authMiddleware(ZFSDeviceBySerial))
 
-	// Scrub history endpoints
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}/scrubs", authMiddleware(ZFSScrubHistory))
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}/scrubs/last", authMiddleware(ZFSLastScrub))
 
-	// Summary and health endpoints
 	mux.HandleFunc("GET /api/zfs/summary", authMiddleware(ZFSPoolSummary))
 	mux.HandleFunc("GET /api/zfs/health", authMiddleware(ZFSHealthCheck))
 
-	// Drive cross-reference endpoint
 	mux.HandleFunc("GET /api/zfs/drive/{hostname}/{serial}", authMiddleware(ZFSDriveInfo))
 }
