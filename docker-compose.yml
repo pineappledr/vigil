@@ -2,6 +2,10 @@
 # Use this for: Ubuntu, Debian, Proxmox, most Linux distributions
 #
 # For TrueNAS, use docker-compose.truenas.yml instead
+#
+# ZFS Requirements:
+#   - Host must have zfsutils-linux installed
+#   - /dev/zfs must exist (ZFS kernel module loaded)
 
 services:
   vigil-server:
@@ -13,6 +17,9 @@ services:
     environment:
       - PORT=9080
       - DB_PATH=/data/vigil.db
+      - AUTH_ENABLED=true
+      # Uncomment and set your admin password (otherwise auto-generated)
+      # - ADMIN_PASS=your-secure-password
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9080/health"]
       interval: 30s
@@ -41,13 +48,17 @@ services:
     privileged: true
     command: ["--server", "http://localhost:9080", "--interval", "60"]
     volumes:
-      # Required for SMART monitoring
+      # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
-      # Required for ZFS detection
+      
+      # ─── Required for ZFS detection ───
       - /sys:/sys:ro
       - /proc:/proc:ro
-      # ZFS kernel device
+      
+      # ─── ZFS kernel device (required for zpool/zfs commands) ───
+      # Remove this line if ZFS is not installed on host
       - /dev/zfs:/dev/zfs
+      
     deploy:
       resources:
         limits:

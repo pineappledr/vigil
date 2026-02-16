@@ -2,6 +2,13 @@
 # Uses Debian-based agent with host ZFS tools mounted for compatibility
 #
 # For standard Linux systems, use docker-compose.yml instead
+#
+# TrueNAS-Specific Notes:
+#   - Uses :debian tag (not :latest) for better library compatibility
+#   - Mounts host ZFS binaries (/sbin/zpool, /sbin/zfs)
+#   - Mounts host libraries for ZFS tool dependencies
+#   - Uses pid: host for process visibility
+#   - ZFS device names may show as GUIDs (normal for TrueNAS)
 
 services:
   vigil-server:
@@ -13,6 +20,9 @@ services:
     environment:
       - PORT=9080
       - DB_PATH=/data/vigil.db
+      - AUTH_ENABLED=true
+      # Uncomment and set your admin password (otherwise auto-generated)
+      # - ADMIN_PASS=your-secure-password
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9080/health"]
       interval: 30s
@@ -35,28 +45,28 @@ services:
     image: ghcr.io/pineappledr/vigil-agent:debian  # Debian variant for TrueNAS
     restart: unless-stopped
     network_mode: host
-    pid: host
+    pid: host  # Required for proper process/device visibility on TrueNAS
     depends_on:
       vigil-server:
         condition: service_healthy
     privileged: true
     command: ["--server", "http://localhost:9080", "--interval", "60"]
     volumes:
-      # Required for SMART monitoring
+      # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
       
-      # Required for ZFS detection - kernel interfaces
+      # ─── Required for ZFS detection - kernel interfaces ───
       - /sys:/sys:ro
       
-      # ZFS kernel device (required for zpool commands)
+      # ─── ZFS kernel device (required for zpool commands) ───
       - /dev/zfs:/dev/zfs
       
-      # Mount HOST ZFS binaries for TrueNAS compatibility
+      # ─── Mount HOST ZFS binaries for TrueNAS compatibility ───
       # TrueNAS has ZFS tools at /sbin/
       - /sbin/zpool:/sbin/zpool:ro
       - /sbin/zfs:/sbin/zfs:ro
       
-      # Required shared libraries for ZFS tools to work
+      # ─── Required shared libraries for ZFS tools to work ───
       - /lib:/lib:ro
       - /lib64:/lib64:ro
       - /usr/lib:/usr/lib:ro

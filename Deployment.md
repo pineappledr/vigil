@@ -3,8 +3,9 @@
 ## Table of Contents
 1. [Server Deployment](#server-deployment)
 2. [Agent Deployment](#agent-deployment)
-3. [Creating Releases](#creating-releases)
-4. [Semantic Versioning](#semantic-versioning)
+3. [ZFS Monitoring Setup](#zfs-monitoring-setup)
+4. [Creating Releases](#creating-releases)
+5. [Semantic Versioning](#semantic-versioning)
 
 ---
 
@@ -97,17 +98,22 @@ Deploy agents on each server you want to monitor.
 
 ### Prerequisites
 
-Install smartmontools on each server:
+Install required tools on each server:
 
 ```bash
-# Ubuntu/Debian/Proxmox
-sudo apt update && sudo apt install -y smartmontools
+# Ubuntu/Debian/Proxmox (with ZFS support)
+sudo apt update && sudo apt install -y smartmontools nvme-cli zfsutils-linux
 
-# Fedora/CentOS/RHEL
-sudo dnf install -y smartmontools
+# Fedora/CentOS/RHEL (with ZFS support)
+sudo dnf install -y smartmontools nvme-cli
+# For ZFS, follow: https://openzfs.github.io/openzfs-docs/Getting%20Started/RHEL-based%20distro/
 
 # Arch Linux
-sudo pacman -S smartmontools
+sudo pacman -S smartmontools nvme-cli
+# For ZFS: yay -S zfs-dkms
+
+# TrueNAS (ZFS pre-installed)
+# Just ensure smartmontools is available
 ```
 
 ### Option 1: Binary with Systemd (Recommended)
@@ -143,7 +149,7 @@ sudo systemctl start vigil-agent
 sudo systemctl status vigil-agent
 ```
 
-### Option 2: Docker Agent
+### Option 2: Docker Agent (Standard Linux)
 
 ```bash
 docker run -d \
@@ -151,13 +157,39 @@ docker run -d \
   --net=host \
   --privileged \
   -v /dev:/dev:ro \
+  -v /sys:/sys:ro \
+  -v /dev/zfs:/dev/zfs \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil-agent:latest \
   --server http://YOUR_SERVER_IP:9080 \
   --interval 60
 ```
 
-### Option 3: One-time Manual Run (Testing)
+### Option 3: Docker Agent (TrueNAS)
+
+For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools:
+
+```bash
+docker run -d \
+  --name vigil-agent \
+  --net=host \
+  --pid=host \
+  --privileged \
+  -v /dev:/dev:ro \
+  -v /sys:/sys:ro \
+  -v /dev/zfs:/dev/zfs \
+  -v /sbin/zpool:/sbin/zpool:ro \
+  -v /sbin/zfs:/sbin/zfs:ro \
+  -v /lib:/lib:ro \
+  -v /lib64:/lib64:ro \
+  -v /usr/lib:/usr/lib:ro \
+  --restart unless-stopped \
+  ghcr.io/pineappledr/vigil-agent:debian \
+  --server http://YOUR_SERVER_IP:9080 \
+  --interval 60
+```
+
+### Option 4: One-time Manual Run (Testing)
 
 ```bash
 sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 0
@@ -171,6 +203,96 @@ sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 0
 | `--interval` | `60` | Reporting interval in seconds (0 = run once) |
 | `--hostname` | (auto) | Override the hostname |
 | `--version` | - | Show version and exit |
+
+---
+
+## ZFS Monitoring Setup
+
+Vigil automatically detects and monitors ZFS pools when the agent has access to ZFS tools.
+
+### Requirements
+
+**On the monitored host:**
+- ZFS tools installed (`zpool` and `zfs` commands available)
+- ZFS kernel module loaded (`/dev/zfs` exists)
+- Agent running with root/privileged access
+
+**Verify ZFS is available:**
+```bash
+# Check ZFS tools
+which zpool zfs
+
+# Check ZFS module
+ls -la /dev/zfs
+
+# List pools
+sudo zpool list
+```
+
+### Docker Volume Mounts for ZFS
+
+When running the agent in Docker, these mounts are required for ZFS monitoring:
+
+```yaml
+volumes:
+  # Kernel interfaces
+  - /sys:/sys:ro
+  
+  # ZFS kernel device
+  - /dev/zfs:/dev/zfs
+  
+  # For TrueNAS only - mount host ZFS tools
+  - /sbin/zpool:/sbin/zpool:ro
+  - /sbin/zfs:/sbin/zfs:ro
+  - /lib:/lib:ro
+  - /lib64:/lib64:ro
+  - /usr/lib:/usr/lib:ro
+```
+
+### ZFS Features Available
+
+Once configured, Vigil monitors:
+
+| Feature | Description |
+|---------|-------------|
+| **Pool Health** | ONLINE, DEGRADED, FAULTED status |
+| **Capacity** | Used, free, and total space |
+| **Fragmentation** | Pool fragmentation percentage |
+| **Dedup Ratio** | Deduplication effectiveness |
+| **Device Topology** | MIRROR, RAIDZ1/2/3, Stripe configuration |
+| **Device List** | All vdevs and member disks |
+| **Serial Numbers** | Drive serials for SMART correlation |
+| **Error Counts** | Read, write, and checksum errors |
+| **Scrub History** | Past scrub dates, durations, and results |
+
+### Troubleshooting ZFS
+
+**ZFS pools not appearing:**
+```bash
+# Check if agent can run zpool
+sudo zpool list
+
+# Check agent logs
+journalctl -u vigil-agent | grep -i zfs
+
+# For Docker, verify mounts
+docker exec vigil-agent zpool list
+```
+
+**Device names showing as GUIDs:**
+
+This is normal on TrueNAS. The agent attempts to resolve GUIDs to device names, but some may still appear as GUIDs. The frontend shortens these for display, and serial numbers are used for SMART data correlation.
+
+**Permission errors:**
+
+Ensure the agent runs with root/privileged access:
+```bash
+# Binary agent
+sudo vigil-agent --server http://localhost:9080 --interval 0
+
+# Docker agent
+docker run --privileged ...
+```
 
 ---
 
@@ -237,7 +359,7 @@ git push origin v1.0.1
 #### Minor Release (New Features)
 ```bash
 # Current: v1.0.1
-# Added email notifications feature
+# Added ZFS monitoring feature
 git tag v1.1.0
 git push origin v1.1.0
 ```
@@ -276,10 +398,11 @@ Before creating a release:
 
 1. ✅ Update version in `web/index.html` (sidebar footer)
 2. ✅ Update version in `cmd/agent/main.go` and `cmd/server/main.go`
-3. ✅ Test locally
-4. ✅ Commit all changes
-5. ✅ Push to main
-6. ✅ Create and push tag
+3. ✅ Test locally (including ZFS features if applicable)
+4. ✅ Test Docker deployment
+5. ✅ Commit all changes
+6. ✅ Push to main
+7. ✅ Create and push tag
 
 ### Deleting a Tag (if you made a mistake)
 
@@ -300,10 +423,18 @@ git push origin --delete v1.0.0
 docker run -d --name vigil-server -p 9080:9080 -v vigil_data:/data --restart unless-stopped ghcr.io/pineappledr/vigil:latest
 ```
 
-### Deploy Agent
+### Deploy Agent (Standard Linux)
 ```bash
 sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /usr/local/bin/vigil-agent && sudo chmod +x /usr/local/bin/vigil-agent
 sudo vigil-agent --server http://SERVER_IP:9080 --interval 60
+```
+
+### Deploy Agent (Docker with ZFS)
+```bash
+docker run -d --name vigil-agent --net=host --privileged \
+  -v /dev:/dev:ro -v /sys:/sys:ro -v /dev/zfs:/dev/zfs \
+  --restart unless-stopped ghcr.io/pineappledr/vigil-agent:latest \
+  --server http://SERVER_IP:9080 --interval 60
 ```
 
 ### Create Release
@@ -332,6 +463,19 @@ sudo smartctl --scan
 
 # Check permissions (agent needs root)
 sudo vigil-agent --server http://localhost:9080 --interval 0
+```
+
+### ZFS pools not showing
+```bash
+# Verify ZFS is available
+which zpool
+sudo zpool list
+
+# Check agent logs
+journalctl -u vigil-agent | grep -i zfs
+
+# For Docker, check inside container
+docker exec vigil-agent zpool list
 ```
 
 ### Check logs
