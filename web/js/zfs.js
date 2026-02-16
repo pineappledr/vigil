@@ -258,14 +258,15 @@ const ZFS = {
 
     /**
      * Deduplicate devices - FIXED VERSION
-     * Problem: GUID entries have no serial, device name entries have serial
-     * Solution: Group by (vdev_parent + vdev_index) to find same physical position,
-     *           then prefer the one with a serial number
+     * Handles:
+     * 1. GUID + device name duplicates (same vdev_parent:vdev_index)
+     * 2. Partition duplicates (mmcblk0p3 appears twice = 1 disk)
+     * 3. Stripe pools (no vdev_parent)
      */
     deduplicateDevices(devices) {
         const vdevs = [];
         const disksByPosition = new Map(); // "parent:index" -> best device
-        const disksNoPosition = [];
+        const disksByBaseName = new Map(); // "mmcblk0" -> best device (for stripes)
         
         console.log('=== Deduplication Start ===');
         console.log('Total devices:', devices.length);
@@ -286,67 +287,95 @@ const ZFS = {
                 return;
             }
             
-            // For disks, create a position key
-            const posKey = parent && vdevIndex !== undefined ? `${parent}:${vdevIndex}` : null;
-            
-            if (!posKey) {
-                // No position info - check if we can dedupe by other means
-                disksNoPosition.push(dev);
-                console.log(`  -> No position, added to noPosition list`);
-                return;
-            }
-            
-            // Check if we already have a device at this position
-            if (!disksByPosition.has(posKey)) {
-                disksByPosition.set(posKey, dev);
-                console.log(`  -> First at position ${posKey}, added`);
-            } else {
-                // Duplicate position - keep the one with serial (or better name)
-                const existing = disksByPosition.get(posKey);
-                const existingSerial = existing.serial_number || '';
-                const existingName = existing.device_name || existing.name || '';
+            // For disks with vdev_parent (mirror/raidz), use position key
+            if (parent && vdevIndex !== undefined) {
+                const posKey = `${parent}:${vdevIndex}`;
                 
-                console.log(`  -> Duplicate at ${posKey}. Existing: name="${existingName}", serial="${existingSerial}"`);
-                
-                // Prefer device WITH serial
-                if (!existingSerial && serial) {
+                if (!disksByPosition.has(posKey)) {
                     disksByPosition.set(posKey, dev);
-                    console.log(`  -> Replaced (current has serial)`);
-                } else if (existingSerial && !serial) {
-                    console.log(`  -> Keeping existing (has serial)`);
+                    console.log(`  -> First at position ${posKey}, added`);
                 } else {
-                    // Both have serial or both don't - prefer non-GUID name
-                    const existingIsGuid = this.looksLikeGUID(existingName);
-                    const currentIsGuid = this.looksLikeGUID(name);
-                    
-                    if (existingIsGuid && !currentIsGuid) {
+                    // Duplicate position - keep the one with serial (or better name)
+                    const existing = disksByPosition.get(posKey);
+                    if (this.isBetterDevice(dev, existing)) {
                         disksByPosition.set(posKey, dev);
-                        console.log(`  -> Replaced (current has better name)`);
+                        console.log(`  -> Replaced at position ${posKey}`);
                     } else {
-                        console.log(`  -> Keeping existing`);
+                        console.log(`  -> Keeping existing at ${posKey}`);
+                    }
+                }
+            } else {
+                // Stripe pool (no vdev_parent) - dedupe by base device name
+                const baseName = this.getBaseDeviceName(name);
+                
+                if (!disksByBaseName.has(baseName)) {
+                    disksByBaseName.set(baseName, dev);
+                    console.log(`  -> First with base name ${baseName}, added`);
+                } else {
+                    const existing = disksByBaseName.get(baseName);
+                    if (this.isBetterDevice(dev, existing)) {
+                        disksByBaseName.set(baseName, dev);
+                        console.log(`  -> Replaced at base name ${baseName}`);
+                    } else {
+                        console.log(`  -> Keeping existing at ${baseName}`);
                     }
                 }
             }
         });
         
-        // Combine unique disks
-        const uniqueDisks = Array.from(disksByPosition.values());
-        
-        // Add disks without position (dedupe by name)
-        const seenNames = new Set(uniqueDisks.map(d => d.device_name || d.name));
-        disksNoPosition.forEach(disk => {
-            const name = disk.device_name || disk.name;
-            if (!seenNames.has(name)) {
-                uniqueDisks.push(disk);
-                seenNames.add(name);
-            }
-        });
+        // Combine unique disks from both maps
+        const uniqueDisks = [
+            ...Array.from(disksByPosition.values()),
+            ...Array.from(disksByBaseName.values())
+        ];
         
         console.log('=== Deduplication End ===');
         console.log('Vdevs:', vdevs.length);
         console.log('Unique disks:', uniqueDisks.length);
         
         return { vdevs, uniqueDisks };
+    },
+
+    // Check if newDev is better than existing (has serial, or better name)
+    isBetterDevice(newDev, existing) {
+        const newSerial = newDev.serial_number || '';
+        const existingSerial = existing.serial_number || '';
+        const newName = newDev.device_name || newDev.name || '';
+        const existingName = existing.device_name || existing.name || '';
+        
+        // Prefer device WITH serial
+        if (!existingSerial && newSerial) return true;
+        if (existingSerial && !newSerial) return false;
+        
+        // Both have serial or both don't - prefer non-GUID name
+        const existingIsGuid = this.looksLikeGUID(existingName);
+        const newIsGuid = this.looksLikeGUID(newName);
+        
+        if (existingIsGuid && !newIsGuid) return true;
+        return false;
+    },
+
+    // Extract base device name: mmcblk0p3 -> mmcblk0, sda2 -> sda, nvme0n1p1 -> nvme0n1
+    getBaseDeviceName(name) {
+        if (!name) return 'unknown';
+        
+        // mmcblk0p3 -> mmcblk0
+        const mmcMatch = name.match(/^(mmcblk\d+)/);
+        if (mmcMatch) return mmcMatch[1];
+        
+        // nvme0n1p1 -> nvme0n1
+        const nvmeMatch = name.match(/^(nvme\d+n\d+)/);
+        if (nvmeMatch) return nvmeMatch[1];
+        
+        // sda2 -> sda, hdb1 -> hdb
+        const sdMatch = name.match(/^([shv]d[a-z]+)/);
+        if (sdMatch) return sdMatch[1];
+        
+        // da0p2 -> da0 (FreeBSD)
+        const daMatch = name.match(/^(da\d+|ada\d+)/);
+        if (daMatch) return daMatch[1];
+        
+        return name;
     },
 
     looksLikeGUID(name) {

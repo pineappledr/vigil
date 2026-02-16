@@ -113,10 +113,13 @@ func CountZFSDevices(poolID int64) (int, error) {
 }
 
 // CountZFSDisks returns count of unique disk devices (not vdevs)
-// Deduplicates by vdev_parent + vdev_index (same position = same physical disk)
-// This handles the case where both GUID and device name entries exist for same disk
+// Deduplicates by:
+// 1. vdev_parent + vdev_index (same position = same physical disk)
+// 2. Base device name (mmcblk0p3 -> mmcblk0, sda2 -> sda)
+// This handles GUID/device name duplicates AND partition duplicates
 func CountZFSDisks(poolID int64) (int, error) {
-	var count int
+	// First try position-based counting (for mirrors/raidz with vdev_parent)
+	var countByPosition int
 	err := DB.QueryRow(`
 		SELECT COUNT(DISTINCT vdev_parent || ':' || vdev_index)
 		FROM zfs_pool_devices 
@@ -127,8 +130,51 @@ func CountZFSDisks(poolID int64) (int, error) {
 		AND is_log = 0 
 		AND is_cache = 0`,
 		poolID,
-	).Scan(&count)
-	return count, err
+	).Scan(&countByPosition)
+
+	if err == nil && countByPosition > 0 {
+		return countByPosition, nil
+	}
+
+	// For stripe pools (no vdev_parent), count by unique base device name
+	// This groups mmcblk0p1, mmcblk0p2, mmcblk0p3 as one device
+	// And sda1, sda2 as one device
+	var countByName int
+	err = DB.QueryRow(`
+		SELECT COUNT(DISTINCT 
+			CASE 
+				-- Handle mmcblk devices: mmcblk0p3 -> mmcblk0
+				WHEN device_name LIKE 'mmcblk%' THEN 
+					SUBSTR(device_name, 1, INSTR(device_name || 'p', 'p') + 
+						CASE WHEN INSTR(SUBSTR(device_name, INSTR(device_name, 'mmcblk') + 6), 'p') > 0 
+						THEN INSTR(SUBSTR(device_name, INSTR(device_name, 'mmcblk') + 6), 'p') + 5
+						ELSE LENGTH(device_name) END)
+				-- Handle nvme devices: nvme0n1p1 -> nvme0n1
+				WHEN device_name LIKE 'nvme%' THEN
+					CASE WHEN INSTR(device_name, 'p') > 0 
+					THEN SUBSTR(device_name, 1, INSTR(device_name, 'n1p') + 1)
+					ELSE device_name END
+				-- Handle sd/hd devices: sda2 -> sda
+				WHEN device_name GLOB 'sd[a-z]*' OR device_name GLOB 'hd[a-z]*' THEN
+					RTRIM(device_name, '0123456789')
+				-- Default: use full name
+				ELSE device_name
+			END
+		)
+		FROM zfs_pool_devices 
+		WHERE pool_id = ? 
+		AND vdev_type = 'disk'
+		AND is_spare = 0 
+		AND is_log = 0 
+		AND is_cache = 0`,
+		poolID,
+	).Scan(&countByName)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return countByName, nil
 }
 
 // GetZFSDeviceBySerial finds a device by its serial number
