@@ -41,6 +41,11 @@ const ZFS = {
             <rect x="2" y="14" width="20" height="8" rx="2"/>
             <circle cx="6" cy="6" r="1"/>
             <circle cx="6" cy="18" r="1"/>
+        </svg>`,
+        link: `<svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/>
+            <line x1="10" y1="14" x2="21" y2="3"/>
         </svg>`
     },
 
@@ -120,7 +125,6 @@ const ZFS = {
 
     // ─── Pool Card ───────────────────────────────────────────────────────────
     renderPoolCard(pool, hostname) {
-        // Get pool name - handle both 'name' and 'pool_name' from API
         const poolName = pool.name || pool.pool_name || 'Unknown Pool';
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const stateClass = this.getStateClass(state);
@@ -176,17 +180,7 @@ const ZFS = {
             <div class="empty-state zfs-empty">
                 ${this.icons.pool}
                 <p>No ZFS pools detected</p>
-                <span class="hint">ZFS pools will appear here when agents report them.<br>
-                Make sure ZFS is installed and the Vigil agent has ZFS detection enabled.</span>
-            </div>
-        `;
-    },
-
-    renderLoadingState() {
-        return `
-            <div class="zfs-loading-state">
-                <div class="zfs-loading-spinner"></div>
-                <p>Loading ZFS pools...</p>
+                <span class="hint">ZFS pools will appear here when agents report them.</span>
             </div>
         `;
     },
@@ -195,8 +189,10 @@ const ZFS = {
     async showPoolDetail(hostname, poolName) {
         this.showModal(`
             <div class="zfs-modal-header">
-                <h3>${poolName}</h3>
-                <span class="zfs-modal-host">${hostname}</span>
+                <div class="zfs-modal-title">
+                    <span class="pool-name">${poolName}</span>
+                    <span class="pool-host">${hostname}</span>
+                </div>
                 <button class="modal-close" onclick="ZFS.closeModal()">×</button>
             </div>
             <div class="zfs-modal-body">
@@ -225,22 +221,30 @@ const ZFS = {
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const capacity = this.parseCapacity(pool);
 
-        // Store hostname for device click handlers
         this._currentHostname = hostname;
+
+        const lastScrub = scrubHistory.length > 0 ? scrubHistory[0] : null;
+        
+        // Organize devices into vdevs and disks
+        const { vdevs, disks } = this.organizeDevices(devices);
+        const diskCount = disks.length;
+        
+        // Calculate topology
+        const topology = this.calculateTopology(vdevs, disks, capacity);
 
         return `
             <div class="zfs-detail-tabs">
                 <button class="zfs-tab active" onclick="ZFS.switchTab(this, 'overview')">Overview</button>
-                <button class="zfs-tab" onclick="ZFS.switchTab(this, 'devices')">Devices (${devices.length})</button>
+                <button class="zfs-tab" onclick="ZFS.switchTab(this, 'devices')">Devices (${diskCount})</button>
                 <button class="zfs-tab" onclick="ZFS.switchTab(this, 'scrubs')">Scrub History</button>
             </div>
 
             <div id="zfs-tab-overview" class="zfs-tab-content active">
-                ${this.renderOverviewTab(pool, capacity, state)}
+                ${this.renderOverviewTab(pool, capacity, state, topology, lastScrub)}
             </div>
 
             <div id="zfs-tab-devices" class="zfs-tab-content">
-                ${this.renderDevicesTab(devices, hostname)}
+                ${this.renderDevicesTab(vdevs, disks, hostname)}
             </div>
 
             <div id="zfs-tab-scrubs" class="zfs-tab-content">
@@ -249,92 +253,252 @@ const ZFS = {
         `;
     },
 
-    renderOverviewTab(pool, capacity, state) {
+    renderOverviewTab(pool, capacity, state, topology, lastScrub) {
         const poolName = pool.name || pool.pool_name || 'Unknown';
+        
         return `
-            <div class="zfs-detail-grid">
-                <div class="zfs-detail-item">
-                    <span class="label">Pool Name</span>
-                    <span class="value">${poolName}</span>
+            <div class="zfs-overview-section">
+                <div class="zfs-detail-grid">
+                    <div class="zfs-detail-item">
+                        <span class="label">Pool Name</span>
+                        <span class="value">${poolName}</span>
+                    </div>
+                    <div class="zfs-detail-item">
+                        <span class="label">Status</span>
+                        <span class="value zfs-state-badge ${this.getStateClass(state)}">${state}</span>
+                    </div>
                 </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Status</span>
-                    <span class="value zfs-state-badge ${this.getStateClass(state)}">${state}</span>
+            </div>
+
+            <div class="zfs-overview-section">
+                <h4>Data Topology</h4>
+                <div class="topology-display">${topology.description}</div>
+            </div>
+
+            <div class="zfs-overview-section">
+                <h4>Capacity</h4>
+                <div class="zfs-detail-grid">
+                    <div class="zfs-detail-item">
+                        <span class="label">Usable Capacity</span>
+                        <span class="value">${capacity.total}</span>
+                    </div>
+                    <div class="zfs-detail-item">
+                        <span class="label">Used</span>
+                        <span class="value">${capacity.used} (${capacity.percent}%)</span>
+                    </div>
+                    <div class="zfs-detail-item">
+                        <span class="label">Free Space</span>
+                        <span class="value">${capacity.free}</span>
+                    </div>
+                    <div class="zfs-detail-item">
+                        <span class="label">Fragmentation</span>
+                        <span class="value">${pool.fragmentation || 0}%</span>
+                    </div>
+                    <div class="zfs-detail-item">
+                        <span class="label">Dedup Ratio</span>
+                        <span class="value">${(pool.dedup_ratio || 1).toFixed(2)}x</span>
+                    </div>
                 </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Capacity</span>
-                    <span class="value">${capacity.used} / ${capacity.total} (${capacity.percent}%)</span>
-                </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Free Space</span>
-                    <span class="value">${capacity.free}</span>
-                </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Fragmentation</span>
-                    <span class="value">${pool.fragmentation || 0}%</span>
-                </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Dedup Ratio</span>
-                    <span class="value">${pool.dedup_ratio || 1.00}x</span>
-                </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Read Errors</span>
-                    <span class="value ${pool.read_errors > 0 ? 'error-text' : ''}">${pool.read_errors || 0}</span>
-                </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Write Errors</span>
-                    <span class="value ${pool.write_errors > 0 ? 'error-text' : ''}">${pool.write_errors || 0}</span>
-                </div>
-                <div class="zfs-detail-item">
-                    <span class="label">Checksum Errors</span>
-                    <span class="value ${pool.checksum_errors > 0 ? 'error-text' : ''}">${pool.checksum_errors || 0}</span>
+            </div>
+            
+            <div class="zfs-overview-section">
+                <h4>Last Scrub</h4>
+                ${lastScrub ? `
+                    <div class="zfs-detail-grid">
+                        <div class="zfs-detail-item">
+                            <span class="label">Date</span>
+                            <span class="value">${this.formatFullDateTime(lastScrub.start_time)}</span>
+                        </div>
+                        <div class="zfs-detail-item">
+                            <span class="label">Duration</span>
+                            <span class="value">${this.formatDurationLong(lastScrub.duration_secs)}</span>
+                        </div>
+                        <div class="zfs-detail-item">
+                            <span class="label">Data Examined</span>
+                            <span class="value">${this.formatStorageSize(lastScrub.data_examined)}</span>
+                        </div>
+                        <div class="zfs-detail-item">
+                            <span class="label">Errors Found</span>
+                            <span class="value ${lastScrub.errors_found > 0 ? 'error-text' : ''}">${lastScrub.errors_found || 0}</span>
+                        </div>
+                    </div>
+                ` : `<p class="zfs-no-data">No scrub history available</p>`}
+            </div>
+
+            <div class="zfs-overview-section">
+                <h4>Pool Errors</h4>
+                <div class="zfs-errors-row">
+                    <div class="zfs-error-item">
+                        <span class="error-count ${pool.read_errors > 0 ? 'has-errors' : ''}">${pool.read_errors || 0}</span>
+                        <span class="error-label">Read</span>
+                    </div>
+                    <div class="zfs-error-item">
+                        <span class="error-count ${pool.write_errors > 0 ? 'has-errors' : ''}">${pool.write_errors || 0}</span>
+                        <span class="error-label">Write</span>
+                    </div>
+                    <div class="zfs-error-item">
+                        <span class="error-count ${pool.checksum_errors > 0 ? 'has-errors' : ''}">${pool.checksum_errors || 0}</span>
+                        <span class="error-label">Checksum</span>
+                    </div>
                 </div>
             </div>
         `;
     },
 
-    renderDevicesTab(devices, hostname) {
-        if (!devices || devices.length === 0) {
+    organizeDevices(devices) {
+        const vdevs = [];
+        const disks = [];
+        
+        devices.forEach(dev => {
+            const vdevType = (dev.vdev_type || 'disk').toLowerCase();
+            if (vdevType === 'disk') {
+                disks.push(dev);
+            } else {
+                vdevs.push(dev);
+            }
+        });
+        
+        return { vdevs, disks };
+    },
+
+    calculateTopology(vdevs, disks, capacity) {
+        // Group disks by parent
+        const disksByParent = {};
+        disks.forEach(d => {
+            const parent = d.vdev_parent || 'stripe';
+            if (!disksByParent[parent]) disksByParent[parent] = [];
+            disksByParent[parent].push(d);
+        });
+
+        // Count vdev types
+        const vdevCounts = {};
+        vdevs.forEach(v => {
+            const type = (v.vdev_type || 'unknown').toUpperCase();
+            vdevCounts[type] = (vdevCounts[type] || 0) + 1;
+        });
+
+        // Determine width (disks per vdev)
+        let width = 0;
+        Object.values(disksByParent).forEach(diskList => {
+            if (diskList.length > width) width = diskList.length;
+        });
+        if (width === 0) width = disks.length || 1;
+
+        // Build description
+        let description = '';
+        
+        if (vdevCounts.MIRROR) {
+            description = `${vdevCounts.MIRROR} x MIRROR | ${width} wide | ${capacity.total}`;
+        } else if (vdevCounts.RAIDZ1 || vdevCounts.RAIDZ) {
+            const count = vdevCounts.RAIDZ1 || vdevCounts.RAIDZ || 1;
+            description = `${count} x RAIDZ1 | ${width} wide | ${capacity.total}`;
+        } else if (vdevCounts.RAIDZ2) {
+            description = `${vdevCounts.RAIDZ2} x RAIDZ2 | ${width} wide | ${capacity.total}`;
+        } else if (vdevCounts.RAIDZ3) {
+            description = `${vdevCounts.RAIDZ3} x RAIDZ3 | ${width} wide | ${capacity.total}`;
+        } else if (disks.length > 0) {
+            description = `${disks.length} x DISK (Stripe) | ${capacity.total}`;
+        } else if (vdevs.length > 0) {
+            const type = (vdevs[0].vdev_type || 'VDEV').toUpperCase();
+            description = `${vdevs.length} x ${type} | ${capacity.total}`;
+        } else {
+            description = `Unknown topology | ${capacity.total}`;
+        }
+
+        return { description, vdevCounts, disksByParent, width };
+    },
+
+    renderDevicesTab(vdevs, disks, hostname) {
+        if (disks.length === 0 && vdevs.length === 0) {
             return `<p class="zfs-no-data">No device information available</p>`;
         }
 
-        return `
-            <div class="zfs-devices-list">
-                ${devices.map(dev => {
-                    const serial = dev.serial_number || '';
-                    const hasSerial = serial && serial.length > 0;
-                    const driveLink = hasSerial ? this.findDriveBySerial(hostname, serial) : null;
-                    
-                    return `
-                    <div class="zfs-device-item ${this.getStateClass(dev.state || 'ONLINE')}">
-                        <div class="zfs-device-header">
-                            <span class="zfs-device-name">${dev.device_name || dev.name || 'Unknown'}</span>
-                            <span class="zfs-device-type">${dev.vdev_type || 'disk'}</span>
-                            <span class="zfs-device-state ${this.getStateClass(dev.state || 'ONLINE')}">${dev.state || 'ONLINE'}</span>
-                        </div>
-                        <div class="zfs-device-details">
-                            ${dev.device_path || dev.path ? `<span class="zfs-device-path">${dev.device_path || dev.path}</span>` : ''}
-                            ${hasSerial ? `
-                                <span class="zfs-device-serial ${driveLink ? 'clickable' : ''}" 
-                                      ${driveLink ? `onclick="ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="Click to view drive details"` : ''}>
-                                    S/N: ${serial}
-                                    ${driveLink ? '<svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' : ''}
-                                </span>
-                            ` : ''}
-                            <span class="zfs-device-errors">
-                                R: ${dev.read_errors || 0} / W: ${dev.write_errors || 0} / C: ${dev.checksum_errors || 0}
-                            </span>
-                        </div>
+        // Group disks by their vdev parent
+        const disksByParent = {};
+        disks.forEach(disk => {
+            const parent = disk.vdev_parent || 'root';
+            if (!disksByParent[parent]) disksByParent[parent] = [];
+            disksByParent[parent].push(disk);
+        });
+
+        let html = '<div class="zfs-devices-list">';
+
+        // Render each vdev with its disks
+        vdevs.forEach(vdev => {
+            const vdevName = vdev.device_name || vdev.name || 'Unknown';
+            const childDisks = disksByParent[vdevName] || [];
+            html += this.renderVdevGroup(vdev, childDisks, hostname);
+        });
+
+        // Render orphan disks (no vdev parent) as stripe
+        if (disksByParent['root'] && disksByParent['root'].length > 0) {
+            html += `
+                <div class="zfs-vdev-group">
+                    <div class="zfs-vdev-header">
+                        <span class="zfs-vdev-name">Data Disks</span>
+                        <span class="zfs-vdev-type">STRIPE</span>
                     </div>
-                `}).join('')}
+                    <div class="zfs-disk-list">
+                        ${disksByParent['root'].map(disk => this.renderDiskRow(disk, hostname)).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        html += '</div>';
+        return html;
+    },
+
+    renderVdevGroup(vdev, disks, hostname) {
+        const vdevName = vdev.device_name || vdev.name || 'Unknown';
+        const vdevType = (vdev.vdev_type || 'VDEV').toUpperCase();
+        const vdevState = (vdev.state || 'ONLINE').toUpperCase();
+
+        return `
+            <div class="zfs-vdev-group">
+                <div class="zfs-vdev-header">
+                    <span class="zfs-vdev-name">${vdevName}</span>
+                    <span class="zfs-vdev-type">${vdevType}</span>
+                    <span class="zfs-vdev-state ${this.getStateClass(vdevState)}">${vdevState}</span>
+                    <span class="zfs-vdev-errors">R: ${vdev.read_errors || 0} / W: ${vdev.write_errors || 0} / C: ${vdev.checksum_errors || 0}</span>
+                </div>
+                <div class="zfs-disk-list">
+                    ${disks.length > 0 
+                        ? disks.map(disk => this.renderDiskRow(disk, hostname)).join('')
+                        : '<div class="zfs-no-disks">No disk details available - ensure agent reports child devices</div>'
+                    }
+                </div>
             </div>
         `;
     },
 
-    /**
-     * Find a drive in State.data by hostname and serial number
-     * @returns {Object|null} { serverIdx, driveIdx } or null
-     */
+    renderDiskRow(disk, hostname) {
+        const diskName = disk.device_name || disk.name || 'Unknown';
+        const diskState = (disk.state || 'ONLINE').toUpperCase();
+        const serial = disk.serial_number || '';
+        const driveLink = serial ? this.findDriveBySerial(hostname, serial) : null;
+
+        return `
+            <div class="zfs-disk-row ${this.getStateClass(diskState)}">
+                <div class="zfs-disk-main">
+                    <span class="zfs-disk-indent">└─</span>
+                    <span class="zfs-disk-name">${diskName}</span>
+                    <span class="zfs-disk-state ${this.getStateClass(diskState)}">${diskState}</span>
+                </div>
+                <div class="zfs-disk-info">
+                    ${serial ? `
+                        <span class="zfs-disk-serial ${driveLink ? 'clickable' : ''}" 
+                              ${driveLink ? `onclick="event.stopPropagation(); ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="Click to view SMART data for ${serial}"` : ''}>
+                            ${serial}
+                            ${driveLink ? this.icons.link : ''}
+                        </span>
+                    ` : `<span class="zfs-disk-path">${disk.device_path || disk.path || 'No serial'}</span>`}
+                    <span class="zfs-disk-errors">R:${disk.read_errors || 0} W:${disk.write_errors || 0} C:${disk.checksum_errors || 0}</span>
+                </div>
+            </div>
+        `;
+    },
+
     findDriveBySerial(hostname, serial) {
         if (!serial || !hostname) return null;
         
@@ -352,9 +516,6 @@ const ZFS = {
         return null;
     },
 
-    /**
-     * Navigate to drive details from ZFS pool view
-     */
     navigateToDrive(serverIdx, driveIdx) {
         this.closeModal();
         Navigation.showDriveDetails(serverIdx, driveIdx);
@@ -369,20 +530,24 @@ const ZFS = {
             <div class="zfs-scrub-history">
                 ${history.map(scrub => `
                     <div class="zfs-scrub-item ${scrub.errors_found > 0 ? 'has-errors' : ''}">
-                        <div class="zfs-scrub-date">
-                            ${this.formatDate(scrub.end_time || scrub.start_time)}
+                        <div class="zfs-scrub-main">
+                            <span class="zfs-scrub-date">${this.formatFullDateTime(scrub.start_time)}</span>
+                            <span class="zfs-scrub-type">${(scrub.scan_type || 'scrub').toUpperCase()}</span>
                         </div>
-                        <div class="zfs-scrub-details">
-                            <span class="zfs-scrub-duration">${this.formatDuration(scrub.duration_secs) || 'Unknown'}</span>
-                            <span class="zfs-scrub-errors ${scrub.errors_found > 0 ? 'error-text' : ''}">
+                        <div class="zfs-scrub-stats">
+                            <span class="zfs-scrub-duration">${this.formatDurationLong(scrub.duration_secs)}</span>
+                            <span class="zfs-scrub-errors ${scrub.errors_found > 0 ? 'has-errors' : ''}">
                                 ${scrub.errors_found || 0} error${scrub.errors_found !== 1 ? 's' : ''}
                             </span>
-                            ${scrub.data_examined ? `<span class="zfs-scrub-bytes">${this.formatBytes(scrub.data_examined)} examined</span>` : ''}
                         </div>
                     </div>
                 `).join('')}
             </div>
         `;
+    },
+
+    renderLoadingState() {
+        return `<div class="loading-spinner"><div class="spinner"></div><span>Loading pool details...</span></div>`;
     },
 
     // ─── Modal Helpers ───────────────────────────────────────────────────────
@@ -432,6 +597,7 @@ const ZFS = {
 
     // ─── Utility Methods ─────────────────────────────────────────────────────
     getStateClass(state) {
+        const s = (state || '').toUpperCase();
         const stateMap = {
             'ONLINE': 'online',
             'DEGRADED': 'degraded',
@@ -440,7 +606,7 @@ const ZFS = {
             'OFFLINE': 'offline',
             'REMOVED': 'offline'
         };
-        return stateMap[state] || 'unknown';
+        return stateMap[s] || 'unknown';
     },
 
     getCapacityClass(percent) {
@@ -492,19 +658,15 @@ const ZFS = {
 
     getDeviceStats(pool) {
         const deviceCount = pool.device_count !== undefined ? pool.device_count : (pool.devices || []).length;
-        
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
-        
-        // Add device errors if devices array is present
         (pool.devices || []).forEach(d => {
             errors += (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0);
         });
-        
         return { total: deviceCount, errors };
     },
 
     formatStorageSize(size) {
-        if (!size) return '0';
+        if (!size) return '0 B';
         if (typeof size === 'string') return size;
         const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         let value = parseFloat(size);
@@ -513,18 +675,21 @@ const ZFS = {
             value /= 1024;
             unitIndex++;
         }
-        return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unitIndex]}`;
+        return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
     },
 
-    formatBytes(bytes) {
-        return this.formatStorageSize(bytes);
-    },
-
-    formatDuration(seconds) {
-        if (!seconds) return null;
+    formatDurationLong(seconds) {
+        if (!seconds) return 'Unknown';
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
-        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        const secs = Math.floor(seconds % 60);
+        
+        let parts = [];
+        if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+        if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`);
+        if (secs > 0 && hours === 0) parts.push(`${secs} second${secs !== 1 ? 's' : ''}`);
+        
+        return parts.length > 0 ? parts.join(' ') : '0 seconds';
     },
 
     formatDate(dateStr) {
@@ -542,6 +707,24 @@ const ZFS = {
                 day: 'numeric',
                 year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
             });
+        } catch {
+            return dateStr;
+        }
+    },
+
+    formatFullDateTime(dateStr) {
+        if (!dateStr) return 'Unknown';
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            // Format: YYYY-MM-DD HH:MM:SS
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const mins = String(date.getMinutes()).padStart(2, '0');
+            const secs = String(date.getSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
         } catch {
             return dateStr;
         }

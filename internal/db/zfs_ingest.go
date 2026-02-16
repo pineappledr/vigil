@@ -19,22 +19,22 @@ type ZFSAgentReport struct {
 
 // ZFSAgentPool represents a pool from the agent report
 type ZFSAgentPool struct {
-	Name           string            `json:"name"`
-	GUID           string            `json:"guid"`
-	Status         string            `json:"status"`
-	Health         string            `json:"health"`
-	Size           int64             `json:"size_bytes"`
-	Allocated      int64             `json:"allocated_bytes"`
-	Free           int64             `json:"free_bytes"`
-	Fragmentation  int               `json:"fragmentation"`
-	CapacityPct    int               `json:"capacity_pct"`
-	DedupRatio     float64           `json:"dedup_ratio"`
-	Altroot        string            `json:"altroot"`
-	ReadErrors     int64             `json:"read_errors"`
-	WriteErrors    int64             `json:"write_errors"`
-	ChecksumErrors int64             `json:"checksum_errors"`
-	Scan           *ZFSAgentScan     `json:"scan"`
-	Devices        []ZFSAgentDevice  `json:"devices"`
+	Name           string           `json:"name"`
+	GUID           string           `json:"guid"`
+	Status         string           `json:"status"`
+	Health         string           `json:"health"`
+	Size           int64            `json:"size_bytes"`
+	Allocated      int64            `json:"allocated_bytes"`
+	Free           int64            `json:"free_bytes"`
+	Fragmentation  int              `json:"fragmentation"`
+	CapacityPct    int              `json:"capacity_pct"`
+	DedupRatio     float64          `json:"dedup_ratio"`
+	Altroot        string           `json:"altroot"`
+	ReadErrors     int64            `json:"read_errors"`
+	WriteErrors    int64            `json:"write_errors"`
+	ChecksumErrors int64            `json:"checksum_errors"`
+	Scan           *ZFSAgentScan    `json:"scan"`
+	Devices        []ZFSAgentDevice `json:"devices"`
 }
 
 // ZFSAgentScan represents scan info from the agent report
@@ -54,24 +54,26 @@ type ZFSAgentScan struct {
 }
 
 // ZFSAgentDevice represents a device from the agent report
+// IMPORTANT: Children field contains nested disks for mirror/raidz vdevs
 type ZFSAgentDevice struct {
-	Name           string `json:"name"`
-	Path           string `json:"path"`
-	GUID           string `json:"guid"`
-	SerialNumber   string `json:"serial_number"`
-	VdevType       string `json:"vdev_type"`
-	VdevParent     string `json:"vdev_parent"`
-	VdevIndex      int    `json:"vdev_index"`
-	State          string `json:"state"`
-	ReadErrors     int64  `json:"read_errors"`
-	WriteErrors    int64  `json:"write_errors"`
-	ChecksumErrors int64  `json:"checksum_errors"`
-	Size           int64  `json:"size_bytes"`
-	Allocated      int64  `json:"allocated_bytes"`
-	IsSpare        bool   `json:"is_spare"`
-	IsLog          bool   `json:"is_log"`
-	IsCache        bool   `json:"is_cache"`
-	IsReplacing    bool   `json:"is_replacing"`
+	Name           string           `json:"name"`
+	Path           string           `json:"path"`
+	GUID           string           `json:"guid"`
+	SerialNumber   string           `json:"serial_number"`
+	VdevType       string           `json:"vdev_type"`
+	VdevParent     string           `json:"vdev_parent"`
+	VdevIndex      int              `json:"vdev_index"`
+	State          string           `json:"state"`
+	ReadErrors     int64            `json:"read_errors"`
+	WriteErrors    int64            `json:"write_errors"`
+	ChecksumErrors int64            `json:"checksum_errors"`
+	Size           int64            `json:"size_bytes"`
+	Allocated      int64            `json:"allocated_bytes"`
+	IsSpare        bool             `json:"is_spare"`
+	IsLog          bool             `json:"is_log"`
+	IsCache        bool             `json:"is_cache"`
+	IsReplacing    bool             `json:"is_replacing"`
+	Children       []ZFSAgentDevice `json:"children,omitempty"` // Child disks in mirror/raidz
 }
 
 // ─── Report Processing ───────────────────────────────────────────────────────
@@ -137,11 +139,10 @@ func processPool(hostname string, pool ZFSAgentPool) error {
 		return fmt.Errorf("upsert pool: %w", err)
 	}
 
-	// Process devices
+	// Process devices - including children (disks inside mirrors/raidz)
+	vdevIndex := 0
 	for _, dev := range pool.Devices {
-		if err := processDevice(poolID, hostname, pool.Name, dev); err != nil {
-			log.Printf("⚠️  Failed to process device %s: %v", dev.Name, err)
-		}
+		processDeviceRecursive(poolID, hostname, pool.Name, dev, "", &vdevIndex)
 	}
 
 	// Record scrub history if applicable
@@ -152,8 +153,16 @@ func processPool(hostname string, pool ZFSAgentPool) error {
 	return nil
 }
 
-// processDevice handles a single device from the pool
-func processDevice(poolID int64, hostname, poolName string, dev ZFSAgentDevice) error {
+// processDeviceRecursive processes a device and all its children
+// This flattens the hierarchy while maintaining parent-child relationships via VdevParent
+func processDeviceRecursive(poolID int64, hostname, poolName string, dev ZFSAgentDevice, parentName string, index *int) {
+	// Determine parent
+	vdevParent := dev.VdevParent
+	if vdevParent == "" && parentName != "" {
+		vdevParent = parentName
+	}
+
+	// Create device record
 	dbDevice := &ZFSPoolDevice{
 		PoolID:         poolID,
 		Hostname:       hostname,
@@ -163,8 +172,8 @@ func processDevice(poolID int64, hostname, poolName string, dev ZFSAgentDevice) 
 		DeviceGUID:     dev.GUID,
 		SerialNumber:   dev.SerialNumber,
 		VdevType:       dev.VdevType,
-		VdevParent:     dev.VdevParent,
-		VdevIndex:      dev.VdevIndex,
+		VdevParent:     vdevParent,
+		VdevIndex:      *index,
 		State:          dev.State,
 		ReadErrors:     dev.ReadErrors,
 		WriteErrors:    dev.WriteErrors,
@@ -177,7 +186,22 @@ func processDevice(poolID int64, hostname, poolName string, dev ZFSAgentDevice) 
 		IsReplacing:    dev.IsReplacing,
 	}
 
-	return UpsertZFSPoolDevice(poolID, dbDevice)
+	if err := UpsertZFSPoolDevice(poolID, dbDevice); err != nil {
+		log.Printf("⚠️  Failed to upsert ZFS device %s: %v", dev.Name, err)
+	} else {
+		log.Printf("✅ Processed ZFS device: %s (type=%s, parent=%s, serial=%s)",
+			dev.Name, dev.VdevType, vdevParent, dev.SerialNumber)
+	}
+
+	*index++
+
+	// Process children recursively (disks inside mirror/raidz)
+	for childIdx, child := range dev.Children {
+		// Child's parent is this device
+		child.VdevParent = dev.Name
+		child.VdevIndex = childIdx
+		processDeviceRecursive(poolID, hostname, poolName, child, dev.Name, index)
+	}
 }
 
 // processScrubHistory records scrub history if needed
