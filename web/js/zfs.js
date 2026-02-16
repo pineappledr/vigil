@@ -126,10 +126,19 @@ const ZFS = {
         const capacity = this.parseCapacity(pool);
         const scrub = this.parseScrub(pool);
         
-        // Get deduplicated device count
-        const devices = pool.devices || [];
-        const uniqueDisks = this.getUniqueDisks(devices);
-        const deviceCount = uniqueDisks.length;
+        // Use device_count from API if available, otherwise calculate from devices
+        let deviceCount = pool.device_count;
+        if (deviceCount === undefined || deviceCount === 0) {
+            // Calculate from devices array if available
+            const devices = pool.devices || [];
+            const uniqueSerials = new Set();
+            devices.forEach(d => {
+                if (d.vdev_type === 'disk' && d.serial_number) {
+                    uniqueSerials.add(d.serial_number);
+                }
+            });
+            deviceCount = uniqueSerials.size || devices.filter(d => d.vdev_type === 'disk').length;
+        }
         
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
 
@@ -224,10 +233,13 @@ const ZFS = {
 
         const lastScrub = scrubHistory.length > 0 ? scrubHistory[0] : null;
         
-        // Organize and deduplicate devices
-        const { vdevs, uniqueDisks } = this.organizeAndDeduplicateDevices(devices);
+        // Deduplicate devices
+        const { vdevs, uniqueDisks } = this.deduplicateDevices(devices);
         const diskCount = uniqueDisks.length;
         const topology = this.calculateTopology(vdevs, uniqueDisks, capacity);
+
+        console.log('Devices from API:', devices.length);
+        console.log('After dedup - vdevs:', vdevs.length, 'disks:', uniqueDisks.length);
 
         return `
             <div class="zfs-detail-tabs">
@@ -250,116 +262,101 @@ const ZFS = {
         `;
     },
 
-    // Get unique disks by serial number (deduplicates GUID vs device name entries)
-    getUniqueDisks(devices) {
-        const dominated = new Set();
-        const disks = [];
+    /**
+     * Deduplicate devices - KEY FUNCTION
+     * Problem: Database has both GUID entries AND device name entries with same serial
+     * Solution: Keep only one entry per serial number, preferring readable names
+     */
+    deduplicateDevices(devices) {
+        const vdevs = [];
+        const diskMap = new Map(); // serial -> best disk entry
+        const noSerialDisks = [];
         
-        devices.forEach(dev => {
+        console.log('=== Deduplication Start ===');
+        console.log('Total devices:', devices.length);
+        
+        devices.forEach((dev, idx) => {
             const vdevType = (dev.vdev_type || 'disk').toLowerCase();
-            if (vdevType === 'disk') {
-                disks.push(dev);
+            const name = dev.device_name || dev.name || '';
+            const serial = dev.serial_number || '';
+            
+            console.log(`Device ${idx}: name="${name}", type="${vdevType}", serial="${serial}"`);
+            
+            // Separate vdevs (mirror, raidz) from disks
+            if (vdevType !== 'disk') {
+                vdevs.push(dev);
+                console.log(`  -> Added to vdevs`);
+                return;
             }
-        });
-        
-        // Group by serial number to find duplicates
-        const bySerial = {};
-        disks.forEach((disk, idx) => {
-            const serial = disk.serial_number;
-            if (serial) {
-                if (!bySerial[serial]) bySerial[serial] = [];
-                bySerial[serial].push({ disk, idx });
+            
+            // Handle disks
+            if (!serial) {
+                // No serial - add to noSerial list
+                noSerialDisks.push(dev);
+                console.log(`  -> No serial, added to noSerial list`);
+                return;
             }
-        });
-        
-        // Mark duplicates - prefer device with readable name (sda over GUID)
-        Object.values(bySerial).forEach(group => {
-            if (group.length > 1) {
-                // Sort: prefer short names (sda) over GUIDs
-                group.sort((a, b) => {
-                    const aIsGuid = this.looksLikeGUID(a.disk.device_name || a.disk.name);
-                    const bIsGuid = this.looksLikeGUID(b.disk.device_name || b.disk.name);
-                    if (aIsGuid && !bIsGuid) return 1;  // b is better
-                    if (!aIsGuid && bIsGuid) return -1; // a is better
-                    return 0;
-                });
-                // Mark all but the first as duplicates
-                for (let i = 1; i < group.length; i++) {
-                    dominated.add(group[i].idx);
+            
+            // Has serial - check for duplicates
+            if (!diskMap.has(serial)) {
+                diskMap.set(serial, dev);
+                console.log(`  -> First with serial ${serial}, added`);
+            } else {
+                // Duplicate serial - keep the one with better name
+                const existing = diskMap.get(serial);
+                const existingName = existing.device_name || existing.name || '';
+                
+                const existingIsGuid = this.looksLikeGUID(existingName);
+                const currentIsGuid = this.looksLikeGUID(name);
+                
+                console.log(`  -> Duplicate serial. Existing="${existingName}" (GUID:${existingIsGuid}), Current="${name}" (GUID:${currentIsGuid})`);
+                
+                if (existingIsGuid && !currentIsGuid) {
+                    // Current has better name
+                    diskMap.set(serial, dev);
+                    console.log(`  -> Replaced with current (better name)`);
+                } else if (!existingIsGuid && currentIsGuid) {
+                    // Existing has better name, keep it
+                    console.log(`  -> Keeping existing (better name)`);
+                } else if (name.length < existingName.length) {
+                    // Prefer shorter name
+                    diskMap.set(serial, dev);
+                    console.log(`  -> Replaced with current (shorter name)`);
+                } else {
+                    console.log(`  -> Keeping existing`);
                 }
             }
         });
         
-        // Return non-duplicate disks
-        return disks.filter((_, idx) => !dominated.has(idx));
-    },
-
-    // Organize devices into vdevs and deduplicated disks
-    organizeAndDeduplicateDevices(devices) {
-        const vdevs = [];
-        const allDisks = [];
+        // Combine unique disks
+        const uniqueDisks = Array.from(diskMap.values());
         
-        devices.forEach(dev => {
-            const vdevType = (dev.vdev_type || 'disk').toLowerCase();
-            if (vdevType === 'disk') {
-                allDisks.push(dev);
-            } else {
-                vdevs.push(dev);
+        // Add no-serial disks (but avoid duplicates by name)
+        const seenNames = new Set(uniqueDisks.map(d => d.device_name || d.name));
+        noSerialDisks.forEach(disk => {
+            const name = disk.device_name || disk.name;
+            if (!seenNames.has(name)) {
+                uniqueDisks.push(disk);
+                seenNames.add(name);
             }
         });
         
-        // Deduplicate disks by serial
-        const uniqueDisks = this.deduplicateDisks(allDisks);
+        console.log('=== Deduplication End ===');
+        console.log('Vdevs:', vdevs.length);
+        console.log('Unique disks:', uniqueDisks.length);
         
         return { vdevs, uniqueDisks };
     },
 
-    // Deduplicate disks - prefer readable names over GUIDs
-    deduplicateDisks(disks) {
-        const dominated = new Set();
-        
-        // Group by serial
-        const bySerial = {};
-        disks.forEach((disk, idx) => {
-            const serial = disk.serial_number;
-            if (serial) {
-                if (!bySerial[serial]) bySerial[serial] = [];
-                bySerial[serial].push({ disk, idx });
-            }
-        });
-        
-        // For each group with same serial, keep only the best one
-        Object.values(bySerial).forEach(group => {
-            if (group.length > 1) {
-                // Sort: prefer readable device names
-                group.sort((a, b) => {
-                    const aName = a.disk.device_name || a.disk.name || '';
-                    const bName = b.disk.device_name || b.disk.name || '';
-                    const aIsGuid = this.looksLikeGUID(aName);
-                    const bIsGuid = this.looksLikeGUID(bName);
-                    
-                    // Prefer non-GUID
-                    if (aIsGuid && !bIsGuid) return 1;
-                    if (!aIsGuid && bIsGuid) return -1;
-                    
-                    // Prefer shorter names
-                    return aName.length - bName.length;
-                });
-                
-                // Mark all but the best as dominated
-                for (let i = 1; i < group.length; i++) {
-                    dominated.add(group[i].idx);
-                }
-            }
-        });
-        
-        return disks.filter((_, idx) => !dominated.has(idx));
-    },
-
     looksLikeGUID(name) {
         if (!name) return false;
-        // GUIDs have dashes and are long
-        return name.includes('-') && name.length > 20;
+        // GUIDs: contain dashes and are 32+ chars (like 79b85ece-9d17-4299-8dc9-97ba419af8ae)
+        if (name.length >= 20 && name.includes('-')) {
+            // Count hex chars
+            const hexChars = (name.match(/[0-9a-fA-F]/g) || []).length;
+            return hexChars >= 20;
+        }
+        return false;
     },
 
     renderOverviewTab(pool, capacity, state, topology, lastScrub) {
@@ -456,7 +453,6 @@ const ZFS = {
             vdevCounts[type] = (vdevCounts[type] || 0) + 1;
         });
 
-        // Width = number of disks per vdev
         const width = vdevs.length > 0 ? Math.ceil(disks.length / vdevs.length) : disks.length;
 
         let description = '';
@@ -548,11 +544,10 @@ const ZFS = {
         const diskState = (disk.state || 'ONLINE').toUpperCase();
         const serial = disk.serial_number || '';
         
-        // Get display name - strip partition suffix for matching (sda2 -> sda)
-        const baseDiskName = this.getBaseDiskName(diskName);
+        // Get display name
         const displayName = this.getDisplayName(diskName);
         
-        // Find drive by serial - this is the correct way
+        // Find drive by serial
         const driveLink = serial ? this.findDriveBySerial(hostname, serial) : null;
 
         return `
@@ -565,7 +560,7 @@ const ZFS = {
                 <div class="zfs-disk-info">
                     ${serial ? `
                         <span class="zfs-disk-serial ${driveLink ? 'clickable' : ''}" 
-                              ${driveLink ? `onclick="event.stopPropagation(); ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="View SMART data for ${serial}"` : ''}>
+                              ${driveLink ? `onclick="event.stopPropagation(); ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="View SMART data"` : ''}>
                             ${serial}
                             ${driveLink ? this.icons.link : ''}
                         </span>
@@ -576,31 +571,17 @@ const ZFS = {
         `;
     },
 
-    // Strip partition number from device name (sda2 -> sda)
-    getBaseDiskName(name) {
-        if (!name) return '';
-        // Match device names like sda2, nvme0n1p2, etc. and strip partition
-        const match = name.match(/^(sd[a-z]+|nvme\d+n\d+|hd[a-z]+|vd[a-z]+|xvd[a-z]+|da\d+|ada\d+)/i);
-        return match ? match[1] : name;
-    },
-
     getDisplayName(name) {
         if (!name) return 'Unknown';
-        
-        // If it's a GUID, shorten it
         if (this.looksLikeGUID(name)) {
             return name.substring(0, 8) + '...';
         }
-        
-        // If it's a device path, extract just the device name
         if (name.startsWith('/dev/')) {
             return name.replace('/dev/', '');
         }
-        
         return name;
     },
 
-    // Find drive by serial number - must match exactly
     findDriveBySerial(hostname, serial) {
         if (!serial || !hostname) return null;
         
@@ -775,7 +756,6 @@ const ZFS = {
 
     formatScrubDate(dateStr) {
         if (!dateStr) return 'Unknown';
-        
         try {
             const date = new Date(dateStr);
             if (isNaN(date.getTime())) return dateStr;
