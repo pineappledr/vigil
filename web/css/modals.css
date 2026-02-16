@@ -1,242 +1,345 @@
-/* ============================================
-   USER MENU & DROPDOWN
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   ZFS Pool Modal Styles - TrueNAS-like Display
+   Add to your main CSS file
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-.user-dropdown { position: relative; }
+/* Overview sections */
+.zfs-overview-section {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
 
-.user-btn {
+.zfs-overview-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.zfs-overview-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Detail rows - TrueNAS style */
+.zfs-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.zfs-detail-row:last-child {
+    border-bottom: none;
+}
+
+.zfs-detail-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.zfs-detail-value {
+    font-size: 14px;
+    color: #fff;
+    font-weight: 500;
+}
+
+/* Topology display */
+.topology-display {
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    background: rgba(0, 255, 170, 0.1);
+    border: 1px solid rgba(0, 255, 170, 0.2);
+    padding: 12px 16px;
+    border-radius: 6px;
+    color: var(--accent-color, #00ffaa);
+}
+
+/* ─── Device List Styles ─────────────────────────────────────────────────────── */
+
+.zfs-devices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.zfs-vdev-group {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.zfs-vdev-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.zfs-vdev-name {
+    font-weight: 600;
+    color: #fff;
+    font-size: 14px;
+}
+
+.zfs-vdev-type,
+.zfs-device-type-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    background: rgba(100, 100, 255, 0.2);
+    color: #aaccff;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.zfs-vdev-state,
+.zfs-device-state {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.zfs-vdev-state.online,
+.zfs-device-state.online,
+.zfs-disk-state.online { background: rgba(0, 200, 100, 0.2); color: #00c864; }
+.zfs-vdev-state.degraded,
+.zfs-device-state.degraded,
+.zfs-disk-state.degraded { background: rgba(255, 200, 0, 0.2); color: #ffc800; }
+.zfs-vdev-state.faulted,
+.zfs-device-state.faulted,
+.zfs-disk-state.faulted { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
+
+.zfs-vdev-errors {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    font-family: monospace;
+}
+
+/* Disk list */
+.zfs-disk-list {
+    padding: 8px 0;
+}
+
+.zfs-disk-row,
+.zfs-device-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.15s;
+}
+
+.zfs-disk-row:last-child,
+.zfs-device-row:last-child {
+    border-bottom: none;
+}
+
+.zfs-disk-row:hover,
+.zfs-device-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.zfs-disk-main,
+.zfs-device-main {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: all var(--transition-fast);
 }
 
-.user-btn:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-hover);
+.zfs-disk-indent {
+    color: rgba(255, 255, 255, 0.25);
+    font-family: monospace;
+    font-size: 14px;
+    width: 20px;
 }
 
-.user-btn svg { width: 18px; height: 18px; }
-.user-btn .chevron { width: 14px; height: 14px; color: var(--text-muted); }
-
-.dropdown-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    min-width: 160px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-shadow: var(--shadow-lg);
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-8px);
-    transition: all var(--transition-fast);
-    z-index: 1000;
+.zfs-disk-name,
+.zfs-device-name {
+    font-weight: 500;
+    color: #fff;
+    font-size: 13px;
+    font-family: monospace;
 }
 
-.dropdown-menu.show {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
+.zfs-disk-state {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 500;
 }
 
-.dropdown-menu button {
+.zfs-disk-info,
+.zfs-device-info {
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 16px;
-    background: none;
-    border: none;
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    font-size: 0.875rem;
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--transition-fast);
+    gap: 16px;
 }
 
-.dropdown-menu button:hover { background: var(--bg-hover); }
-.dropdown-menu button:first-child { border-radius: 8px 8px 0 0; }
-.dropdown-menu button:last-child { border-radius: 0 0 8px 8px; }
-.dropdown-menu button svg { width: 16px; height: 16px; color: var(--text-muted); }
-
-/* ============================================
-   MODALS
-   ============================================ */
-
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
+.zfs-disk-serial,
+.zfs-device-serial {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
     display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.zfs-disk-serial.clickable,
+.zfs-device-serial.clickable {
+    color: var(--accent-color, #00ffaa);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0, 255, 170, 0.1);
+    transition: all 0.2s;
+}
+
+.zfs-disk-serial.clickable:hover,
+.zfs-device-serial.clickable:hover {
+    background: rgba(0, 255, 170, 0.2);
+    color: #fff;
+}
+
+.zfs-disk-serial .link-icon,
+.zfs-device-serial .link-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.zfs-disk-errors,
+.zfs-device-errors {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.35);
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.zfs-no-disks {
+    padding: 16px;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* ─── Scrub History ────────────────────────────────────────────────────────── */
+
+.zfs-scrub-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.zfs-scrub-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    border-left: 3px solid transparent;
+}
+
+.zfs-scrub-item.has-errors {
+    border-left-color: var(--danger-color, #ff4444);
+    background: rgba(255, 68, 68, 0.05);
+}
+
+.zfs-scrub-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.zfs-scrub-date {
+    font-weight: 500;
+    font-size: 14px;
+    color: #fff;
+    font-family: monospace;
+}
+
+.zfs-scrub-stats {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.zfs-scrub-duration {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.zfs-scrub-errors {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    background: rgba(0, 255, 170, 0.15);
+    color: var(--accent-color, #00ffaa);
+}
+
+.zfs-scrub-errors.has-errors {
+    background: rgba(255, 68, 68, 0.15);
+    color: var(--danger-color, #ff4444);
+}
+
+/* ─── States ───────────────────────────────────────────────────────────────── */
+
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
-    padding: 20px;
+    padding: 48px;
+    color: rgba(255, 255, 255, 0.5);
 }
 
-.modal {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    width: 100%;
-    max-width: 400px;
-    box-shadow: var(--shadow-lg);
-}
-
-.modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.modal-header h3 { font-size: 1.125rem; font-weight: 600; }
-
-.modal-close {
-    padding: 8px;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all var(--transition-fast);
-}
-
-.modal-close:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-.modal-close svg { width: 20px; height: 20px; }
-
-.modal-body { padding: 24px; }
-
-.modal-footer {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    padding: 16px 24px;
-    border-top: 1px solid var(--border-color);
-}
-
-.modal-message {
-    margin-bottom: 20px;
-    padding: 12px 16px;
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 8px;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-}
-
-/* ============================================
-   FORMS
-   ============================================ */
-
-.form-group { margin-bottom: 16px; }
-
-.form-group label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-}
-
-.form-input {
-    width: 100%;
-    padding: 10px 14px;
-    font-size: 0.875rem;
-    font-family: var(--font-sans);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-primary);
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.form-input:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-.form-input::placeholder { color: var(--text-muted); }
-
-.form-hint {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 8px;
-}
-
-.form-error {
-    color: var(--danger);
-    font-size: 0.875rem;
-    margin-top: 8px;
-}
-
-.alias-drive-info {
-    background: var(--bg-elevated);
-    padding: 12px 16px;
-    border-radius: 8px;
+.spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--accent-color, #00ffaa);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
     margin-bottom: 16px;
-    font-size: 0.875rem;
 }
 
-.alias-drive-info div { margin-bottom: 4px; }
-.alias-drive-info div:last-child { margin-bottom: 0; }
-
-/* ============================================
-   BUTTONS
-   ============================================ */
-
-.btn {
-    padding: 10px 20px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    font-family: var(--font-sans);
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    transition: all var(--transition-fast);
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
-.btn-primary {
-    background: var(--accent-gradient);
-    color: white;
+.zfs-no-data {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+    padding: 16px 0;
+    text-align: center;
 }
 
-.btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+.error-text {
+    color: var(--danger-color, #ff4444) !important;
 }
 
-.btn-secondary {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+/* State badge */
+.zfs-state-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
 }
 
-.btn-secondary:hover { background: var(--bg-hover); }
-
-.btn-danger {
-    background: var(--danger);
-    color: white;
-}
-
-.btn-danger:hover { background: #dc2626; }
+.zfs-state-badge.online { background: rgba(0, 200, 100, 0.2); color: #00c864; }
+.zfs-state-badge.degraded { background: rgba(255, 200, 0, 0.2); color: #ffc800; }
+.zfs-state-badge.faulted { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
