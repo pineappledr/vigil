@@ -1,0 +1,132 @@
+/* Nav Section Header */
+.nav-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px 4px 16px;
+}
+
+.nav-section-header .nav-label {
+    margin: 0;
+    padding: 0;
+}
+
+.sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sort-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+/* Sidebar Header */
+.sidebar-header {
+    height: 64px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.logo-img {
+    height: 40px;
+    width: auto;
+    margin-right: 12px;
+}
+
+.logo-text {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    font-size: 28px;
+    color: #3b82f6;
+    text-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+    letter-spacing: -1px;
+}
+
+/* Pool Host Label */
+.pool-host-label {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-left: auto;
+    padding-left: 8px;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Offline Styles */
+.status-indicator.offline {
+    background: var(--danger);
+    animation: pulse-offline 2s ease-in-out infinite;
+}
+
+@keyframes pulse-offline {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.server-nav-item.server-offline {
+    opacity: 0.7;
+}
+
+.server-nav-item.server-offline:hover {
+    opacity: 1;
+}
+
+.offline-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: var(--danger);
+    color: white;
+    margin-left: auto;
+}
+
+.server-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.server-nav-item .server-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ZFS Clickable Device */
+.zfs-device-serial.clickable {
+    cursor: pointer;
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.zfs-device-serial.clickable:hover {
+    background: var(--bg-tertiary);
+    text-decoration: underline;
+}

@@ -17,19 +17,20 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION}" \
     -o vigil-agent ./cmd/agent
 
-# Final Stage - Alpine with ZFS tools
-FROM alpine:3.19
+# Final Stage - Debian for better ZFS/library compatibility
+# Use this variant for TrueNAS, FreeBSD-based systems, or when mounting host ZFS tools
+FROM debian:bookworm-slim
 WORKDIR /app
 
-# Install smartmontools, nvme-cli, and ZFS userspace tools
-# Note: ZFS tools require kernel modules from host - use with:
-#   - privileged: true
-#   - /dev/zfs:/dev/zfs mount
-RUN apk add --no-cache \
+# Install smartmontools and nvme-cli
+# ZFS tools can be:
+#   1. Installed here (apt install zfsutils-linux) if host has compatible kernel
+#   2. Mounted from host for TrueNAS/FreeBSD compatibility
+RUN apt-get update && apt-get install -y --no-install-recommends \
     smartmontools \
     nvme-cli \
     ca-certificates \
-    zfs
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary
 COPY --from=builder /app/vigil-agent .

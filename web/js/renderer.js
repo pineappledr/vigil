@@ -1,27 +1,68 @@
 /**
  * Vigil Dashboard - View Renderer
+ * FIXED: Restores dashboard structure after ZFS view
  */
 
 const Renderer = {
+    // Template for the dashboard structure
+    dashboardTemplate: `
+        <div class="summary-grid" id="summary-cards"></div>
+        <div class="section-header"><h2>Servers</h2></div>
+        <div id="server-list" class="server-grid"></div>
+    `,
+
+    /**
+     * Ensure dashboard structure exists (ZFS.render destroys it)
+     */
+    ensureDashboardStructure() {
+        const container = document.getElementById('dashboard-view');
+        if (!container) return false;
+        
+        // Check if structure exists
+        const summaryCards = document.getElementById('summary-cards');
+        const serverList = document.getElementById('server-list');
+        
+        if (!summaryCards || !serverList) {
+            console.log('[Renderer] Restoring dashboard structure');
+            container.innerHTML = this.dashboardTemplate;
+        }
+        return true;
+    },
+
     dashboard(servers) {
+        console.log('[Renderer] dashboard() called with', servers?.length || 0, 'servers');
+        
+        // CRITICAL: Restore structure if destroyed by ZFS.render()
+        this.ensureDashboardStructure();
+        
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
         
+        if (!serverList || !summaryCards) {
+            console.error('[Renderer] Dashboard elements not found!');
+            return;
+        }
+        
         summaryCards.innerHTML = this.serverSummaryCards();
         
-        if (servers.length === 0) {
+        if (!servers || servers.length === 0) {
             serverList.innerHTML = Components.emptyState('noServers');
             return;
         }
         
-        serverList.innerHTML = servers.map((server, idx) => {
+        const sortedServers = State.getSortedData();
+        
+        serverList.innerHTML = sortedServers.map((server) => {
+            const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
-            return Components.serverSection(server, idx, drives);
+            return Components.serverSection(server, actualIdx, drives);
         }).join('');
     },
 
     serverSummaryCards() {
         const stats = State.getStats();
+        const zfsStats = State.getZFSStats();
+        const showZFS = zfsStats.totalPools > 0;
         
         return `
             ${Components.summaryCard({
@@ -58,22 +99,27 @@ const Renderer = {
                 active: State.activeFilter === 'attention',
                 title: stats.attentionDrives > 0 ? 'Click to view drives needing attention' : 'All drives healthy'
             })}
+            ${showZFS ? Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="7" cy="6" r="1" fill="currentColor"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="7" cy="18" r="1" fill="currentColor"/></svg>`,
+                iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan',
+                value: `${zfsStats.healthyPools}/${zfsStats.totalPools}`,
+                label: 'ZFS Pools',
+                onClick: "Navigation.showZFS()",
+                active: State.activeView === 'zfs',
+                title: zfsStats.attentionPools > 0 
+                    ? `${zfsStats.attentionPools} pool(s) need attention` 
+                    : 'Click to view ZFS pools'
+            }) : ''}
         `;
     },
 
     serverDetailSummaryCards(server) {
         const drives = server.details?.drives || [];
         const totalDrives = drives.length;
-        
-        // Calculate total capacity
         const totalBytes = drives.reduce((sum, d) => sum + (d.user_capacity?.bytes || 0), 0);
         const totalCapacity = Utils.formatSize(totalBytes);
-        
-        // Calculate average temperature
         const temps = drives.map(d => d.temperature?.current).filter(t => t != null);
         const avgTemp = temps.length > 0 ? Math.round(temps.reduce((a, b) => a + b, 0) / temps.length) : null;
-        
-        // Count healthy drives
         const healthyDrives = drives.filter(d => Utils.getHealthStatus(d) === 'healthy').length;
         
         return `
@@ -109,10 +155,14 @@ const Renderer = {
     },
 
     serverDetail(server, serverIdx) {
+        // Restore structure first
+        this.ensureDashboardStructure();
+        
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
         
-        // Use server-specific summary cards
+        if (!serverList || !summaryCards) return;
+        
         summaryCards.innerHTML = this.serverDetailSummaryCards(server);
         
         const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
@@ -136,96 +186,98 @@ const Renderer = {
     },
 
     filteredDrives(filterFn, filterType) {
+        // Restore structure first
+        this.ensureDashboardStructure();
+        
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
+        
+        if (!serverList || !summaryCards) return;
         
         summaryCards.innerHTML = this.serverSummaryCards();
         
         const matchingDrives = [];
-        State.data.forEach((server, serverIdx) => {
+        const sortedServers = State.getSortedData();
+        
+        sortedServers.forEach((server) => {
+            const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             (server.details?.drives || []).forEach((drive, driveIdx) => {
                 if (filterFn(drive)) {
                     matchingDrives.push({
                         ...drive,
-                        _idx: driveIdx,
-                        _serverIdx: serverIdx,
-                        _hostname: server.hostname
+                        _serverIdx: actualIdx,
+                        _driveIdx: driveIdx,
+                        _hostname: server.hostname,
+                        _idx: driveIdx
                     });
                 }
             });
         });
         
         if (matchingDrives.length === 0) {
-            serverList.innerHTML = Components.emptyState(filterType);
+            serverList.innerHTML = Components.emptyState(filterType === 'attention' ? 'attention' : 'noDrives');
             return;
         }
         
-        const byServer = {};
-        matchingDrives.forEach(drive => {
-            const key = drive._serverIdx;
-            if (!byServer[key]) byServer[key] = [];
-            byServer[key].push(drive);
-        });
+        const nvme = matchingDrives.filter(d => Utils.getDriveType(d) === 'NVMe');
+        const ssd = matchingDrives.filter(d => Utils.getDriveType(d) === 'SSD');
+        const hdd = matchingDrives.filter(d => !['NVMe', 'SSD'].includes(Utils.getDriveType(d)));
         
-        serverList.innerHTML = Object.entries(byServer).map(([serverIdx, drives]) => {
-            const server = State.data[serverIdx];
-            return Components.serverSection(server, parseInt(serverIdx), drives);
-        }).join('');
+        const renderFilteredSection = (title, icon, drives) => {
+            if (drives.length === 0) return '';
+            return `
+                <div class="drive-type-section">
+                    <div class="drive-type-header">
+                        ${icon}
+                        <span>${title}</span>
+                        <span class="drive-type-count">${drives.length}</span>
+                    </div>
+                    <div class="drives-grid">
+                        ${drives.map(d => Components.driveCard(d, d._serverIdx)).join('')}
+                    </div>
+                </div>
+            `;
+        };
+        
+        serverList.innerHTML = `
+            <div class="filtered-drives-view">
+                ${renderFilteredSection('NVMe Drives', Components.icons.nvme, nvme)}
+                ${renderFilteredSection('Solid State Drives', Components.icons.ssd, ssd)}
+                ${renderFilteredSection('Hard Disk Drives', Components.icons.hdd, hdd)}
+            </div>
+        `;
     },
 
     driveDetails(serverIdx, driveIdx) {
         const server = State.data[serverIdx];
         const drive = server?.details?.drives?.[driveIdx];
         if (!drive) return;
-
-        const status = Utils.getHealthStatus(drive);
-        const sidebar = document.getElementById('detail-sidebar');
-        const hostname = server.hostname;
-
-        // Detect drive type properly including NVMe
-        const isNvme = drive.device?.type?.toLowerCase() === 'nvme' || 
-                       drive.device?.protocol === 'NVMe' ||
-                       !!drive.nvme_smart_health_information_log;
         
-        let rotationType, rotationDetail;
-        if (isNvme) {
-            rotationType = 'NVMe';
-            rotationDetail = 'NVMe SSD';
-        } else if (drive.rotation_rate === 0) {
-            rotationType = 'SSD';
-            rotationDetail = 'Solid State Drive';
-        } else if (drive.rotation_rate) {
-            rotationType = 'HDD';
-            rotationDetail = `${drive.rotation_rate} RPM`;
-        } else {
-            rotationType = 'Unknown';
-            rotationDetail = 'Not reported';
-        }
-
+        const hostname = server.hostname;
+        const sidebar = document.getElementById('detail-sidebar');
+        
         sidebar.innerHTML = `
-            <div class="drive-header">
-                <div class="icon ${status}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg></div>
-                <h3>${Utils.getDriveName(drive)}</h3>
-                <span class="serial">${drive.serial_number || 'N/A'}</span>
+            <div class="detail-header">
+                ${Components.icons[Utils.getDriveType(drive).toLowerCase()] || Components.icons.hdd}
+                <div class="drive-detail-title">
+                    <h3>${Utils.getDriveName(drive)}</h3>
+                    <span class="drive-serial">${drive.serial_number || 'Unknown'}</span>
+                </div>
             </div>
             <div class="info-group">
-                <div class="info-group-label">Device Information</div>
+                ${this.infoRow('Model', drive.model_name || 'Unknown')}
+                ${this.infoRow('Serial', drive.serial_number || 'Unknown')}
+                ${this.infoRow('Firmware', drive.firmware_version || 'Unknown')}
                 ${this.infoRow('Capacity', Utils.formatSize(drive.user_capacity?.bytes))}
-                ${this.infoRow('Firmware', drive.firmware_version || 'N/A')}
-                ${this.infoRow('Drive Type', rotationType)}
-                ${this.infoRow('Rotation Rate', rotationDetail)}
-                ${this.infoRow('Interface', drive.device?.protocol || 'ATA')}
-            </div>
-            <div class="info-group">
-                <div class="info-group-label">Health Status</div>
-                ${this.infoRow('SMART Status', drive.smart_status?.passed === true ? 'PASSED' : drive.smart_status?.passed === false ? 'FAILED' : 'Unknown', drive.smart_status?.passed === true ? 'success' : drive.smart_status?.passed === false ? 'danger' : '')}
-                ${this.infoRow('Temperature', drive.temperature?.current != null ? `${drive.temperature.current}°C` : 'N/A', drive.temperature?.current > 50 ? 'warning' : '')}
+                ${this.infoRow('Type', Utils.getDriveType(drive))}
+                ${drive.rotation_rate ? this.infoRow('RPM', drive.rotation_rate) : ''}
+                ${this.infoRow('Temperature', drive.temperature?.current != null ? `${drive.temperature.current}°C` : 'N/A')}
+                ${this.infoRow('SMART Status', drive.smart_status?.passed ? 'Passed' : 'Failed', drive.smart_status?.passed ? 'healthy' : 'critical')}
                 ${this.infoRow('Powered On', Utils.formatAge(drive.power_on_time?.hours))}
                 ${this.infoRow('Power Cycles', drive.power_cycle_count ?? 'N/A')}
             </div>
         `;
 
-        // Use SmartAttributes module if available, otherwise render basic view
         if (typeof SmartAttributes !== 'undefined') {
             SmartAttributes.init(hostname, drive.serial_number, drive);
         } else {

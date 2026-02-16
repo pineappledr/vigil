@@ -6,6 +6,8 @@
     <title>Vigil · Infrastructure Monitor</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/smart-attributes.css">
+    <link rel="stylesheet" href="css/zfs.css">
+    <link rel="stylesheet" href="css/offline-indicator.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -13,10 +15,10 @@
 <body>
     <div class="app">
         <aside class="sidebar">
-            <div class="sidebar-header" style="height: 64px; padding-top: 0; padding-bottom: 0; display: flex; align-items: center; justify-content: space-between;">
-                <div class="logo" onclick="resetDashboard()" style="display: flex; align-items: center; cursor: pointer; height: 100%;">
-                    <img src="img/Vigil.png" alt="Vigil" style="height: 40px; width: auto; margin-right: 12px;">                   
-                    <span class="logo-text" style="font-family: 'Courier New', Courier, monospace; font-weight: 700; font-size: 28px; color: #3b82f6; text-shadow: 0 0 5px rgba(59, 130, 246, 0.5); letter-spacing: -1px; line-height: 1;">Vigil</span>
+            <div class="sidebar-header">
+                <div class="logo" id="logo-link">
+                    <img src="img/Vigil.png" alt="Vigil" class="logo-img">                   
+                    <span class="logo-text">Vigil</span>
                 </div>
                 <div id="status-indicator" class="status-dot offline" title="Connecting..."></div>
             </div>
@@ -24,7 +26,7 @@
             <nav class="sidebar-nav">
                 <div class="nav-section">
                     <span class="nav-label">Overview</span>
-                    <a href="#" class="nav-item active" onclick="resetDashboard(); return false;">
+                    <a href="javascript:void(0)" class="nav-item active" id="nav-dashboard">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="7" height="7"/>
                             <rect x="14" y="3" width="7" height="7"/>
@@ -36,8 +38,39 @@
                 </div>
                 
                 <div class="nav-section">
-                    <span class="nav-label">Servers <span id="server-count" class="count-badge">0</span></span>
+                    <div class="nav-section-header">
+                        <span class="nav-label">SERVERS</span>
+                        <button id="server-sort-btn" class="sort-btn" title="Sort servers">
+                            <span class="sort-icon">↑</span>
+                            <span class="sort-text">A-Z</span>
+                        </button>
+                    </div>
+                    <a href="javascript:void(0)" class="nav-item" id="nav-servers">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="7" rx="1"/>
+                            <rect x="2" y="14" width="20" height="7" rx="1"/>
+                            <circle cx="6" cy="6.5" r="1.5" fill="currentColor"/>
+                            <circle cx="6" cy="17.5" r="1.5" fill="currentColor"/>
+                        </svg>
+                        Servers
+                        <span id="server-count" class="count-badge">0</span>
+                    </a>
                     <div id="server-nav-list" class="server-list-nav"></div>
+                </div>
+
+                <div id="zfs-nav-section" class="nav-section hidden">
+                    <span class="nav-label">Storage</span>
+                    <a href="javascript:void(0)" class="nav-item" id="nav-zfs">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 6h16M4 12h16M4 18h16"/>
+                            <circle cx="7" cy="6" r="1.5" fill="currentColor"/>
+                            <circle cx="7" cy="12" r="1.5" fill="currentColor"/>
+                            <circle cx="7" cy="18" r="1.5" fill="currentColor"/>
+                        </svg>
+                        ZFS Pools
+                        <span id="zfs-pool-count" class="count-badge">0</span>
+                    </a>
+                    <div id="zfs-nav-list" class="server-list-nav"></div>
                 </div>
             </nav>
             
@@ -71,7 +104,7 @@
             <header class="main-header">
                 <div class="header-left">
                     <nav id="breadcrumbs" class="breadcrumbs hidden">
-                        <a href="#" onclick="resetDashboard(); return false;">Dashboard</a>
+                        <a href="javascript:void(0)" id="breadcrumb-home">Dashboard</a>
                         <span class="separator">›</span>
                         <span id="crumb-server" class="current">Server</span>
                     </nav>
@@ -80,7 +113,7 @@
                 <div class="header-right">
                     <div id="user-menu"></div>
                     <span class="last-update">Last update: <time id="last-update-time">--:--:--</time></span>
-                    <button class="btn-refresh" onclick="fetchData()" title="Refresh">
+                    <button class="btn-refresh" id="btn-refresh" title="Refresh">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="23 4 23 10 17 10"/>
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -107,7 +140,7 @@
             </div>
 
             <div id="details-view" class="view hidden">
-                <button class="btn-back" onclick="goBackToContext()">
+                <button class="btn-back" id="btn-back">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="19" y1="12" x2="5" y2="12"/>
                         <polyline points="12 19 5 12 12 5"/>
@@ -133,6 +166,7 @@
     <script src="js/components.js"></script>
     <script src="js/modals.js"></script>
     <script src="js/smart-attributes.js"></script>
+    <script src="js/zfs.js"></script>
     <script src="js/renderer.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/data.js"></script>

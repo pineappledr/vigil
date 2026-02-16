@@ -71,7 +71,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent (PR Preview)
+      - name: Build and push Agent Alpine (PR Preview)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -83,6 +83,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push Agent Debian (PR Preview)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent.debian
+          push: true
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}-debian
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
@@ -91,21 +103,24 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🐳 Preview Images Built! (Alpine Linux)
+              body: `## 🐳 Preview Images Built!
               
               **Server:**
               \`\`\`bash
               docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
               \`\`\`
               
-              **Agent:**
+              **Agent (Alpine - recommended for most Linux):**
               \`\`\`bash
               docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}
               \`\`\`
               
-              These preview images can be used for testing before merging.
+              **Agent (Debian - for TrueNAS/FreeBSD compatibility):**
+              \`\`\`bash
+              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}-debian
+              \`\`\`
               
-              _Built with Alpine Linux for minimal size and security._`
+              These preview images can be used for testing before merging.`
             })
 
   # Build dev images and binaries for feature branches (not main, not tags)
@@ -183,7 +198,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent (Dev)
+      - name: Build and push Agent Alpine (Dev)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -197,26 +212,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Print dev build info
-        run: |
-          echo "## 🛠️ Dev Build Complete!"
-          echo ""
-          echo "### Agent Binaries"
-          echo "Download from the workflow artifacts or use:"
-          echo ""
-          echo "**Docker Images:**"
-          echo "\`\`\`bash"
-          echo "# Server"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.branch.outputs.name }}"
-          echo ""
-          echo "# Agent"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}"
-          echo "\`\`\`"
-          echo ""
-          echo "**Binary Artifacts:**"
-          echo "- vigil-agent-linux-amd64"
-          echo "- vigil-agent-linux-arm64"
-          echo "- checksums.txt"
+      - name: Build and push Agent Debian (Dev)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent.debian
+          push: true
+          build-args: |
+            VERSION=dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}-debian
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}-debian-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # Build latest images for main branch
   build-latest:
@@ -263,7 +271,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent
+      - name: Build and push Agent Alpine
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -274,7 +282,24 @@ jobs:
             VERSION=latest-${{ steps.sha.outputs.short }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:alpine
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Agent Debian
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent.debian
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=latest-${{ steps.sha.outputs.short }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:debian
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest-debian
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}-debian
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -332,7 +357,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent (Release)
+      - name: Build and push Agent Alpine (Release)
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -343,7 +368,24 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}-alpine
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:alpine
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Agent Debian (Release)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent.debian
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}-debian
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:debian
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -387,19 +429,37 @@ jobs:
             
             ---
             
-            ### 🐳 Docker Images (Alpine Linux)
+            ### 🐳 Docker Images
             
+            **Server:**
             ```bash
-            # Server (Alpine-based, ~50MB)
             docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
-            
-            # Agent (Alpine-based, ~50MB)
-            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}
             ```
             
-            **Multi-Architecture Support:**
-            - `linux/amd64` (x86_64)
-            - `linux/arm64` (aarch64)
+            **Agent (Alpine - recommended for most Linux systems):**
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}
+            # or explicitly:
+            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}-alpine
+            ```
+            
+            **Agent (Debian - for TrueNAS/FreeBSD or when mounting host ZFS tools):**
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}-debian
+            ```
+            
+            #### Which Agent Image Should I Use?
+            
+            | System | Recommended Image | Notes |
+            |--------|-------------------|-------|
+            | Ubuntu/Debian | `latest` (Alpine) | ZFS tools included |
+            | Alpine Linux | `latest` (Alpine) | Native compatibility |
+            | TrueNAS SCALE | `debian` | Mount host ZFS tools |
+            | TrueNAS CORE | `debian` | Mount host ZFS tools |
+            | Proxmox | `latest` (Alpine) | ZFS tools included |
+            | Unraid | `latest` (Alpine) | No ZFS needed |
+            
+            **Multi-Architecture Support:** Both variants support `linux/amd64` and `linux/arm64`
             
             ---
             
@@ -424,10 +484,7 @@ jobs:
             ### ✅ Verify Checksums
             
             ```bash
-            # Download checksums
             curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/checksums.txt -o checksums.txt
-            
-            # Verify (Linux/macOS)
             sha256sum -c checksums.txt
             ```
           files: |

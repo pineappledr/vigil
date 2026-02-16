@@ -5,7 +5,7 @@
     <span style="vertical-align: middle;">Vigil</span>
   </h1>
 
-  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis.**
+  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis and ZFS pool management.**
   
   <p>
     <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
@@ -16,9 +16,9 @@
 
 </div>
 
-**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard and predictive health analysis, ensuring you never miss a critical hardware failure.
+**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, and comprehensive ZFS pool monitoring, ensuring you never miss a critical hardware failure.
 
-Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
+Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
 
 ---
 
@@ -33,6 +33,21 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, Unraid, Fedora, etc.) in
 - **🔐 Authentication:** Built-in login system with secure sessions.
 - **🏷️ Drive Aliases:** Set custom names for your drives (e.g., "Plex Media", "Backup Drive").
 - **🔧 HBA Support:** Automatic detection for SATA drives behind SAS HBA controllers (LSI SAS3224, etc.).
+- **🗄️ ZFS Pool Monitoring:** Full ZFS support with pool health, device hierarchy, scrub history, and SMART integration.
+
+---
+
+## 🗄️ ZFS Monitoring Features
+
+Vigil provides comprehensive ZFS pool monitoring:
+
+- **Pool Overview:** Health status, capacity, fragmentation, and dedup ratio
+- **Data Topology:** Visual display of pool configuration (MIRROR, RAIDZ1/2/3, Stripe)
+- **Device Hierarchy:** View vdevs and their member disks with proper parent-child relationships
+- **Scrub History:** Track scrub dates, durations, and errors over time
+- **SMART Integration:** Click any drive serial to view its detailed SMART data
+- **Error Tracking:** Read, write, and checksum errors at pool and device level
+- **TrueNAS Compatible:** Full support for TrueNAS SCALE and CORE with GUID resolution
 
 ---
 
@@ -51,6 +66,9 @@ The main dashboard shows all servers with their drives in a clean card grid layo
 ### Drive Details
 Click any drive to see detailed S.M.A.R.T. attributes, temperature, power-on hours, and health status.
 
+### ZFS Pools
+View all ZFS pools with health status, capacity, and scrub information. Click to see device hierarchy and history.
+
 ### Settings
 Manage your password and account settings.
 
@@ -58,27 +76,51 @@ Manage your password and account settings.
 
 ## 📋 Requirements
 
-**Essential:**
+### Essential
 - **Linux OS:** (64-bit recommended)
-- **Root/Sudo Access:** Required for the Agent to read physical disk health.
+- **Root/Sudo Access:** Required for the Agent to read physical disk health and ZFS data.
 - **smartmontools:** The core engine for reading HDD/SSD health data.
 
-**Install Requirements:**
+### Optional (for ZFS monitoring)
+- **zfsutils-linux** (Linux) or **zfs** (FreeBSD/TrueNAS): Required for ZFS pool monitoring.
+- **nvme-cli:** For enhanced NVMe drive support.
+
+### Install Requirements
 
 ```bash
 # Ubuntu / Debian / Proxmox
-sudo apt update && sudo apt install smartmontools nvme-cli -y
+sudo apt update && sudo apt install -y smartmontools nvme-cli zfsutils-linux
 ```
 
 ```bash
 # Fedora / CentOS / RHEL
-sudo dnf install smartmontools nvme-cli
+sudo dnf install -y https://zfsonlinux.org/fedora/zfs-release-latest.noarch.rpm
+sudo dnf install -y smartmontools nvme-cli zfs
 ```
 
 ```bash
 # Arch Linux
 sudo pacman -S smartmontools nvme-cli
+sudo yay -S zfs-dkms
 ```
+
+```bash
+# TrueNAS SCALE / CORE
+# ZFS tools are pre-installed, just ensure smartmontools is available
+sudo apt install -y smartmontools  # SCALE
+pkg install smartmontools          # CORE
+```
+
+**Optional: Arch Linux** using the archzfs Repository
+
+Follow the instructions on the [archzfs website](https://github.com/archzfs/archzfs) to add their GPG key and repository URL.
+
+Once added, you can then run:
+
+```bash
+sudo pacman -S zfs-linux 
+```
+or the version matching your kernel.
 
 ---
 
@@ -175,18 +217,43 @@ sudo systemctl enable vigil-agent
 sudo systemctl start vigil-agent
 ```
 
-### Agent: Docker
+### Agent: Docker (Standard Linux)
 
 ```bash
 docker run -d \
   --name vigil-agent \
-  --net=host \
-  --privileged \
-  -v /dev:/dev \
   --restart unless-stopped \
+  --network host \
+  --privileged \
+  -v /dev:/dev:ro \
+  -v /sys:/sys:ro \
+  -v /proc:/proc:ro \
+  -v /dev/zfs:/dev/zfs \
   ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:9080 \
-  --interval 60
+  --server http://localhost:9080 --interval 60
+```
+
+### Agent: Docker (TrueNAS)
+
+For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools:
+
+```bash
+docker run -d \
+  --name vigil-agent \
+  --restart unless-stopped \
+  --network host \
+  --pid host \
+  --privileged \
+  -v /dev:/dev:ro \
+  -v /sys:/sys:ro \
+  -v /dev/zfs:/dev/zfs \
+  -v /sbin/zpool:/sbin/zpool:ro \
+  -v /sbin/zfs:/sbin/zfs:ro \
+  -v /lib:/lib:ro \
+  -v /lib64:/lib64:ro \
+  -v /usr/lib:/usr/lib:ro \
+  ghcr.io/pineappledr/vigil-agent:debian \
+  --server http://localhost:9080 --interval 60
 ```
 
 ---
@@ -242,6 +309,8 @@ docker run -d \
   --net=host \
   --privileged \
   -v /dev:/dev \
+  -v /sys:/sys:ro \
+  -v /dev/zfs:/dev/zfs \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil-agent:latest \
   --server http://YOUR_SERVER_IP:9080 \
@@ -404,6 +473,20 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 | `GET` | `/api/users/me` | Get current user |
 | `POST` | `/api/users/password` | Change password |
 
+### ZFS Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/zfs/pools` | Get all ZFS pools |
+| `GET` | `/api/zfs/pools?hostname=X` | Get pools for specific host |
+| `GET` | `/api/zfs/pools/{hostname}/{poolname}` | Get pool details with devices |
+| `GET` | `/api/zfs/pools/{hostname}/{poolname}/devices` | Get pool devices |
+| `GET` | `/api/zfs/pools/{hostname}/{poolname}/scrubs` | Get scrub history |
+| `GET` | `/api/zfs/summary` | Get ZFS summary stats |
+| `GET` | `/api/zfs/health` | Get pools needing attention |
+| `GET` | `/api/zfs/drive/{hostname}/{serial}` | Cross-reference drive with ZFS |
+| `DELETE` | `/api/zfs/pools/{hostname}/{poolname}` | Remove pool from database |
+
 ---
 
 ## 🔨 Build from Source
@@ -461,6 +544,20 @@ docker pull ghcr.io/pineappledr/vigil-agent:dev-feature-new-feature
 ### "Unknown Drive" showing instead of model name
 
 This can happen with drives behind HBA controllers. The latest agent version automatically handles this, but the drive may be reporting limited info. Setting an alias can help identify the drive.
+
+### ZFS pools not showing
+
+1. Ensure ZFS tools are installed (`zpool` command available)
+2. Check agent logs for ZFS detection: `journalctl -u vigil-agent | grep -i zfs`
+3. For TrueNAS Docker deployments, ensure host ZFS binaries are mounted (see TrueNAS docker-compose)
+4. Verify ZFS is detected: `sudo zpool list`
+
+### ZFS showing GUIDs instead of device names
+
+On TrueNAS, ZFS uses disk GUIDs by default. The agent attempts to resolve these to device names. If GUIDs still appear:
+1. Update to the latest agent version
+2. The frontend will shorten long GUIDs for display
+3. Serial numbers are used for SMART data correlation
 
 ### Authentication issues
 

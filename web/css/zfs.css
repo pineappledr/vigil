@@ -1,0 +1,736 @@
+/* ============================================
+   VIGIL DASHBOARD - ZFS Pools Styles
+   ============================================ */
+
+/* ─── Summary Cards ───────────────────────────────────────────────────────── */
+
+.zfs-summary {
+    margin-bottom: 1.5rem;
+}
+
+.summary-card.healthy-glow {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.summary-card.warning-glow {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.summary-card.danger-glow {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ─── Pools Container ─────────────────────────────────────────────────────── */
+
+.zfs-pools-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* ─── Host Section ────────────────────────────────────────────────────────── */
+
+.zfs-host-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.zfs-host-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.zfs-host-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.zfs-host-title svg {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-primary);
+}
+
+.zfs-host-count {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 0.2rem 0.6rem;
+    border-radius: 10px;
+}
+
+/* ─── Pool Grid ───────────────────────────────────────────────────────────── */
+
+.zfs-pool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+}
+
+/* ─── Pool Card ───────────────────────────────────────────────────────────── */
+
+.zfs-pool-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+}
+
+.zfs-pool-card:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.zfs-pool-card.highlight {
+    animation: zfs-highlight 2s ease-out;
+}
+
+@keyframes zfs-highlight {
+    0%, 100% { box-shadow: none; }
+    50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.5); }
+}
+
+/* Pool card state borders */
+.zfs-pool-card.online {
+    border-left: 3px solid var(--success);
+}
+
+.zfs-pool-card.degraded {
+    border-left: 3px solid var(--warning);
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.zfs-pool-card.faulted {
+    border-left: 3px solid var(--danger);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.zfs-pool-card.offline,
+.zfs-pool-card.unknown {
+    border-left: 3px solid var(--text-muted);
+    opacity: 0.7;
+}
+
+/* ─── Pool Header ─────────────────────────────────────────────────────────── */
+
+.zfs-pool-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.zfs-pool-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.zfs-status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.zfs-status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.zfs-status-dot.degraded { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+.zfs-status-dot.faulted { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.zfs-status-dot.offline,
+.zfs-status-dot.unknown { background: var(--text-muted); }
+
+.zfs-pool-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+/* ─── State Badge ─────────────────────────────────────────────────────────── */
+
+.zfs-state-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+}
+
+.zfs-state-badge.online {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.zfs-state-badge.degraded {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.zfs-state-badge.faulted {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.zfs-state-badge.offline,
+.zfs-state-badge.unknown {
+    background: rgba(100, 116, 139, 0.15);
+    color: var(--text-muted);
+}
+
+.zfs-state-badge.small {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+}
+
+/* ─── Capacity Bar ────────────────────────────────────────────────────────── */
+
+.zfs-pool-capacity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.zfs-capacity-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+}
+
+.zfs-capacity-used {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.zfs-capacity-sep {
+    color: var(--text-muted);
+}
+
+.zfs-capacity-total {
+    font-family: var(--font-mono);
+}
+
+.zfs-capacity-percent {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-left: 0.25rem;
+}
+
+.zfs-capacity-bar {
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.zfs-capacity-bar.large {
+    height: 10px;
+    border-radius: 5px;
+    margin-top: 0.5rem;
+}
+
+.zfs-capacity-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.zfs-capacity-fill.healthy { background: var(--success); }
+.zfs-capacity-fill.warning { background: var(--warning); }
+.zfs-capacity-fill.critical { background: var(--danger); }
+
+/* ─── Scrub & Device Info ─────────────────────────────────────────────────── */
+
+.zfs-pool-scrub,
+.zfs-pool-devices {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.zfs-pool-scrub svg,
+.zfs-pool-devices svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.zfs-error-count {
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.zfs-no-errors {
+    color: var(--success);
+}
+
+/* ─── Empty State ─────────────────────────────────────────────────────────── */
+
+.zfs-empty {
+    padding: 4rem 2rem;
+}
+
+.zfs-empty svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1rem;
+}
+
+.zfs-empty .hint {
+    line-height: 1.6;
+}
+
+/* ─── Loading State ───────────────────────────────────────────────────────── */
+
+.zfs-loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+}
+
+.zfs-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: zfs-spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes zfs-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ─── Error State ─────────────────────────────────────────────────────────── */
+
+.zfs-error-state {
+    padding: 4rem 2rem;
+}
+
+.zfs-error-state svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1rem;
+    color: var(--danger);
+    opacity: 0.6;
+}
+
+.zfs-error-state p {
+    color: var(--danger);
+}
+
+/* ─── Modal Styles ────────────────────────────────────────────────────────── */
+
+.zfs-modal {
+    max-width: 700px;
+    width: 95%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.zfs-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+}
+
+.zfs-modal-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.zfs-modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.zfs-loading,
+.zfs-error,
+.zfs-no-data {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.zfs-error {
+    color: var(--danger);
+}
+
+/* ─── Tabs ────────────────────────────────────────────────────────────────── */
+
+.zfs-detail-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+.zfs-tab {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all var(--transition-fast);
+}
+
+.zfs-tab:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.zfs-tab.active {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.zfs-tab-content {
+    display: none;
+}
+
+.zfs-tab-content.active {
+    display: block;
+}
+
+/* ─── Detail Sections ─────────────────────────────────────────────────────── */
+
+.zfs-detail-section {
+    margin-bottom: 1.5rem;
+}
+
+.zfs-detail-section h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.zfs-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.zfs-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.zfs-detail-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.zfs-detail-value {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.error-text {
+    color: var(--danger) !important;
+    font-weight: 600;
+}
+
+/* ─── Devices Table ───────────────────────────────────────────────────────── */
+
+.zfs-devices-table-wrapper {
+    overflow-x: auto;
+}
+
+.zfs-devices-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.zfs-devices-table th,
+.zfs-devices-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.zfs-devices-table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+}
+
+.zfs-devices-table tr:hover {
+    background: var(--bg-hover);
+}
+
+.zfs-devices-table tr.has-errors {
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.zfs-devices-table .device-name {
+    font-family: var(--font-mono);
+    font-weight: 500;
+}
+
+.vdev-info {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 0.25rem;
+}
+
+/* ─── Scrub History ───────────────────────────────────────────────────────── */
+
+.zfs-scrub-history {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.zfs-scrub-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.zfs-scrub-item.has-errors {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.zfs-scrub-date {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.zfs-scrub-details {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.zfs-scrub-errors {
+    font-weight: 500;
+}
+
+/* ─── Sidebar ZFS Section ─────────────────────────────────────────────────── */
+
+#zfs-nav-section {
+    margin-top: 0.5rem;
+}
+
+#zfs-nav-section .nav-item {
+    position: relative;
+}
+
+#zfs-nav-section .nav-item.has-warning::after,
+#zfs-nav-section .nav-item.has-critical::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+#zfs-nav-section .nav-item.has-warning::after {
+    background: var(--warning);
+}
+
+#zfs-nav-section .nav-item.has-critical::after {
+    background: var(--danger);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .zfs-pool-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .zfs-modal {
+        max-height: 90vh;
+        width: 100%;
+        margin: 0;
+        border-radius: 12px 12px 0 0;
+    }
+
+    .zfs-detail-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .zfs-scrub-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .zfs-scrub-details {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .zfs-pool-card {
+        padding: 0.875rem 1rem;
+    }
+
+    .zfs-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .zfs-devices-table th,
+    .zfs-devices-table td {
+        padding: 0.5rem;
+        font-size: 0.8rem;
+    }
+}
+
+/* ─── Drive Card ZFS Badge ────────────────────────────────────────────────── */
+
+.drive-card-zfs-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0 -0.25rem;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: 1px solid var(--border-color);
+}
+
+.drive-card-zfs-badge:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+}
+
+.zfs-badge-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.zfs-badge-pool {
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.zfs-badge-vdev {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+}
+
+.zfs-badge-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: var(--danger);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-left: auto;
+}
+
+/* Badge state colors */
+.drive-card-zfs-badge.zfs-online {
+    border-left: 3px solid var(--success);
+}
+
+.drive-card-zfs-badge.zfs-online .zfs-badge-icon {
+    color: var(--success);
+}
+
+.drive-card-zfs-badge.zfs-degraded {
+    border-left: 3px solid var(--warning);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.drive-card-zfs-badge.zfs-degraded .zfs-badge-icon {
+    color: var(--warning);
+}
+
+.drive-card-zfs-badge.zfs-faulted {
+    border-left: 3px solid var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.drive-card-zfs-badge.zfs-faulted .zfs-badge-icon {
+    color: var(--danger);
+}
+
+.drive-card-zfs-badge.zfs-offline,
+.drive-card-zfs-badge.zfs-unknown {
+    border-left: 3px solid var(--text-muted);
+    opacity: 0.7;
+}
+
+.drive-card-zfs-badge.zfs-offline .zfs-badge-icon,
+.drive-card-zfs-badge.zfs-unknown .zfs-badge-icon {
+    color: var(--text-muted);
+}

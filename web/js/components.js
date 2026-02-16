@@ -32,6 +32,10 @@ const Components = {
         const serial = drive.serial_number || '';
         const alias = drive._alias || '';
 
+        // Get ZFS pool info for this drive
+        const zfsInfo = State.getZFSInfoForDrive(hostname, serial);
+        const zfsBadge = zfsInfo ? this.zfsPoolBadge(zfsInfo, hostname) : '';
+
         return `
             <div class="drive-card ${status}" onclick="Navigation.showDriveDetails(${serverIdx}, ${drive._idx})">
                 <div class="drive-card-header">
@@ -57,6 +61,7 @@ const Components = {
                     <div class="drive-card-model">${driveName}</div>
                     <div class="drive-card-serial">${serial || 'N/A'}</div>
                 </div>
+                ${zfsBadge}
                 <div class="drive-card-stats">
                     <div class="drive-card-stat">
                         <span class="stat-value">${Utils.formatSize(drive.user_capacity?.bytes)}</span>
@@ -76,6 +81,40 @@ const Components = {
                 </div>
             </div>
         `;
+    },
+
+    zfsPoolBadge(zfsInfo, hostname) {
+        const stateClass = this.getZFSStateClass(zfsInfo.poolState);
+        const hasErrors = zfsInfo.readErrors > 0 || zfsInfo.writeErrors > 0 || zfsInfo.checksumErrors > 0;
+        const errorIndicator = hasErrors ? '<span class="zfs-badge-error">!</span>' : '';
+        
+        return `
+            <div class="drive-card-zfs-badge ${stateClass}" 
+                 onclick="event.stopPropagation(); ZFS.showPoolDetail('${hostname}', '${zfsInfo.poolName}')"
+                 title="ZFS Pool: ${zfsInfo.poolName} (${zfsInfo.poolState})${zfsInfo.vdev ? ' - ' + zfsInfo.vdev : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="zfs-badge-icon">
+                    <path d="M4 6h16M4 12h16M4 18h16"/>
+                    <circle cx="7" cy="6" r="1" fill="currentColor"/>
+                    <circle cx="7" cy="12" r="1" fill="currentColor"/>
+                    <circle cx="7" cy="18" r="1" fill="currentColor"/>
+                </svg>
+                <span class="zfs-badge-pool">${zfsInfo.poolName}</span>
+                ${zfsInfo.vdev ? `<span class="zfs-badge-vdev">${zfsInfo.vdev}</span>` : ''}
+                ${errorIndicator}
+            </div>
+        `;
+    },
+
+    getZFSStateClass(state) {
+        const stateMap = {
+            'ONLINE': 'zfs-online',
+            'DEGRADED': 'zfs-degraded',
+            'FAULTED': 'zfs-faulted',
+            'UNAVAIL': 'zfs-faulted',
+            'OFFLINE': 'zfs-offline',
+            'REMOVED': 'zfs-offline'
+        };
+        return stateMap[state] || 'zfs-unknown';
     },
 
     emptyState(type) {
@@ -140,13 +179,23 @@ const Components = {
         `;
     },
 
+    /**
+     * Server section for dashboard
+     * @param {Object} server - Server data
+     * @param {number} serverIdx - Index in original State.data array
+     * @param {Array} drives - Array of drives
+     */
     serverSection(server, serverIdx, drives) {
         const driveCount = drives.length;
         const countText = `${driveCount} drive${driveCount !== 1 ? 's' : ''}`;
+        
+        // Find sorted index for navigation (sidebar uses sorted order)
+        const sortedData = State.getSortedData();
+        const sortedIdx = sortedData.findIndex(s => s.hostname === server.hostname);
 
         return `
             <div class="drive-section">
-                <div class="drive-section-header clickable" onclick="Navigation.showServer(${serverIdx})">
+                <div class="drive-section-header clickable" onclick="Navigation.showServer(${sortedIdx >= 0 ? sortedIdx : serverIdx})">
                     <div class="drive-section-title">
                         ${this.icons.server}
                         <span>${server.hostname}</span>

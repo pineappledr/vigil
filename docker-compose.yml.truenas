@@ -1,11 +1,14 @@
-# Docker Compose for Vigil - Standard Linux (Alpine Agent)
-# Use this for: Ubuntu, Debian, Proxmox, most Linux distributions
+# Docker Compose for Vigil - TrueNAS SCALE / TrueNAS CORE
+# Uses Debian-based agent with host ZFS tools mounted for compatibility
 #
-# For TrueNAS, use docker-compose.truenas.yml instead
+# For standard Linux systems, use docker-compose.yml instead
 #
-# ZFS Requirements:
-#   - Host must have zfsutils-linux installed
-#   - /dev/zfs must exist (ZFS kernel module loaded)
+# TrueNAS-Specific Notes:
+#   - Uses :debian tag (not :latest) for better library compatibility
+#   - Mounts host ZFS binaries (/sbin/zpool, /sbin/zfs)
+#   - Mounts host libraries for ZFS tool dependencies
+#   - Uses pid: host for process visibility
+#   - ZFS device names may show as GUIDs (normal for TrueNAS)
 
 services:
   vigil-server:
@@ -39,9 +42,10 @@ services:
 
   vigil-agent:
     container_name: vigil-agent
-    image: ghcr.io/pineappledr/vigil-agent:latest  # Alpine variant (default)
+    image: ghcr.io/pineappledr/vigil-agent:debian  # Debian variant for TrueNAS
     restart: unless-stopped
     network_mode: host
+    pid: host  # Required for proper process/device visibility on TrueNAS
     depends_on:
       vigil-server:
         condition: service_healthy
@@ -51,13 +55,21 @@ services:
       # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
       
-      # ─── Required for ZFS detection ───
+      # ─── Required for ZFS detection - kernel interfaces ───
       - /sys:/sys:ro
-      - /proc:/proc:ro
       
-      # ─── ZFS kernel device (required for zpool/zfs commands) ───
-      # Remove this line if ZFS is not installed on host
+      # ─── ZFS kernel device (required for zpool commands) ───
       - /dev/zfs:/dev/zfs
+      
+      # ─── Mount HOST ZFS binaries for TrueNAS compatibility ───
+      # TrueNAS has ZFS tools at /sbin/
+      - /sbin/zpool:/sbin/zpool:ro
+      - /sbin/zfs:/sbin/zfs:ro
+      
+      # ─── Required shared libraries for ZFS tools to work ───
+      - /lib:/lib:ro
+      - /lib64:/lib64:ro
+      - /usr/lib:/usr/lib:ro
       
     deploy:
       resources:
