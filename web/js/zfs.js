@@ -125,7 +125,13 @@ const ZFS = {
         const stateClass = this.getStateClass(state);
         const capacity = this.parseCapacity(pool);
         const scrub = this.parseScrub(pool);
-        const deviceStats = this.getDeviceStats(pool);
+        
+        // Get deduplicated device count
+        const devices = pool.devices || [];
+        const uniqueDisks = this.getUniqueDisks(devices);
+        const deviceCount = uniqueDisks.length;
+        
+        let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
 
         return `
             <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${hostname}', '${poolName}')">
@@ -158,9 +164,9 @@ const ZFS = {
                 <div class="zfs-pool-devices">
                     ${this.icons.drive}
                     <span class="zfs-device-info">
-                        ${deviceStats.total} device${deviceStats.total !== 1 ? 's' : ''}
-                        ${deviceStats.errors > 0 
-                            ? `<span class="zfs-error-count">${deviceStats.errors} error${deviceStats.errors !== 1 ? 's' : ''}</span>` 
+                        ${deviceCount} device${deviceCount !== 1 ? 's' : ''}
+                        ${errors > 0 
+                            ? `<span class="zfs-error-count">${errors} error${errors !== 1 ? 's' : ''}</span>` 
                             : '<span class="zfs-no-errors">0 errors</span>'
                         }
                     </span>
@@ -217,9 +223,11 @@ const ZFS = {
         this._currentHostname = hostname;
 
         const lastScrub = scrubHistory.length > 0 ? scrubHistory[0] : null;
-        const { vdevs, disks } = this.organizeDevices(devices);
-        const diskCount = disks.length || devices.length;
-        const topology = this.calculateTopology(vdevs, disks, capacity);
+        
+        // Organize and deduplicate devices
+        const { vdevs, uniqueDisks } = this.organizeAndDeduplicateDevices(devices);
+        const diskCount = uniqueDisks.length;
+        const topology = this.calculateTopology(vdevs, uniqueDisks, capacity);
 
         return `
             <div class="zfs-detail-tabs">
@@ -233,13 +241,125 @@ const ZFS = {
             </div>
 
             <div id="zfs-tab-devices" class="zfs-tab-content">
-                ${this.renderDevicesTab(vdevs, disks, devices, hostname)}
+                ${this.renderDevicesTab(vdevs, uniqueDisks, hostname)}
             </div>
 
             <div id="zfs-tab-scrubs" class="zfs-tab-content">
                 ${this.renderScrubsTab(scrubHistory)}
             </div>
         `;
+    },
+
+    // Get unique disks by serial number (deduplicates GUID vs device name entries)
+    getUniqueDisks(devices) {
+        const dominated = new Set();
+        const disks = [];
+        
+        devices.forEach(dev => {
+            const vdevType = (dev.vdev_type || 'disk').toLowerCase();
+            if (vdevType === 'disk') {
+                disks.push(dev);
+            }
+        });
+        
+        // Group by serial number to find duplicates
+        const bySerial = {};
+        disks.forEach((disk, idx) => {
+            const serial = disk.serial_number;
+            if (serial) {
+                if (!bySerial[serial]) bySerial[serial] = [];
+                bySerial[serial].push({ disk, idx });
+            }
+        });
+        
+        // Mark duplicates - prefer device with readable name (sda over GUID)
+        Object.values(bySerial).forEach(group => {
+            if (group.length > 1) {
+                // Sort: prefer short names (sda) over GUIDs
+                group.sort((a, b) => {
+                    const aIsGuid = this.looksLikeGUID(a.disk.device_name || a.disk.name);
+                    const bIsGuid = this.looksLikeGUID(b.disk.device_name || b.disk.name);
+                    if (aIsGuid && !bIsGuid) return 1;  // b is better
+                    if (!aIsGuid && bIsGuid) return -1; // a is better
+                    return 0;
+                });
+                // Mark all but the first as duplicates
+                for (let i = 1; i < group.length; i++) {
+                    dominated.add(group[i].idx);
+                }
+            }
+        });
+        
+        // Return non-duplicate disks
+        return disks.filter((_, idx) => !dominated.has(idx));
+    },
+
+    // Organize devices into vdevs and deduplicated disks
+    organizeAndDeduplicateDevices(devices) {
+        const vdevs = [];
+        const allDisks = [];
+        
+        devices.forEach(dev => {
+            const vdevType = (dev.vdev_type || 'disk').toLowerCase();
+            if (vdevType === 'disk') {
+                allDisks.push(dev);
+            } else {
+                vdevs.push(dev);
+            }
+        });
+        
+        // Deduplicate disks by serial
+        const uniqueDisks = this.deduplicateDisks(allDisks);
+        
+        return { vdevs, uniqueDisks };
+    },
+
+    // Deduplicate disks - prefer readable names over GUIDs
+    deduplicateDisks(disks) {
+        const dominated = new Set();
+        
+        // Group by serial
+        const bySerial = {};
+        disks.forEach((disk, idx) => {
+            const serial = disk.serial_number;
+            if (serial) {
+                if (!bySerial[serial]) bySerial[serial] = [];
+                bySerial[serial].push({ disk, idx });
+            }
+        });
+        
+        // For each group with same serial, keep only the best one
+        Object.values(bySerial).forEach(group => {
+            if (group.length > 1) {
+                // Sort: prefer readable device names
+                group.sort((a, b) => {
+                    const aName = a.disk.device_name || a.disk.name || '';
+                    const bName = b.disk.device_name || b.disk.name || '';
+                    const aIsGuid = this.looksLikeGUID(aName);
+                    const bIsGuid = this.looksLikeGUID(bName);
+                    
+                    // Prefer non-GUID
+                    if (aIsGuid && !bIsGuid) return 1;
+                    if (!aIsGuid && bIsGuid) return -1;
+                    
+                    // Prefer shorter names
+                    return aName.length - bName.length;
+                });
+                
+                // Mark all but the best as dominated
+                for (let i = 1; i < group.length; i++) {
+                    dominated.add(group[i].idx);
+                }
+            }
+        });
+        
+        return disks.filter((_, idx) => !dominated.has(idx));
+    },
+
+    looksLikeGUID(name) {
+        if (!name) return false;
+        // GUIDs have dashes and are long
+        return name.includes('-') && name.length > 20;
     },
 
     renderOverviewTab(pool, capacity, state, topology, lastScrub) {
@@ -329,41 +449,15 @@ const ZFS = {
         `;
     },
 
-    organizeDevices(devices) {
-        const vdevs = [];
-        const disks = [];
-        
-        devices.forEach(dev => {
-            const vdevType = (dev.vdev_type || 'disk').toLowerCase();
-            if (vdevType === 'disk') {
-                disks.push(dev);
-            } else {
-                vdevs.push(dev);
-            }
-        });
-        
-        return { vdevs, disks };
-    },
-
     calculateTopology(vdevs, disks, capacity) {
-        const disksByParent = {};
-        disks.forEach(d => {
-            const parent = d.vdev_parent || 'stripe';
-            if (!disksByParent[parent]) disksByParent[parent] = [];
-            disksByParent[parent].push(d);
-        });
-
         const vdevCounts = {};
         vdevs.forEach(v => {
             const type = (v.vdev_type || 'unknown').toUpperCase();
             vdevCounts[type] = (vdevCounts[type] || 0) + 1;
         });
 
-        let width = 0;
-        Object.values(disksByParent).forEach(diskList => {
-            if (diskList.length > width) width = diskList.length;
-        });
-        if (width === 0) width = disks.length || 1;
+        // Width = number of disks per vdev
+        const width = vdevs.length > 0 ? Math.ceil(disks.length / vdevs.length) : disks.length;
 
         let description = '';
         
@@ -378,26 +472,19 @@ const ZFS = {
             description = `${vdevCounts.RAIDZ3} x RAIDZ3 | ${width} wide | ${capacity.total}`;
         } else if (disks.length > 0) {
             description = `${disks.length} x DISK (Stripe) | ${capacity.total}`;
-        } else if (vdevs.length > 0) {
-            const type = (vdevs[0].vdev_type || 'VDEV').toUpperCase();
-            description = `${vdevs.length} x ${type} | ${capacity.total}`;
         } else {
             description = `Unknown topology | ${capacity.total}`;
         }
 
-        return { description, vdevCounts, disksByParent, width };
+        return { description, vdevCounts, width };
     },
 
-    renderDevicesTab(vdevs, disks, allDevices, hostname) {
-        // If no separation, show all devices flat
-        if (disks.length === 0 && vdevs.length === 0 && allDevices.length > 0) {
-            return this.renderFlatDevices(allDevices, hostname);
-        }
-        
+    renderDevicesTab(vdevs, disks, hostname) {
         if (disks.length === 0 && vdevs.length === 0) {
             return `<p class="zfs-no-data">No device information available</p>`;
         }
 
+        // Group disks by their vdev parent
         const disksByParent = {};
         disks.forEach(disk => {
             const parent = disk.vdev_parent || 'root';
@@ -407,12 +494,14 @@ const ZFS = {
 
         let html = '<div class="zfs-devices-list">';
 
+        // Render vdevs with their child disks
         vdevs.forEach(vdev => {
             const vdevName = vdev.device_name || vdev.name || 'Unknown';
             const childDisks = disksByParent[vdevName] || [];
             html += this.renderVdevGroup(vdev, childDisks, hostname);
         });
 
+        // Render orphan disks (stripe)
         if (disksByParent['root'] && disksByParent['root'].length > 0) {
             html += `
                 <div class="zfs-vdev-group">
@@ -431,43 +520,6 @@ const ZFS = {
         return html;
     },
 
-    renderFlatDevices(devices, hostname) {
-        return `
-            <div class="zfs-devices-list">
-                ${devices.map(dev => {
-                    const devName = dev.device_name || dev.name || 'Unknown';
-                    const devType = (dev.vdev_type || 'disk').toUpperCase();
-                    const devState = (dev.state || 'ONLINE').toUpperCase();
-                    const serial = dev.serial_number || '';
-                    const driveLink = serial ? this.findDriveBySerial(hostname, serial) : null;
-                    
-                    // Get display name - prefer serial or short name
-                    const displayName = this.getDisplayName(devName, serial);
-                    
-                    return `
-                        <div class="zfs-device-row">
-                            <div class="zfs-device-main">
-                                <span class="zfs-device-name">${displayName}</span>
-                                <span class="zfs-device-type-badge">${devType}</span>
-                                <span class="zfs-device-state ${this.getStateClass(devState)}">${devState}</span>
-                            </div>
-                            <div class="zfs-device-info">
-                                ${serial ? `
-                                    <span class="zfs-device-serial ${driveLink ? 'clickable' : ''}" 
-                                          ${driveLink ? `onclick="event.stopPropagation(); ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="View SMART data"` : ''}>
-                                        ${serial}
-                                        ${driveLink ? this.icons.link : ''}
-                                    </span>
-                                ` : ''}
-                                <span class="zfs-device-errors">R:${dev.read_errors || 0} W:${dev.write_errors || 0} C:${dev.checksum_errors || 0}</span>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        `;
-    },
-
     renderVdevGroup(vdev, disks, hostname) {
         const vdevName = vdev.device_name || vdev.name || 'Unknown';
         const vdevType = (vdev.vdev_type || 'VDEV').toUpperCase();
@@ -476,7 +528,7 @@ const ZFS = {
         return `
             <div class="zfs-vdev-group">
                 <div class="zfs-vdev-header">
-                    <span class="zfs-vdev-name">${this.getDisplayName(vdevName, '')}</span>
+                    <span class="zfs-vdev-name">${vdevName}</span>
                     <span class="zfs-vdev-type">${vdevType}</span>
                     <span class="zfs-vdev-state ${this.getStateClass(vdevState)}">${vdevState}</span>
                     <span class="zfs-vdev-errors">R:${vdev.read_errors || 0} W:${vdev.write_errors || 0} C:${vdev.checksum_errors || 0}</span>
@@ -484,7 +536,7 @@ const ZFS = {
                 <div class="zfs-disk-list">
                     ${disks.length > 0 
                         ? disks.map(disk => this.renderDiskRow(disk, hostname)).join('')
-                        : '<div class="zfs-no-disks">Waiting for agent to report disk details</div>'
+                        : '<div class="zfs-no-disks">No disk details available</div>'
                     }
                 </div>
             </div>
@@ -495,10 +547,13 @@ const ZFS = {
         const diskName = disk.device_name || disk.name || 'Unknown';
         const diskState = (disk.state || 'ONLINE').toUpperCase();
         const serial = disk.serial_number || '';
-        const driveLink = serial ? this.findDriveBySerial(hostname, serial) : null;
         
-        // Get display name - prefer short device name or serial
-        const displayName = this.getDisplayName(diskName, serial);
+        // Get display name - strip partition suffix for matching (sda2 -> sda)
+        const baseDiskName = this.getBaseDiskName(diskName);
+        const displayName = this.getDisplayName(diskName);
+        
+        // Find drive by serial - this is the correct way
+        const driveLink = serial ? this.findDriveBySerial(hostname, serial) : null;
 
         return `
             <div class="zfs-disk-row ${this.getStateClass(diskState)}">
@@ -521,16 +576,19 @@ const ZFS = {
         `;
     },
 
-    // Get a nice display name - shorten GUIDs, prefer serials
-    getDisplayName(name, serial) {
-        if (!name) return serial || 'Unknown';
+    // Strip partition number from device name (sda2 -> sda)
+    getBaseDiskName(name) {
+        if (!name) return '';
+        // Match device names like sda2, nvme0n1p2, etc. and strip partition
+        const match = name.match(/^(sd[a-z]+|nvme\d+n\d+|hd[a-z]+|vd[a-z]+|xvd[a-z]+|da\d+|ada\d+)/i);
+        return match ? match[1] : name;
+    },
+
+    getDisplayName(name) {
+        if (!name) return 'Unknown';
         
-        // If it's a GUID (contains dashes and is long), shorten it
-        if (name.includes('-') && name.length > 20) {
-            // It's likely a GUID, show first part or use serial if available
-            if (serial) {
-                return name.split('-')[0] + '...';
-            }
+        // If it's a GUID, shorten it
+        if (this.looksLikeGUID(name)) {
             return name.substring(0, 8) + '...';
         }
         
@@ -542,6 +600,7 @@ const ZFS = {
         return name;
     },
 
+    // Find drive by serial number - must match exactly
     findDriveBySerial(hostname, serial) {
         if (!serial || !hostname) return null;
         
@@ -551,7 +610,8 @@ const ZFS = {
             
             const drives = server.details?.drives || [];
             for (let driveIdx = 0; driveIdx < drives.length; driveIdx++) {
-                if (drives[driveIdx].serial_number === serial) {
+                const driveSerial = drives[driveIdx].serial_number;
+                if (driveSerial && driveSerial === serial) {
                     return { serverIdx, driveIdx };
                 }
             }
@@ -686,15 +746,6 @@ const ZFS = {
         return { text, state: scanState };
     },
 
-    getDeviceStats(pool) {
-        const deviceCount = pool.device_count !== undefined ? pool.device_count : (pool.devices || []).length;
-        let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
-        (pool.devices || []).forEach(d => {
-            errors += (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0);
-        });
-        return { total: deviceCount, errors };
-    },
-
     formatStorageSize(size) {
         if (!size) return '0 B';
         if (typeof size === 'string') return size;
@@ -722,24 +773,14 @@ const ZFS = {
         return parts.length > 0 ? parts.join(' ') : '0 seconds';
     },
 
-    // Format scrub date like TrueNAS: "2026-02-14 05:46:54"
     formatScrubDate(dateStr) {
         if (!dateStr) return 'Unknown';
         
         try {
             const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            if (date.getFullYear() < 2000) return 'Unknown';
             
-            // Check if date is valid
-            if (isNaN(date.getTime())) {
-                return dateStr; // Return original if can't parse
-            }
-            
-            // Check for epoch/invalid dates (year 1 or 1970)
-            if (date.getFullYear() < 2000) {
-                return 'Unknown';
-            }
-            
-            // Format: YYYY-MM-DD HH:MM:SS
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
@@ -750,22 +791,6 @@ const ZFS = {
             return `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
         } catch {
             return dateStr || 'Unknown';
-        }
-    },
-
-    formatDate(dateStr) {
-        if (!dateStr) return 'Unknown';
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'Unknown';
-            const now = new Date();
-            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-            if (diffDays === 0) return 'Today';
-            if (diffDays === 1) return 'Yesterday';
-            if (diffDays < 7) return `${diffDays} days ago`;
-            return this.formatScrubDate(dateStr);
-        } catch {
-            return dateStr;
         }
     }
 };
