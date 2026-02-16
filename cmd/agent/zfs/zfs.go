@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -13,11 +14,10 @@ import (
 
 // ─── ZFS Binary Path Detection ───────────────────────────────────────────────
 
-// Common paths where zpool might be located
 var zpoolPaths = []string{
-	"zpool",           // In PATH
-	"/sbin/zpool",     // TrueNAS, FreeBSD
-	"/usr/sbin/zpool", // Linux standard
+	"zpool",
+	"/sbin/zpool",
+	"/usr/sbin/zpool",
 	"/usr/local/sbin/zpool",
 	"/usr/local/bin/zpool",
 }
@@ -30,11 +30,9 @@ var zfsPaths = []string{
 	"/usr/local/bin/zfs",
 }
 
-// Cached paths (found once, reused)
 var zpoolCmd string
 var zfsCmd string
 
-// findZpoolCommand locates the zpool binary
 func findZpoolCommand() string {
 	if zpoolCmd != "" {
 		return zpoolCmd
@@ -42,13 +40,11 @@ func findZpoolCommand() string {
 
 	for _, path := range zpoolPaths {
 		if path == "zpool" {
-			// Check in PATH
 			if p, err := exec.LookPath("zpool"); err == nil {
 				zpoolCmd = p
 				return zpoolCmd
 			}
 		} else {
-			// Check absolute path
 			if _, err := os.Stat(path); err == nil {
 				zpoolCmd = path
 				return zpoolCmd
@@ -58,7 +54,6 @@ func findZpoolCommand() string {
 	return ""
 }
 
-// findZfsCommand locates the zfs binary
 func findZfsCommand() string {
 	if zfsCmd != "" {
 		return zfsCmd
@@ -80,23 +75,18 @@ func findZfsCommand() string {
 	return ""
 }
 
-// IsZFSAvailable checks if ZFS tools are installed and accessible
 func IsZFSAvailable() bool {
 	return findZpoolCommand() != ""
 }
 
 // ─── Pool List Parsing ───────────────────────────────────────────────────────
 
-// ListPools returns all ZFS pools with basic information
-// Uses: zpool list -H -p -o name,size,alloc,free,frag,cap,dedup,health,altroot
 func ListPools() ([]Pool, error) {
 	zpoolPath := findZpoolCommand()
 	if zpoolPath == "" {
 		return nil, fmt.Errorf("zpool command not found")
 	}
 
-	// -H: no header, -p: parseable (exact bytes)
-	// Fields: name, size, alloc, free, frag, cap, dedup, health, altroot
 	cmd := exec.Command(zpoolPath, "list", "-H", "-p", "-o",
 		"name,size,alloc,free,frag,cap,dedup,health,altroot,guid")
 
@@ -105,7 +95,6 @@ func ListPools() ([]Pool, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		// No pools is not an error
 		if strings.Contains(stderr.String(), "no pools available") {
 			return []Pool{}, nil
 		}
@@ -115,7 +104,6 @@ func ListPools() ([]Pool, error) {
 	return parsePoolList(stdout.String())
 }
 
-// parsePoolList parses the output of zpool list -H -p
 func parsePoolList(output string) ([]Pool, error) {
 	var pools []Pool
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -128,7 +116,7 @@ func parsePoolList(output string) ([]Pool, error) {
 
 		fields := strings.Split(line, "\t")
 		if len(fields) < 8 {
-			continue // Skip malformed lines
+			continue
 		}
 
 		pool := Pool{
@@ -139,27 +127,19 @@ func parsePoolList(output string) ([]Pool, error) {
 			LastSeen:  time.Now(),
 		}
 
-		// Fragmentation (may be "-" for pools without fragmentation)
 		if fields[4] != "-" {
 			pool.Fragmentation = parseInt(fields[4])
 		}
 
-		// Capacity percentage
 		pool.CapacityPct = parseInt(fields[5])
-
-		// Dedup ratio (e.g., "1.00x" or just "1.00")
 		pool.DedupRatio = parseFloat(strings.TrimSuffix(fields[6], "x"))
-
-		// Health status
 		pool.Health = fields[7]
-		pool.Status = fields[7] // Same as health for basic list
+		pool.Status = fields[7]
 
-		// Altroot (optional, may be "-")
 		if len(fields) > 8 && fields[8] != "-" {
 			pool.Altroot = fields[8]
 		}
 
-		// GUID (optional)
 		if len(fields) > 9 && fields[9] != "-" {
 			pool.GUID = fields[9]
 		}
@@ -173,27 +153,39 @@ func parsePoolList(output string) ([]Pool, error) {
 // ─── Pool Status Parsing ─────────────────────────────────────────────────────
 
 // GetPoolStatus retrieves detailed status for a specific pool
-// Uses: zpool status -v <poolname>
+// Uses -L flag to show device names instead of GUIDs when possible
 func GetPoolStatus(poolName string) (*Pool, error) {
 	zpoolPath := findZpoolCommand()
 	if zpoolPath == "" {
 		return nil, fmt.Errorf("zpool command not found")
 	}
 
-	cmd := exec.Command(zpoolPath, "status", "-v", "-p", poolName)
+	// Try with -L flag first (shows device names instead of GUIDs)
+	// -L: Display real paths for vdevs resolving all symbolic links
+	// -P: Display real paths for vdevs instead of only the last component
+	cmd := exec.Command(zpoolPath, "status", "-v", "-p", "-L", "-P", poolName)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("zpool status failed: %v - %s", err, stderr.String())
+	err := cmd.Run()
+	if err != nil {
+		// If -L/-P flags not supported, try without them
+		cmd = exec.Command(zpoolPath, "status", "-v", "-p", poolName)
+		stdout.Reset()
+		stderr.Reset()
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("zpool status failed: %v - %s", err, stderr.String())
+		}
 	}
 
 	return parsePoolStatus(poolName, stdout.String())
 }
 
-// parsePoolStatus parses the output of zpool status -v
 func parsePoolStatus(poolName, output string) (*Pool, error) {
 	pool := &Pool{
 		Name:     poolName,
@@ -203,35 +195,30 @@ func parsePoolStatus(poolName, output string) (*Pool, error) {
 	lines := strings.Split(output, "\n")
 	var inConfig bool
 	var currentVdev *Device
-	var vdevStack []*Device // Stack for nested vdevs
+	var vdevStack []*Device
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := strings.TrimSpace(line)
 
-		// Parse pool state
 		if strings.HasPrefix(trimmed, "state:") {
 			pool.Health = strings.TrimSpace(strings.TrimPrefix(trimmed, "state:"))
 			pool.Status = pool.Health
 			continue
 		}
 
-		// Parse scan/scrub status
 		if strings.HasPrefix(trimmed, "scan:") {
 			pool.Scan = parseScanLine(trimmed, lines, &i)
 			continue
 		}
 
-		// Start of config section
 		if strings.HasPrefix(trimmed, "config:") {
 			inConfig = true
 			continue
 		}
 
-		// End of config section
 		if inConfig && (strings.HasPrefix(trimmed, "errors:") || trimmed == "") {
 			if strings.HasPrefix(trimmed, "errors:") {
-				// Parse error summary
 				parseErrorLine(pool, trimmed)
 			}
 			if trimmed == "" && len(pool.Devices) > 0 {
@@ -240,7 +227,6 @@ func parsePoolStatus(poolName, output string) (*Pool, error) {
 			continue
 		}
 
-		// Parse device lines in config section
 		if inConfig && trimmed != "" && !strings.HasPrefix(trimmed, "NAME") {
 			device := parseDeviceLine(line)
 			if device != nil {
@@ -253,22 +239,11 @@ func parsePoolStatus(poolName, output string) (*Pool, error) {
 }
 
 // parseScanLine parses scrub/resilver status
-// Example outputs:
-//
-//	scan: scrub repaired 0B in 12:34:56 with 0 errors on Sun Feb  2 12:00:00 2025
-//	scan: scrub in progress since Sun Feb  2 10:00:00 2025
-//	      1.23T scanned at 100M/s, 500G issued at 50M/s, 2.00T total
-//	      0B repaired, 25.00% done, 01:30:00 to go
-//	scan: resilver in progress since Sun Feb  2 10:00:00 2025
-//	      500G scanned out of 2.00T at 100M/s, 25.00% done, 04:00:00 to go
-//	scan: scrub canceled on Sun Feb  2 11:00:00 2025
-//	scan: none requested
 func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 	scan := &ScanInfo{}
 	fullText := strings.TrimPrefix(firstLine, "scan:")
 	fullText = strings.TrimSpace(fullText)
 
-	// Collect continuation lines (indented lines that are part of scan info)
 	for *lineIdx+1 < len(lines) {
 		nextLine := lines[*lineIdx+1]
 		if strings.HasPrefix(nextLine, "\t") || strings.HasPrefix(nextLine, "        ") {
@@ -279,24 +254,20 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 		}
 	}
 
-	// Determine scan type and state
 	lowerText := strings.ToLower(fullText)
 
-	// No scans
 	if strings.Contains(lowerText, "no scans") || strings.Contains(lowerText, "none requested") {
 		scan.Function = ScanNone
 		scan.State = ScanStateNone
 		return scan
 	}
 
-	// Determine scan type
 	if strings.Contains(lowerText, "resilver") {
 		scan.Function = ScanResilver
 	} else if strings.Contains(lowerText, "scrub") {
 		scan.Function = ScanScrub
 	}
 
-	// Determine scan state
 	if strings.Contains(lowerText, "in progress") {
 		scan.State = ScanStateScanning
 	} else if strings.Contains(lowerText, "canceled") {
@@ -305,21 +276,16 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 		scan.State = ScanStateFinished
 	}
 
-	// Parse timestamps
 	scan.StartTime = parseZFSTimestamp(fullText, "since")
 	scan.EndTime = parseZFSTimestamp(fullText, "on")
 
-	// Calculate duration if we have end time (finished/canceled)
 	if !scan.EndTime.IsZero() && !scan.StartTime.IsZero() {
 		scan.Duration = int64(scan.EndTime.Sub(scan.StartTime).Seconds())
 	}
 
-	// Parse duration from "in HH:MM:SS" format (for finished scans)
-	// Example: "repaired 0B in 12:34:56 with 0 errors"
 	if idx := strings.Index(lowerText, " in "); idx > 0 {
 		rest := lowerText[idx+4:]
 		if colonIdx := strings.Index(rest, ":"); colonIdx > 0 && colonIdx < 5 {
-			// Looks like a time format HH:MM:SS
 			parts := strings.Fields(rest)
 			if len(parts) > 0 {
 				scan.Duration = parseHHMMSS(parts[0])
@@ -327,19 +293,14 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 		}
 	}
 
-	// Parse progress percentage (e.g., "45.2% done" or "25.00% done")
 	scan.ProgressPct = parsePercentage(lowerText, "% done")
 	if scan.ProgressPct == 0 && scan.State == ScanStateFinished {
 		scan.ProgressPct = 100.0
 	}
 
-	// Parse errors found (e.g., "0 errors" or "with 0 errors")
 	scan.ErrorsFound = parseNumberBefore(lowerText, " errors")
-
-	// Parse data scanned/examined (e.g., "1.23T scanned")
 	scan.DataExamined = parseSizeBefore(fullText, " scanned")
 
-	// Parse total data (e.g., "out of 2.00T" or "2.00T total")
 	if idx := strings.Index(lowerText, "out of "); idx >= 0 {
 		rest := fullText[idx+7:]
 		parts := strings.Fields(rest)
@@ -350,20 +311,13 @@ func parseScanLine(firstLine string, lines []string, lineIdx *int) *ScanInfo {
 		scan.DataTotal = parseSizeBefore(fullText, " total")
 	}
 
-	// Parse bytes repaired (e.g., "0B repaired" or "123K repaired")
 	scan.BytesRepaired = parseSizeBefore(fullText, " repaired")
-
-	// Parse scan rate (e.g., "100M/s" or "at 100M/s") - returns int64
 	scan.Rate = parseScanRate(fullText)
-
-	// Parse time remaining (e.g., "01:30:00 to go" or "4h30m to go") - returns int64
 	scan.TimeRemaining = parseTimeRemaining(lowerText)
 
 	return scan
 }
 
-// parseZFSTimestamp extracts a timestamp after a keyword like "since" or "on"
-// Example: "since Sun Feb  2 10:00:00 2025" or "on Sun Feb  2 12:00:00 2025"
 func parseZFSTimestamp(text, keyword string) time.Time {
 	lowerText := strings.ToLower(text)
 	idx := strings.Index(lowerText, keyword+" ")
@@ -371,10 +325,8 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 		return time.Time{}
 	}
 
-	// Extract the rest of the string after the keyword
 	rest := strings.TrimSpace(text[idx+len(keyword)+1:])
 
-	// ZFS timestamp formats to try
 	formats := []string{
 		"Mon Jan _2 15:04:05 2006",
 		"Mon Jan  2 15:04:05 2006",
@@ -384,7 +336,6 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 		"2006-01-02 15:04:05",
 	}
 
-	// Try to find where the timestamp ends (usually before "with" or end of meaningful text)
 	endMarkers := []string{" with ", " 0b ", " 0B "}
 	for _, marker := range endMarkers {
 		if endIdx := strings.Index(rest, marker); endIdx > 0 {
@@ -393,14 +344,12 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 		}
 	}
 
-	// Normalize multiple spaces to single space
 	rest = strings.Join(strings.Fields(rest), " ")
 
 	for _, format := range formats {
 		if t, err := time.Parse(format, rest); err == nil {
 			return t
 		}
-		// Try parsing just the beginning of the string
 		for i := len(rest); i > 10; i-- {
 			if t, err := time.Parse(format, rest[:i]); err == nil {
 				return t
@@ -411,7 +360,6 @@ func parseZFSTimestamp(text, keyword string) time.Time {
 	return time.Time{}
 }
 
-// parseHHMMSS parses a duration in HH:MM:SS format
 func parseHHMMSS(s string) int64 {
 	parts := strings.Split(s, ":")
 	if len(parts) != 3 {
@@ -423,14 +371,12 @@ func parseHHMMSS(s string) int64 {
 	return hours*3600 + mins*60 + secs
 }
 
-// parsePercentage extracts a percentage value before a marker
 func parsePercentage(text, marker string) float64 {
 	idx := strings.Index(text, marker)
 	if idx <= 0 {
 		return 0
 	}
 
-	// Walk backwards to find the start of the number
 	start := idx - 1
 	for start > 0 && (text[start] >= '0' && text[start] <= '9' || text[start] == '.') {
 		start--
@@ -442,26 +388,24 @@ func parsePercentage(text, marker string) float64 {
 	return 0
 }
 
-// parseNumberBefore extracts an integer before a marker
 func parseNumberBefore(text, marker string) int64 {
 	idx := strings.Index(text, marker)
 	if idx <= 0 {
 		return 0
 	}
 
-	// Walk backwards to find the start of the number
 	start := idx - 1
 	for start > 0 && text[start] >= '0' && text[start] <= '9' {
 		start--
 	}
 
-	if num, err := strconv.ParseInt(strings.TrimSpace(text[start+1:idx]), 10, 64); err == nil {
+	numStr := strings.TrimSpace(text[start+1 : idx])
+	if num, err := strconv.ParseInt(numStr, 10, 64); err == nil {
 		return num
 	}
 	return 0
 }
 
-// parseSizeBefore extracts a size value (like "1.23T") before a marker
 func parseSizeBefore(text, marker string) int64 {
 	lowerText := strings.ToLower(text)
 	lowerMarker := strings.ToLower(marker)
@@ -470,32 +414,25 @@ func parseSizeBefore(text, marker string) int64 {
 		return 0
 	}
 
-	// Find the size value before the marker
 	before := strings.TrimSpace(text[:idx])
 	parts := strings.Fields(before)
 	if len(parts) == 0 {
 		return 0
 	}
 
-	// The size should be the last word before the marker
 	return parseHumanSize(parts[len(parts)-1])
 }
 
-// parseScanRate extracts scan rate in bytes/sec
 func parseScanRate(text string) int64 {
-	// Look for patterns like "100M/s" or "at 100M/s"
 	idx := strings.Index(text, "/s")
 	if idx <= 0 {
 		return 0
 	}
 
-	// Walk backwards to find the start of the rate value
 	start := idx - 1
-	for start > 0 && (text[start] >= '0' && text[start] <= '9' || text[start] == '.' ||
-		text[start] == 'K' || text[start] == 'k' ||
-		text[start] == 'M' || text[start] == 'm' ||
-		text[start] == 'G' || text[start] == 'g' ||
-		text[start] == 'T' || text[start] == 't') {
+	for start > 0 && ((text[start] >= '0' && text[start] <= '9') || text[start] == '.' ||
+		text[start] == 'K' || text[start] == 'M' || text[start] == 'G' || text[start] == 'T' ||
+		text[start] == 'k' || text[start] == 'm' || text[start] == 'g' || text[start] == 't') {
 		start--
 	}
 
@@ -503,9 +440,7 @@ func parseScanRate(text string) int64 {
 	return parseHumanSize(rateStr)
 }
 
-// parseTimeRemaining extracts remaining time in seconds
 func parseTimeRemaining(text string) int64 {
-	// Look for "HH:MM:SS to go" pattern
 	idx := strings.Index(text, " to go")
 	if idx <= 0 {
 		return 0
@@ -519,12 +454,10 @@ func parseTimeRemaining(text string) int64 {
 
 	timeStr := parts[len(parts)-1]
 
-	// Try HH:MM:SS format
 	if strings.Contains(timeStr, ":") {
 		return parseHHMMSS(timeStr)
 	}
 
-	// Try formats like "4h30m" or "30m" or "45s"
 	var total int64
 	current := ""
 	for _, c := range timeStr {
@@ -556,8 +489,6 @@ func parseTimeRemaining(text string) int64 {
 
 // parseDeviceLine parses a device line from zpool status config section
 func parseDeviceLine(line string) *Device {
-	// Line format: "  NAME                      STATE     READ WRITE CKSUM"
-	// or device:   "    sda                     ONLINE       0     0     0"
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return nil
@@ -568,30 +499,31 @@ func parseDeviceLine(line string) *Device {
 		return nil
 	}
 
+	deviceName := fields[0]
+
+	// Resolve the device name if it's a path or GUID
+	resolvedName, resolvedPath := resolveDeviceName(deviceName)
+
 	device := &Device{
-		Name:  fields[0],
-		State: StateOnline, // Default
+		Name:  resolvedName,
+		Path:  resolvedPath,
+		State: StateOnline,
 	}
 
-	// Parse state if present
 	if len(fields) >= 2 {
 		state := strings.ToUpper(fields[1])
 		switch state {
 		case "ONLINE", "DEGRADED", "FAULTED", "OFFLINE", "REMOVED", "UNAVAIL":
 			device.State = state
-		default:
-			// Not a state, might be a different format
 		}
 	}
 
-	// Parse error counts (READ WRITE CKSUM)
 	if len(fields) >= 5 {
 		device.ReadErrors = parseInt64(fields[2])
 		device.WriteErrors = parseInt64(fields[3])
 		device.ChecksumErrors = parseInt64(fields[4])
 	}
 
-	// Determine device type based on name
 	nameLower := strings.ToLower(device.Name)
 	switch {
 	case strings.HasPrefix(nameLower, "mirror"):
@@ -618,30 +550,212 @@ func parseDeviceLine(line string) *Device {
 		device.VdevType = VdevTypeDisk
 	}
 
-	// Set path for actual devices
-	if device.VdevType == VdevTypeDisk && !strings.Contains(device.Name, "-") {
-		if strings.HasPrefix(device.Name, "/dev/") {
-			device.Path = device.Name
-		} else {
-			device.Path = "/dev/" + device.Name
+	return device
+}
+
+// resolveDeviceName converts GUIDs, paths, or symlinks to actual device names
+func resolveDeviceName(name string) (deviceName string, devicePath string) {
+	// If it's already a simple device name (sda, nvme0n1, etc.), use it
+	if isSimpleDeviceName(name) {
+		devicePath = "/dev/" + name
+		return name, devicePath
+	}
+
+	// If it's a full path like /dev/sda
+	if strings.HasPrefix(name, "/dev/") && !strings.Contains(name, "/disk/") {
+		deviceName = filepath.Base(name)
+		if isSimpleDeviceName(deviceName) {
+			return deviceName, name
 		}
 	}
 
-	return device
+	// If it looks like a GUID (contains dashes, alphanumeric)
+	if looksLikeGUID(name) {
+		// Try to find in /dev/disk/by-partuuid/
+		resolved := resolveByPartUUID(name)
+		if resolved != "" {
+			return resolved, "/dev/" + resolved
+		}
+
+		// Try /dev/disk/by-id/
+		resolved = resolveByDiskID(name)
+		if resolved != "" {
+			return resolved, "/dev/" + resolved
+		}
+
+		// Try gpart on FreeBSD/TrueNAS
+		resolved = resolveByGpart(name)
+		if resolved != "" {
+			return resolved, "/dev/" + resolved
+		}
+	}
+
+	// If it's a /dev/disk/by-* path, resolve the symlink
+	if strings.HasPrefix(name, "/dev/disk/") {
+		if target, err := filepath.EvalSymlinks(name); err == nil {
+			deviceName = filepath.Base(target)
+			return deviceName, target
+		}
+	}
+
+	// If it's a /dev/gptid/ path (FreeBSD/TrueNAS)
+	if strings.HasPrefix(name, "/dev/gptid/") || strings.HasPrefix(name, "gptid/") {
+		cleanName := strings.TrimPrefix(name, "/dev/")
+		resolved := resolveGptid(cleanName)
+		if resolved != "" {
+			return resolved, "/dev/" + resolved
+		}
+	}
+
+	// Return original if we can't resolve
+	return name, ""
+}
+
+// isSimpleDeviceName checks if a name is a simple device name like sda, nvme0n1, da0
+func isSimpleDeviceName(name string) bool {
+	// Linux: sda, sdb, nvme0n1, etc.
+	// FreeBSD: da0, da1, ada0, nvd0, etc.
+	prefixes := []string{"sd", "hd", "nvme", "da", "ada", "nvd", "vd", "xvd"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(name, prefix) {
+			rest := strings.TrimPrefix(name, prefix)
+			// Should be followed by letters/numbers
+			if len(rest) > 0 && (rest[0] >= 'a' && rest[0] <= 'z' || rest[0] >= '0' && rest[0] <= '9') {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// looksLikeGUID checks if a string looks like a GUID/UUID
+func looksLikeGUID(s string) bool {
+	// GUIDs typically have dashes and are 36 chars (with dashes) or 32 chars (without)
+	if len(s) >= 32 && strings.Contains(s, "-") {
+		// Count alphanumeric chars
+		count := 0
+		for _, c := range s {
+			if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+				count++
+			}
+		}
+		return count >= 32
+	}
+	return false
+}
+
+// resolveByPartUUID looks up a GUID in /dev/disk/by-partuuid/
+func resolveByPartUUID(guid string) string {
+	byPartuuid := "/dev/disk/by-partuuid"
+	entries, err := os.ReadDir(byPartuuid)
+	if err != nil {
+		return ""
+	}
+
+	guidLower := strings.ToLower(guid)
+	for _, entry := range entries {
+		if strings.ToLower(entry.Name()) == guidLower {
+			linkPath := filepath.Join(byPartuuid, entry.Name())
+			if target, err := filepath.EvalSymlinks(linkPath); err == nil {
+				return filepath.Base(target)
+			}
+		}
+	}
+	return ""
+}
+
+// resolveByDiskID looks up in /dev/disk/by-id/ for matching entries
+func resolveByDiskID(guid string) string {
+	byID := "/dev/disk/by-id"
+	entries, err := os.ReadDir(byID)
+	if err != nil {
+		return ""
+	}
+
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), guid) {
+			linkPath := filepath.Join(byID, entry.Name())
+			if target, err := filepath.EvalSymlinks(linkPath); err == nil {
+				return filepath.Base(target)
+			}
+		}
+	}
+	return ""
+}
+
+// resolveGptid resolves FreeBSD/TrueNAS gptid paths
+func resolveGptid(gptid string) string {
+	// Try /dev/gptid/GUID -> actual device
+	gptidPath := "/dev/" + gptid
+	if target, err := filepath.EvalSymlinks(gptidPath); err == nil {
+		base := filepath.Base(target)
+		// Remove partition suffix (da0p1 -> da0)
+		if idx := strings.LastIndex(base, "p"); idx > 0 {
+			return base[:idx]
+		}
+		return base
+	}
+
+	// Try glabel command (FreeBSD)
+	cmd := exec.Command("glabel", "status", "-s")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err == nil {
+		scanner := bufio.NewScanner(&stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, gptid) {
+				fields := strings.Fields(line)
+				if len(fields) >= 3 {
+					device := fields[2]
+					// Remove partition suffix
+					if idx := strings.LastIndex(device, "p"); idx > 0 {
+						return device[:idx]
+					}
+					return device
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// resolveByGpart uses gpart on FreeBSD to find device by GUID
+func resolveByGpart(guid string) string {
+	// List all GEOM providers
+	cmd := exec.Command("geom", "part", "list")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+
+	guidLower := strings.ToLower(guid)
+	var currentDevice string
+	scanner := bufio.NewScanner(&stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "Geom name:") {
+			currentDevice = strings.TrimSpace(strings.TrimPrefix(line, "Geom name:"))
+		}
+		if strings.Contains(strings.ToLower(line), guidLower) && currentDevice != "" {
+			return currentDevice
+		}
+	}
+
+	return ""
 }
 
 // addDeviceToPool adds a device to the pool structure with proper hierarchy
 func addDeviceToPool(pool *Pool, device *Device, currentVdev **Device, vdevStack *[]*Device, line string) {
-	// Determine indentation level (each level is typically 2 spaces)
 	indent := len(line) - len(strings.TrimLeft(line, " \t"))
 	level := indent / 2
 
-	// Pool name line (level 1-2)
 	if device.Name == pool.Name {
-		return // Skip pool name line
+		return
 	}
 
-	// Top-level vdev (level 2-3)
 	if level <= 3 && (device.VdevType == VdevTypeMirror || device.VdevType == VdevTypeRaidz1 ||
 		device.VdevType == VdevTypeRaidz2 || device.VdevType == VdevTypeRaidz3 ||
 		device.VdevType == VdevTypeSpare || device.VdevType == VdevTypeLog ||
@@ -652,7 +766,6 @@ func addDeviceToPool(pool *Pool, device *Device, currentVdev **Device, vdevStack
 		return
 	}
 
-	// Child device
 	if *currentVdev != nil && device.VdevType == VdevTypeDisk {
 		device.VdevParent = (*currentVdev).Name
 		device.VdevIndex = len((*currentVdev).Children)
@@ -660,29 +773,20 @@ func addDeviceToPool(pool *Pool, device *Device, currentVdev **Device, vdevStack
 		return
 	}
 
-	// Standalone disk (no vdev parent - simple stripe)
 	if device.VdevType == VdevTypeDisk {
 		pool.Devices = append(pool.Devices, *device)
 	}
 }
 
-// parseErrorLine parses the errors line
 func parseErrorLine(pool *Pool, line string) {
-	// Example: "errors: No known data errors"
-	// Example: "errors: 5 data errors, use '-v' for a list"
 	lower := strings.ToLower(line)
 	if strings.Contains(lower, "no known") {
-		return // No errors
+		return
 	}
 
-	// Try to extract error count from the line
-	// Format: "errors: N data errors, use '-v' for a list"
 	if idx := strings.Index(lower, " data error"); idx > 0 {
-		// Find the number before "data error"
-		numStr := strings.TrimSpace(lower[8:idx]) // Skip "errors: "
+		numStr := strings.TrimSpace(lower[8:idx])
 		if count, err := strconv.ParseInt(numStr, 10, 64); err == nil && count > 0 {
-			// Distribute errors across error types (we can't distinguish without -v)
-			// For now, just note that there are data errors
 			pool.ChecksumErrors += count
 		}
 	}
@@ -690,7 +794,6 @@ func parseErrorLine(pool *Pool, line string) {
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
-// parseBytes parses a byte value (from -p output, already in bytes)
 func parseBytes(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "-" || s == "" {
@@ -700,19 +803,16 @@ func parseBytes(s string) int64 {
 	return val
 }
 
-// parseInt parses an integer, returning 0 on error
 func parseInt(s string) int {
 	s = strings.TrimSpace(s)
 	if s == "-" || s == "" {
 		return 0
 	}
-	// Remove % suffix if present
 	s = strings.TrimSuffix(s, "%")
 	val, _ := strconv.Atoi(s)
 	return val
 }
 
-// parseInt64 parses an int64, returning 0 on error
 func parseInt64(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "-" || s == "" {
@@ -722,7 +822,6 @@ func parseInt64(s string) int64 {
 	return val
 }
 
-// parseFloat parses a float, returning 0 on error
 func parseFloat(s string) float64 {
 	s = strings.TrimSpace(s)
 	if s == "-" || s == "" {
@@ -732,7 +831,6 @@ func parseFloat(s string) float64 {
 	return val
 }
 
-// parseHumanSize parses human-readable sizes (e.g., "1.5T", "500G", "100M")
 func parseHumanSize(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "" || s == "-" {
@@ -769,7 +867,6 @@ func parseHumanSize(s string) int64 {
 
 // ─── Collect All ZFS Data ────────────────────────────────────────────────────
 
-// CollectZFSData gathers all ZFS information for the current host
 func CollectZFSData(hostname string) (*ZFSReport, error) {
 	report := &ZFSReport{
 		Hostname:  hostname,
@@ -781,25 +878,20 @@ func CollectZFSData(hostname string) (*ZFSReport, error) {
 		return report, nil
 	}
 
-	// Get pool list
 	pools, err := ListPools()
 	if err != nil {
 		return report, fmt.Errorf("failed to list pools: %w", err)
 	}
 
-	// Build device serial map once for efficiency
 	serialMap := BuildDeviceSerialMap()
 
-	// Get detailed status for each pool
 	for i := range pools {
 		status, err := GetPoolStatus(pools[i].Name)
 		if err != nil {
-			// Keep basic info even if status fails
 			pools[i].Hostname = hostname
 			continue
 		}
 
-		// Merge status details into pool
 		pools[i].Hostname = hostname
 		pools[i].Health = status.Health
 		pools[i].Status = status.Status
@@ -809,10 +901,8 @@ func CollectZFSData(hostname string) (*ZFSReport, error) {
 		pools[i].WriteErrors = status.WriteErrors
 		pools[i].ChecksumErrors = status.ChecksumErrors
 
-		// Map device serial numbers
 		MapPoolDevicesToSerials(&pools[i], serialMap)
 
-		// Calculate total errors from devices
 		for _, dev := range pools[i].Devices {
 			pools[i].ReadErrors += sumDeviceErrors(dev, "read")
 			pools[i].WriteErrors += sumDeviceErrors(dev, "write")
@@ -824,7 +914,6 @@ func CollectZFSData(hostname string) (*ZFSReport, error) {
 	return report, nil
 }
 
-// sumDeviceErrors recursively sums errors for a device and its children
 func sumDeviceErrors(dev Device, errType string) int64 {
 	var total int64
 	switch errType {
@@ -845,15 +934,12 @@ func sumDeviceErrors(dev Device, errType string) int64 {
 
 // ─── Scrub History Functions ─────────────────────────────────────────────────
 
-// GetScrubHistory retrieves scrub history using zpool history (if available)
-// This provides historical scrub records beyond the last scan shown in zpool status
 func GetScrubHistory(poolName string, limit int) ([]ScrubRecord, error) {
 	zpoolPath := findZpoolCommand()
 	if zpoolPath == "" {
 		return nil, fmt.Errorf("zpool command not found")
 	}
 
-	// zpool history shows all pool operations including scrubs
 	cmd := exec.Command(zpoolPath, "history", "-i", poolName)
 
 	var stdout, stderr bytes.Buffer
@@ -861,14 +947,12 @@ func GetScrubHistory(poolName string, limit int) ([]ScrubRecord, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		// History might not be available on all systems
 		return nil, fmt.Errorf("zpool history failed: %v - %s", err, stderr.String())
 	}
 
 	return parseZpoolHistory(poolName, stdout.String(), limit)
 }
 
-// parseZpoolHistory parses zpool history output for scrub-related entries
 func parseZpoolHistory(poolName, output string, limit int) ([]ScrubRecord, error) {
 	var records []ScrubRecord
 	lines := strings.Split(output, "\n")
@@ -879,9 +963,6 @@ func parseZpoolHistory(poolName, output string, limit int) ([]ScrubRecord, error
 			continue
 		}
 
-		// Look for scrub-related entries
-		// Format: "2025-02-02.10:00:00 zpool scrub tank"
-		// Or internal: "2025-02-02.10:00:00 [internal pool scrub done]"
 		lowerLine := strings.ToLower(line)
 		if !strings.Contains(lowerLine, "scrub") {
 			continue
@@ -892,22 +973,19 @@ func parseZpoolHistory(poolName, output string, limit int) ([]ScrubRecord, error
 			ScanType: ScanScrub,
 		}
 
-		// Parse timestamp at the beginning
 		parts := strings.Fields(line)
 		if len(parts) >= 2 {
-			// Try to parse the timestamp
 			if t, err := time.Parse("2006-01-02.15:04:05", parts[0]); err == nil {
 				record.StartTime = t
 			}
 		}
 
-		// Determine state from the line content
 		if strings.Contains(lowerLine, "scrub done") || strings.Contains(lowerLine, "completed") {
 			record.State = ScanStateFinished
 		} else if strings.Contains(lowerLine, "scrub canceled") || strings.Contains(lowerLine, "cancelled") {
 			record.State = ScanStateCanceled
 		} else if strings.Contains(lowerLine, "zpool scrub") {
-			record.State = ScanStateScanning // Started
+			record.State = ScanStateScanning
 		}
 
 		if !record.StartTime.IsZero() {
@@ -919,7 +997,6 @@ func parseZpoolHistory(poolName, output string, limit int) ([]ScrubRecord, error
 		}
 	}
 
-	// Reverse to get newest first
 	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
 		records[i], records[j] = records[j], records[i]
 	}
@@ -927,7 +1004,6 @@ func parseZpoolHistory(poolName, output string, limit int) ([]ScrubRecord, error
 	return records, nil
 }
 
-// ConvertScanToScrubRecord converts a ScanInfo to a ScrubRecord for storage
 func ConvertScanToScrubRecord(scan *ScanInfo, hostname, poolName string, poolID int64) *ScrubRecord {
 	if scan == nil || scan.Function == ScanNone {
 		return nil
@@ -956,7 +1032,6 @@ func ConvertScanToScrubRecord(scan *ScanInfo, hostname, poolName string, poolID 
 
 // ─── Pool Health Summary ─────────────────────────────────────────────────────
 
-// PoolHealthSummary provides a quick health overview
 type PoolHealthSummary struct {
 	TotalPools      int   `json:"total_pools"`
 	HealthyPools    int   `json:"healthy_pools"`
@@ -967,7 +1042,6 @@ type PoolHealthSummary struct {
 	ActiveResilvers int   `json:"active_resilvers"`
 }
 
-// GetPoolHealthSummary returns a quick summary of all pools health
 func GetPoolHealthSummary(pools []Pool) PoolHealthSummary {
 	summary := PoolHealthSummary{
 		TotalPools: len(pools),
