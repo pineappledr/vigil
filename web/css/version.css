@@ -134,9 +134,13 @@
 
 /* ============================================
    CHECK FOR UPDATES - Settings Page
+   HIGH SPECIFICITY to override global button styles
    ============================================ */
-   
-.check-updates-btn {
+
+/* Use high specificity selector to override any global button styles */
+button.check-updates-btn,
+.settings-card button.check-updates-btn,
+.settings-item button.check-updates-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -146,43 +150,57 @@
     font-weight: 500;
     font-family: var(--font-sans);
     background: transparent;
+    background-color: transparent;
+    background-image: none;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
+    box-shadow: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
 }
 
-.check-updates-btn:hover {
+button.check-updates-btn:hover,
+.settings-card button.check-updates-btn:hover,
+.settings-item button.check-updates-btn:hover {
     background: var(--accent-primary);
+    background-color: var(--accent-primary);
     border-color: var(--accent-primary);
     color: white;
 }
 
-.check-updates-btn:active {
+button.check-updates-btn:active {
     transform: scale(0.98);
 }
 
-.check-updates-btn:disabled {
+button.check-updates-btn:disabled,
+.settings-card button.check-updates-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     background: transparent;
+    background-color: transparent;
     color: var(--text-muted);
 }
 
-.check-updates-btn:disabled:hover {
+button.check-updates-btn:disabled:hover {
     background: transparent;
+    background-color: transparent;
     border-color: var(--border-color);
     color: var(--text-muted);
 }
 
+button.check-updates-btn svg,
 .check-updates-btn svg {
     width: 16px;
     height: 16px;
     stroke: currentColor;
     fill: none;
     stroke-width: 2;
+    background: none;
 }
 
 /* Spinning animation when checking */
@@ -385,7 +403,7 @@
         margin-top: 8px;
     }
     
-    .check-updates-btn {
+    button.check-updates-btn {
         padding: 8px 14px;
         font-size: 0.8rem;
     }
