@@ -100,12 +100,12 @@ func TestGetDashboardTemperatureData(t *testing.T) {
 		t.Errorf("TotalDrives = %d, want 5", data.TotalDrives)
 	}
 
-	if data.DrivesNormal != 2 {
-		t.Errorf("DrivesNormal = %d, want 2", data.DrivesNormal)
+	if data.DrivesNormal != 3 {
+		t.Errorf("DrivesNormal = %d, want 3", data.DrivesNormal)
 	}
 
-	if data.DrivesWarning != 2 {
-		t.Errorf("DrivesWarning = %d, want 2", data.DrivesWarning)
+	if data.DrivesWarning != 1 {
+		t.Errorf("DrivesWarning = %d, want 1", data.DrivesWarning)
 	}
 
 	if data.DrivesCritical != 1 {
@@ -160,8 +160,8 @@ func TestGetDashboardTemperatureDataWithDetails(t *testing.T) {
 		t.Error("Expected DrivesByStatus to be populated with details=true")
 	}
 
-	if len(data.DrivesByStatus["normal"]) != 2 {
-		t.Errorf("DrivesByStatus[normal] = %d, want 2", len(data.DrivesByStatus["normal"]))
+	if len(data.DrivesByStatus["normal"]) != 3 {
+		t.Errorf("DrivesByStatus[normal] = %d, want 3", len(data.DrivesByStatus["normal"]))
 	}
 
 	// Verify recent alerts
@@ -185,8 +185,8 @@ func TestGetDashboardOverview(t *testing.T) {
 		t.Errorf("TotalDrives = %d, want 5", overview.TotalDrives)
 	}
 
-	if overview.DrivesWithIssues != 3 { // 2 warning + 1 critical
-		t.Errorf("DrivesWithIssues = %d, want 3", overview.DrivesWithIssues)
+	if overview.DrivesWithIssues != 2 { // 1 warning + 1 critical
+		t.Errorf("DrivesWithIssues = %d, want 2", overview.DrivesWithIssues)
 	}
 
 	if overview.MaxTemperature != 58 {

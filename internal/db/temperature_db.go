@@ -34,12 +34,13 @@ func GetTemperatureStats(db *sql.DB, hostname, serial string, period Temperature
 	`, timeFilter)
 
 	var stats TemperatureStats
-	var firstReading, lastReading sql.NullTime
+	var firstReading, lastReading sql.NullString
 	var avgTemp sql.NullFloat64
+	var minTemp, maxTemp sql.NullInt64
 
 	err := db.QueryRow(query, args...).Scan(
-		&stats.MinTemp,
-		&stats.MaxTemp,
+		&minTemp,
+		&maxTemp,
 		&avgTemp,
 		&stats.DataPoints,
 		&firstReading,
@@ -55,14 +56,21 @@ func GetTemperatureStats(db *sql.DB, hostname, serial string, period Temperature
 	stats.Hostname = hostname
 	stats.SerialNumber = serial
 	stats.Period = string(period)
+
+	if minTemp.Valid {
+		stats.MinTemp = int(minTemp.Int64)
+	}
+	if maxTemp.Valid {
+		stats.MaxTemp = int(maxTemp.Int64)
+	}
 	if avgTemp.Valid {
 		stats.AvgTemp = math.Round(avgTemp.Float64*100) / 100
 	}
 	if firstReading.Valid {
-		stats.FirstReading = firstReading.Time
+		stats.FirstReading, _ = parseTimestamp(firstReading.String)
 	}
 	if lastReading.Valid {
-		stats.LastReading = lastReading.Time
+		stats.LastReading, _ = parseTimestamp(lastReading.String)
 	}
 
 	// Get current temperature
@@ -332,13 +340,16 @@ func GetCurrentTemperature(db *sql.DB, hostname, serial string) (*CurrentTempera
 	current.Hostname = hostname
 	current.SerialNumber = serial
 
-	err := db.QueryRow(query, hostname, serial).Scan(&current.Temperature, &current.Timestamp)
+	var timestampStr string
+	err := db.QueryRow(query, hostname, serial).Scan(&current.Temperature, &timestampStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current temperature: %w", err)
 	}
+
+	current.Timestamp, _ = parseTimestamp(timestampStr)
 
 	// Get thresholds from settings
 	thresholds := getThresholdsFromSettings(db)
@@ -381,11 +392,13 @@ func GetAllCurrentTemperatures(db *sql.DB) ([]CurrentTemperature, error) {
 
 	for rows.Next() {
 		var ct CurrentTemperature
-		err := rows.Scan(&ct.Hostname, &ct.SerialNumber, &ct.Temperature, &ct.Timestamp)
+		var timestampStr string
+		err := rows.Scan(&ct.Hostname, &ct.SerialNumber, &ct.Temperature, &timestampStr)
 		if err != nil {
 			continue
 		}
 
+		ct.Timestamp, _ = parseTimestamp(timestampStr)
 		ct.Status = thresholds.GetStatus(ct.Temperature)
 
 		// Get drive info
@@ -426,12 +439,12 @@ func GetTemperatureSummary(db *sql.DB) (*TemperatureSummary, error) {
 		t := &temps[i]
 		totalTemp += t.Temperature
 
-		// Track min/max
-		if t.Temperature < summary.MinTemperature {
+		// Track min/max (use <= and >= to ensure first element is captured)
+		if t.Temperature <= summary.MinTemperature {
 			summary.MinTemperature = t.Temperature
 			coolest = t
 		}
-		if t.Temperature > summary.MaxTemperature {
+		if t.Temperature >= summary.MaxTemperature {
 			summary.MaxTemperature = t.Temperature
 			hottest = t
 		}
@@ -472,10 +485,12 @@ func GetTemperatureRange(db *sql.DB, hostname, serial string, from, to time.Time
 	var records []TempReading
 	for rows.Next() {
 		var r TempReading
-		err := rows.Scan(&r.ID, &r.Hostname, &r.SerialNumber, &r.Temperature, &r.Timestamp)
+		var timestampStr string
+		err := rows.Scan(&r.ID, &r.Hostname, &r.SerialNumber, &r.Temperature, &timestampStr)
 		if err != nil {
 			continue
 		}
+		r.Timestamp, _ = parseTimestamp(timestampStr)
 		records = append(records, r)
 	}
 
@@ -605,4 +620,25 @@ func CleanupOldTemperatureData(db *sql.DB, retentionDays int) (int64, error) {
 	}
 
 	return result.RowsAffected()
+}
+
+// parseTimestamp parses various SQLite timestamp formats
+func parseTimestamp(s string) (time.Time, error) {
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05-07:00",
+		time.RFC3339,
+		time.RFC3339Nano,
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, s); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse timestamp: %s", s)
 }
