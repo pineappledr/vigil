@@ -181,11 +181,27 @@ func TestGetAllDrivesTemperatureStats(t *testing.T) {
 	db := setupTempTestDB(t)
 	defer db.Close()
 
-	// Insert data for two drives
-	insertTestTemperatureData(t, db, "server1", "SERIAL001", []int{35, 36, 37}, 3)
-	insertTestTemperatureData(t, db, "server1", "SERIAL002", []int{40, 41, 42}, 3)
+	// Insert data directly with simple timestamps
+	_, err := db.Exec(`
+		INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
+		VALUES 
+			('server1', 'SERIAL001', 35, datetime('now')),
+			('server1', 'SERIAL001', 36, datetime('now', '-1 hour')),
+			('server1', 'SERIAL002', 40, datetime('now')),
+			('server1', 'SERIAL002', 41, datetime('now', '-1 hour'))
+	`)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
 
-	// Use PeriodAllTime to avoid time filter complications in tests
+	// Verify data was inserted
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM temperature_history").Scan(&count)
+	if count != 4 {
+		t.Fatalf("Expected 4 rows, got %d", count)
+	}
+
+	// Use PeriodAllTime to avoid time filter complications
 	stats, err := GetAllDrivesTemperatureStats(db, PeriodAllTime)
 	if err != nil {
 		t.Fatalf("GetAllDrivesTemperatureStats failed: %v", err)

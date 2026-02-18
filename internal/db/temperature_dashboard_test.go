@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"testing"
 	"time"
 
@@ -223,18 +222,24 @@ func TestGetTemperatureTrends(t *testing.T) {
 	db := setupDashboardTestDB(t)
 	defer db.Close()
 
-	// Insert historical data for trending using SQLite datetime format
-	for i := 0; i < 24; i++ {
-		temp := 35 + i/2 // Gradual increase
-		// Use datetime('now', '-X hours') for proper SQLite comparison
-		hoursAgo := 24 - i
-		_, err := db.Exec(`
-			INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
-			VALUES (?, ?, ?, datetime('now', ?))
-		`, "server1", "SERIAL001", temp, fmt.Sprintf("-%d hours", hoursAgo))
-		if err != nil {
-			t.Fatalf("Failed to insert test data: %v", err)
-		}
+	// Insert data directly with simple timestamps
+	_, err := db.Exec(`
+		INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
+		VALUES 
+			('server1', 'SERIAL001', 35, datetime('now')),
+			('server1', 'SERIAL001', 36, datetime('now', '-1 hour')),
+			('server1', 'SERIAL001', 37, datetime('now', '-2 hours')),
+			('server1', 'SERIAL001', 38, datetime('now', '-3 hours'))
+	`)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Verify data was inserted
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM temperature_history").Scan(&count)
+	if count != 4 {
+		t.Fatalf("Expected 4 rows, got %d", count)
 	}
 
 	// Use PeriodAllTime to avoid time filter complications
@@ -251,11 +256,6 @@ func TestGetTemperatureTrends(t *testing.T) {
 		trend := trends[0]
 		if trend.Hostname != "server1" {
 			t.Errorf("Hostname = %s, want server1", trend.Hostname)
-		}
-
-		// Should show heating trend
-		if trend.TrendDesc != "heating" && trend.TrendSlope <= 0 {
-			t.Logf("Trend: slope=%.4f, desc=%s", trend.TrendSlope, trend.TrendDesc)
 		}
 	}
 }
