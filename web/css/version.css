@@ -1,0 +1,195 @@
+/* ============================================
+   VERSION UPDATE BANNER
+   Phase 2.0: Update Notification Styles
+   ============================================ */
+
+/* Update Banner - Full width notification at top of main content */
+.update-banner {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-left: 4px solid var(--accent-primary);
+    padding: 12px 20px;
+    margin: 0;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 40;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.update-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.update-banner-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    background: rgba(59, 130, 246, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary);
+}
+
+.update-banner-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.update-banner-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.update-banner-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.update-banner-version {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+.update-banner-version strong {
+    color: var(--accent-primary);
+}
+
+.update-banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.update-banner-btn {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.update-banner-btn.primary {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.update-banner-btn.primary:hover {
+    background: var(--accent-secondary);
+    transform: translateY(-1px);
+}
+
+.update-banner-btn.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.update-banner-btn.secondary:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Version indicator in sidebar */
+.version.has-update {
+    position: relative;
+    color: var(--accent-primary);
+}
+
+.version.has-update::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -8px;
+    width: 6px;
+    height: 6px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    animation: pulse-update 2s infinite;
+}
+
+@keyframes pulse-update {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.2);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .update-banner-content {
+        flex-wrap: wrap;
+    }
+
+    .update-banner-icon {
+        display: none;
+    }
+
+    .update-banner-text {
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .update-banner-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .update-banner-btn {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .update-banner {
+        padding: 10px 16px;
+    }
+
+    .update-banner-text {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .update-banner-actions {
+        margin-top: 8px;
+    }
+
+    .update-banner-btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
