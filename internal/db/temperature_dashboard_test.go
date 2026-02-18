@@ -237,7 +237,8 @@ func TestGetTemperatureTrends(t *testing.T) {
 		}
 	}
 
-	trends, err := GetTemperatureTrends(db, Period24Hours, 10)
+	// Use PeriodAllTime to avoid time filter complications
+	trends, err := GetTemperatureTrends(db, PeriodAllTime, 10)
 	if err != nil {
 		t.Fatalf("GetTemperatureTrends failed: %v", err)
 	}

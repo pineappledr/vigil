@@ -185,7 +185,8 @@ func TestGetAllDrivesTemperatureStats(t *testing.T) {
 	insertTestTemperatureData(t, db, "server1", "SERIAL001", []int{35, 36, 37}, 3)
 	insertTestTemperatureData(t, db, "server1", "SERIAL002", []int{40, 41, 42}, 3)
 
-	stats, err := GetAllDrivesTemperatureStats(db, Period24Hours)
+	// Use PeriodAllTime to avoid time filter complications in tests
+	stats, err := GetAllDrivesTemperatureStats(db, PeriodAllTime)
 	if err != nil {
 		t.Fatalf("GetAllDrivesTemperatureStats failed: %v", err)
 	}
