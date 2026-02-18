@@ -196,20 +196,22 @@ type TemperatureSummary struct {
 
 // TemperatureSpike represents a rapid temperature change event
 type TemperatureSpike struct {
-	ID           int64     `json:"id"`
-	Hostname     string    `json:"hostname"`
-	SerialNumber string    `json:"serial_number"`
-	DeviceName   string    `json:"device_name,omitempty"`
-	Model        string    `json:"model,omitempty"`
-	StartTime    time.Time `json:"start_time"`
-	EndTime      time.Time `json:"end_time"`
-	StartTemp    int       `json:"start_temp"`
-	EndTemp      int       `json:"end_temp"`
-	Change       int       `json:"change"`
-	RatePerMin   float64   `json:"rate_per_min"`
-	Direction    string    `json:"direction"` // "heating" or "cooling"
-	Acknowledged bool      `json:"acknowledged"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	Hostname       string    `json:"hostname"`
+	SerialNumber   string    `json:"serial_number"`
+	DeviceName     string    `json:"device_name,omitempty"`
+	Model          string    `json:"model,omitempty"`
+	StartTime      time.Time `json:"start_time"`
+	EndTime        time.Time `json:"end_time"`
+	StartTemp      int       `json:"start_temp"`
+	EndTemp        int       `json:"end_temp"`
+	Change         int       `json:"change"`
+	RatePerMin     float64   `json:"rate_per_min"`
+	Direction      string    `json:"direction"` // "heating" or "cooling"
+	Acknowledged   bool      `json:"acknowledged"`
+	AcknowledgedBy string    `json:"acknowledged_by,omitempty"`
+	AcknowledgedAt time.Time `json:"acknowledged_at,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // HeatmapData holds data for temperature heatmap visualization
