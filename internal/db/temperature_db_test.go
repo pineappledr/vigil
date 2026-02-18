@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -57,14 +58,17 @@ func setupTempTestDB(t *testing.T) *sql.DB {
 
 // insertTestTemperatureData adds test temperature readings
 func insertTestTemperatureData(t *testing.T, db *sql.DB, hostname, serial string, temps []int, hours int) {
-	baseTime := time.Now().Add(-time.Duration(hours) * time.Hour)
-
+	t.Helper()
 	for i, temp := range temps {
-		timestamp := baseTime.Add(time.Duration(i) * time.Hour)
+		// Calculate hours ago for this data point
+		hoursAgo := hours - i
+		if hoursAgo < 0 {
+			hoursAgo = 0
+		}
 		_, err := db.Exec(`
 			INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
-			VALUES (?, ?, ?, ?)
-		`, hostname, serial, temp, timestamp)
+			VALUES (?, ?, ?, datetime('now', ?))
+		`, hostname, serial, temp, fmt.Sprintf("-%d hours", hoursAgo))
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
 		}

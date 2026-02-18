@@ -118,12 +118,12 @@ func GetDashboardTemperatureData(db *sql.DB, includeDetails bool) (*DashboardTem
 		t := &temps[i]
 		totalTemp += t.Temperature
 
-		// Track min/max
-		if t.Temperature < data.MinTemperature {
+		// Track min/max (use <= and >= to ensure first element is captured)
+		if t.Temperature <= data.MinTemperature {
 			data.MinTemperature = t.Temperature
 			coolest = t
 		}
-		if t.Temperature > data.MaxTemperature {
+		if t.Temperature >= data.MaxTemperature {
 			data.MaxTemperature = t.Temperature
 			hottest = t
 		}

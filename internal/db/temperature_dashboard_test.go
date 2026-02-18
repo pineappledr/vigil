@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -222,15 +223,18 @@ func TestGetTemperatureTrends(t *testing.T) {
 	db := setupDashboardTestDB(t)
 	defer db.Close()
 
-	// Insert historical data for trending
-	baseTime := time.Now()
+	// Insert historical data for trending using SQLite datetime format
 	for i := 0; i < 24; i++ {
 		temp := 35 + i/2 // Gradual increase
-		timestamp := baseTime.Add(-time.Duration(24-i) * time.Hour)
-		db.Exec(`
+		// Use datetime('now', '-X hours') for proper SQLite comparison
+		hoursAgo := 24 - i
+		_, err := db.Exec(`
 			INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
-			VALUES (?, ?, ?, ?)
-		`, "server1", "SERIAL001", temp, timestamp)
+			VALUES (?, ?, ?, datetime('now', ?))
+		`, "server1", "SERIAL001", temp, fmt.Sprintf("-%d hours", hoursAgo))
+		if err != nil {
+			t.Fatalf("Failed to insert test data: %v", err)
+		}
 	}
 
 	trends, err := GetTemperatureTrends(db, Period24Hours, 10)

@@ -9,15 +9,24 @@ import (
 
 // GetTemperatureStats retrieves temperature statistics for a specific drive
 func GetTemperatureStats(db *sql.DB, hostname, serial string, period TemperaturePeriod) (*TemperatureStats, error) {
-	// Build time filter
+	// Build time filter using SQLite datetime function
 	timeFilter := ""
 	args := []interface{}{hostname, serial}
 
 	if period != PeriodAllTime {
-		duration := PeriodToDuration(period)
-		cutoff := time.Now().Add(-duration)
-		timeFilter = "AND timestamp >= ?"
-		args = append(args, cutoff)
+		// Use SQLite's datetime function for reliable comparison
+		var interval string
+		switch period {
+		case Period24Hours:
+			interval = "-24 hours"
+		case Period7Days:
+			interval = "-7 days"
+		case Period30Days:
+			interval = "-30 days"
+		default:
+			interval = "-365 days"
+		}
+		timeFilter = fmt.Sprintf("AND timestamp >= datetime('now', '%s')", interval)
 	}
 
 	// Query for basic stats
@@ -258,14 +267,23 @@ func GetAllDrivesTemperatureStats(db *sql.DB, period TemperaturePeriod) ([]Tempe
 
 // GetTemperatureTimeSeries retrieves time series data for charting
 func GetTemperatureTimeSeries(db *sql.DB, hostname, serial string, period TemperaturePeriod, interval AggregationInterval) (*TimeSeriesData, error) {
+	// Build time filter using SQLite datetime function
 	timeFilter := ""
 	args := []interface{}{hostname, serial}
 
 	if period != PeriodAllTime {
-		duration := PeriodToDuration(period)
-		cutoff := time.Now().Add(-duration)
-		timeFilter = "AND timestamp >= ?"
-		args = append(args, cutoff)
+		var sqlInterval string
+		switch period {
+		case Period24Hours:
+			sqlInterval = "-24 hours"
+		case Period7Days:
+			sqlInterval = "-7 days"
+		case Period30Days:
+			sqlInterval = "-30 days"
+		default:
+			sqlInterval = "-365 days"
+		}
+		timeFilter = fmt.Sprintf("AND timestamp >= datetime('now', '%s')", sqlInterval)
 	}
 
 	// Build aggregation query
