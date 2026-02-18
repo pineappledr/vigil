@@ -756,11 +756,54 @@ const SmartAttributes = {
     },
 
     renderTemperatureChart(tempData) {
+        // If no history data, show current temperature from drive
         if (!tempData || !tempData.history || tempData.history.length === 0) {
+            const currentTemp = this.currentDrive?.temperature?.current;
+            const nvmeTemp = this.currentDrive?.nvme_smart_health_information_log?.temperature;
+            const temp = currentTemp ?? nvmeTemp;
+            
+            if (temp != null) {
+                // Show current temperature without history
+                const tempClass = temp >= 55 ? 'critical' : temp >= 45 ? 'warning' : 'normal';
+                return `
+                    <div class="temp-current-panel">
+                        <div class="temp-current-header">
+                            ${this.icons.temp}
+                            <span>Current Temperature</span>
+                        </div>
+                        <div class="temp-current-display ${tempClass}">
+                            <span class="temp-value">${temp}</span>
+                            <span class="temp-unit">°C</span>
+                        </div>
+                        <div class="temp-status ${tempClass}">
+                            ${temp >= 55 ? 'Critical - Above safe operating temperature' :
+                              temp >= 45 ? 'Warning - Temperature elevated' :
+                              'Normal - Within safe range'}
+                        </div>
+                        <div class="temp-thresholds">
+                            <div class="threshold-bar">
+                                <div class="threshold-fill" style="width: ${Math.min((temp / 70) * 100, 100)}%"></div>
+                                <div class="threshold-marker warning" style="left: ${(45/70)*100}%"></div>
+                                <div class="threshold-marker critical" style="left: ${(55/70)*100}%"></div>
+                            </div>
+                            <div class="threshold-labels">
+                                <span>0°C</span>
+                                <span class="warning-label">45°C</span>
+                                <span class="critical-label">55°C</span>
+                                <span>70°C</span>
+                            </div>
+                        </div>
+                        <div class="temp-history-note">
+                            <span class="hint">Temperature history will appear after data collection begins</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
             return `
                 <div class="smart-empty">
                     ${this.icons.temp}
-                    <p>No temperature history available</p>
+                    <p>No temperature data available</p>
                     <span class="hint">Temperature data will appear after collection</span>
                 </div>
             `;

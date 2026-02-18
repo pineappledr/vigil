@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="css/smart-attributes.css">
     <link rel="stylesheet" href="css/zfs.css">
     <link rel="stylesheet" href="css/offline-indicator.css">
+    <link rel="stylesheet" href="css/temperature.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -71,6 +73,16 @@
                         <span id="zfs-pool-count" class="count-badge">0</span>
                     </a>
                     <div id="zfs-nav-list" class="server-list-nav"></div>
+                </div>
+
+                <div class="nav-section">
+                    <span class="nav-label">Monitoring</span>
+                    <a href="javascript:void(0)" class="nav-item" id="nav-temperature" onclick="Navigation.showTemperature()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                        </svg>
+                        Temperature
+                    </a>
                 </div>
             </nav>
             
@@ -171,6 +183,7 @@
     <script src="js/auth.js"></script>
     <script src="js/data.js"></script>
     <script src="js/navigation.js"></script>
+    <script src="js/temperature.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
