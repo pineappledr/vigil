@@ -1,29 +1,24 @@
 /* ============================================
-   VERSION UPDATE BANNER
-   Phase 2.0: Update Notification Styles
+   VERSION UPDATE SYSTEM STYLES
    ============================================ */
-
-/* Update Banner - Full width notification at top of main content */
 .update-banner {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-left: 4px solid var(--accent-primary);
-    padding: 12px 20px;
-    margin: 0;
     position: sticky;
-    top: var(--header-height);
-    z-index: 40;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px 20px;
     animation: slideDown 0.3s ease-out;
 }
 
 @keyframes slideDown {
     from {
-        opacity: 0;
         transform: translateY(-100%);
+        opacity: 0;
     }
     to {
-        opacity: 1;
         transform: translateY(0);
+        opacity: 1;
     }
 }
 
@@ -36,20 +31,21 @@
 }
 
 .update-banner-icon {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    background: rgba(59, 130, 246, 0.2);
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--accent-primary);
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .update-banner-icon svg {
     width: 20px;
     height: 20px;
+    stroke: white;
+    fill: none;
 }
 
 .update-banner-text {
@@ -60,78 +56,68 @@
 }
 
 .update-banner-title {
+    font-size: 0.9rem;
     font-weight: 600;
-    font-size: 0.95rem;
-    color: var(--text-primary);
+    color: white;
 }
 
 .update-banner-version {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    font-family: var(--font-mono);
-}
-
-.update-banner-version strong {
-    color: var(--accent-primary);
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.85);
 }
 
 .update-banner-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
-    flex-shrink: 0;
 }
 
 .update-banner-btn {
     padding: 8px 16px;
+    border-radius: 6px;
     font-size: 0.85rem;
     font-weight: 500;
-    font-family: var(--font-sans);
-    border-radius: 6px;
-    border: none;
     cursor: pointer;
-    text-decoration: none;
-    transition: all var(--transition-fast);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    transition: all 0.15s ease;
+    border: none;
+    font-family: var(--font-sans);
 }
 
 .update-banner-btn.primary {
-    background: var(--accent-primary);
-    color: white;
+    background: white;
+    color: #2563eb;
 }
 
 .update-banner-btn.primary:hover {
-    background: var(--accent-secondary);
+    background: rgba(255, 255, 255, 0.9);
     transform: translateY(-1px);
 }
 
 .update-banner-btn.secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .update-banner-btn.secondary:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.25);
 }
 
-/* Version indicator in sidebar */
-.version.has-update {
+/* Version badge with update indicator */
+.version-badge {
     position: relative;
-    color: var(--accent-primary);
 }
 
-.version.has-update::after {
+.version-badge.has-update::after {
     content: '';
     position: absolute;
     top: -2px;
-    right: -8px;
-    width: 6px;
-    height: 6px;
-    background: var(--accent-primary);
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: #3b82f6;
     border-radius: 50%;
+    border: 2px solid var(--bg-primary);
     animation: pulse-update 2s infinite;
 }
 
@@ -149,40 +135,62 @@
 /* ============================================
    CHECK FOR UPDATES - Settings Page
    ============================================ */
-
-/* Check for Updates Button */
+   
 .check-updates-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 10px 20px;
     font-size: 0.875rem;
     font-weight: 500;
     font-family: var(--font-sans);
-    background: var(--bg-elevated);
+    background: transparent;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
 .check-updates-btn:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-hover);
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.check-updates-btn:active {
+    transform: scale(0.98);
 }
 
 .check-updates-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.check-updates-btn:disabled:hover {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-muted);
 }
 
 .check-updates-btn svg {
     width: 16px;
     height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
 }
 
-/* Small spinner for button */
+/* Spinning animation when checking */
+.check-updates-btn.checking svg {
+    animation: spin 1s linear infinite;
+}
+
+/* Small spinner for button loading state */
 .spinner-small {
     display: inline-block;
     width: 14px;
@@ -220,6 +228,8 @@
     width: 24px;
     height: 24px;
     flex-shrink: 0;
+    stroke-width: 2;
+    fill: none;
 }
 
 .update-status-text {
@@ -241,16 +251,16 @@
 
 /* Up to date state */
 .update-status.up-to-date {
-    background: var(--success-soft);
+    background: rgba(16, 185, 129, 0.1);
     border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .update-status.up-to-date svg {
-    color: var(--success);
+    stroke: #10b981;
 }
 
 .update-status.up-to-date strong {
-    color: var(--success);
+    color: #10b981;
 }
 
 /* Update available state */
@@ -260,34 +270,85 @@
 }
 
 .update-status.update-available svg {
-    color: var(--accent-primary);
+    stroke: #3b82f6;
 }
 
 .update-status.update-available strong {
-    color: var(--accent-primary);
+    color: #3b82f6;
 }
 
 /* Error state */
 .update-status.update-error {
-    background: var(--danger-soft);
+    background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .update-status.update-error svg {
-    color: var(--danger);
+    stroke: #ef4444;
 }
 
 .update-status.update-error strong {
-    color: var(--danger);
+    color: #ef4444;
 }
 
-/* Small button variant */
+/* Small button variant for View Release */
 .btn-sm {
     padding: 6px 12px;
     font-size: 0.8rem;
+    border-radius: 6px;
 }
 
-/* Responsive adjustments */
+/* ============================================
+   HEADER NOTIFICATION INDICATOR
+   ============================================ */
+
+.header-update-indicator {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.header-update-indicator:hover {
+    background: var(--bg-hover);
+}
+
+.header-update-indicator svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--text-muted);
+    fill: none;
+    stroke-width: 2;
+}
+
+.header-update-indicator.has-update svg {
+    stroke: #3b82f6;
+}
+
+.header-update-indicator.has-update::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 2px solid var(--bg-primary);
+    animation: pulse-update 2s infinite;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
 @media (max-width: 768px) {
     .update-banner-content {
         flex-wrap: wrap;
@@ -323,24 +384,9 @@
         justify-content: center;
         margin-top: 8px;
     }
-}
-
-@media (max-width: 480px) {
-    .update-banner {
-        padding: 10px 16px;
-    }
-
-    .update-banner-text {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .update-banner-actions {
-        margin-top: 8px;
-    }
-
-    .update-banner-btn {
-        flex: 1;
-        justify-content: center;
+    
+    .check-updates-btn {
+        padding: 8px 14px;
+        font-size: 0.8rem;
     }
 }

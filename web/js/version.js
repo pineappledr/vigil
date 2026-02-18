@@ -144,6 +144,64 @@ const Version = {
                 versionEl.title = '';
             }
         }
+        
+        // Update header notification indicator
+        this.updateHeaderIndicator();
+    },
+    
+    /**
+     * Update the header notification indicator
+     */
+    updateHeaderIndicator() {
+        const indicator = document.getElementById('header-update-indicator');
+        if (!indicator) return;
+        
+        if (this.updateInfo && this.updateInfo.update_available) {
+            indicator.classList.add('has-update');
+            indicator.title = `Update available: v${this.updateInfo.latest_version}`;
+            indicator.style.display = 'flex';
+        } else {
+            indicator.classList.remove('has-update');
+            indicator.title = '';
+            indicator.style.display = 'none';
+        }
+    },
+    
+    /**
+     * Create header indicator element (call once during init)
+     * Returns HTML string to insert into header
+     */
+    createHeaderIndicator() {
+        return `
+            <button id="header-update-indicator" 
+                    class="header-update-indicator" 
+                    onclick="Version.showUpdateDetails()"
+                    style="display: none;"
+                    title="Check for updates">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            </button>
+        `;
+    },
+    
+    /**
+     * Show update details (triggered by header indicator click)
+     */
+    showUpdateDetails() {
+        if (this.updateInfo && this.updateInfo.update_available) {
+            // Navigate to settings page if Navigation module exists
+            if (typeof Navigation !== 'undefined' && Navigation.showSettings) {
+                Navigation.showSettings();
+                // Trigger manual check after a short delay to show results
+                setTimeout(() => this.manualCheck(), 300);
+            } else if (this.updateInfo.release_url) {
+                // Fallback: open release URL directly
+                window.open(this.updateInfo.release_url, '_blank', 'noopener');
+            }
+        }
     },
 
     /**
