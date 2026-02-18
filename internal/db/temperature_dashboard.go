@@ -261,16 +261,31 @@ func GetDashboardOverview(db *sql.DB) (*DashboardOverview, error) {
 // GetTemperatureTrends retrieves temperature trends for multiple drives
 func GetTemperatureTrends(db *sql.DB, period TemperaturePeriod, limit int) ([]DriveTrend, error) {
 	// Get unique drives with recent data
-	query := `
-		SELECT DISTINCT hostname, serial_number
-		FROM temperature_history
-		WHERE timestamp >= datetime('now', ?)
-		ORDER BY hostname, serial_number
-		LIMIT ?
-	`
+	var query string
+	var rows *sql.Rows
+	var err error
 
-	periodSQL := periodToSQLInterval(period)
-	rows, err := db.Query(query, periodSQL, limit)
+	if period == PeriodAllTime {
+		// No time filter for all-time
+		query = `
+			SELECT DISTINCT hostname, serial_number
+			FROM temperature_history
+			ORDER BY hostname, serial_number
+			LIMIT ?
+		`
+		rows, err = db.Query(query, limit)
+	} else {
+		query = `
+			SELECT DISTINCT hostname, serial_number
+			FROM temperature_history
+			WHERE timestamp >= datetime('now', ?)
+			ORDER BY hostname, serial_number
+			LIMIT ?
+		`
+		periodSQL := periodToSQLInterval(period)
+		rows, err = db.Query(query, periodSQL, limit)
+	}
+
 	if err != nil {
 		return nil, err
 	}
