@@ -206,6 +206,103 @@ const Version = {
     },
 
     /**
+     * Manual check triggered by user (shows result in UI)
+     * Used by Settings page "Check for Updates" button
+     */
+    async manualCheck() {
+        const button = document.getElementById('check-updates-btn');
+        const statusEl = document.getElementById('update-check-status');
+        
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = `
+                <span class="spinner-small"></span>
+                Checking...
+            `;
+        }
+        
+        try {
+            const info = await this.forceCheck();
+            
+            if (statusEl) {
+                if (info && info.update_available) {
+                    statusEl.innerHTML = `
+                        <div class="update-status update-available">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                            </svg>
+                            <div class="update-status-text">
+                                <strong>Update available!</strong>
+                                <span>v${this.escapeHtml(info.current_version)} → v${this.escapeHtml(info.latest_version)}</span>
+                            </div>
+                            <a href="${this.escapeHtml(info.release_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">
+                                View Release
+                            </a>
+                        </div>
+                    `;
+                } else if (info) {
+                    statusEl.innerHTML = `
+                        <div class="update-status up-to-date">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                            <div class="update-status-text">
+                                <strong>You're up to date!</strong>
+                                <span>Version ${this.escapeHtml(info.current_version)} is the latest</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    statusEl.innerHTML = `
+                        <div class="update-status update-error">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="15" y1="9" x2="9" y2="15"/>
+                                <line x1="9" y1="9" x2="15" y2="15"/>
+                            </svg>
+                            <div class="update-status-text">
+                                <strong>Couldn't check for updates</strong>
+                                <span>Please try again later</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('[Version] Manual check failed:', error);
+            if (statusEl) {
+                statusEl.innerHTML = `
+                    <div class="update-status update-error">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        <div class="update-status-text">
+                            <strong>Connection error</strong>
+                            <span>Please check your internet connection</span>
+                        </div>
+                    </div>
+                `;
+            }
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    Check for Updates
+                `;
+            }
+        }
+    },
+
+    /**
      * Cleanup (call on page unload if needed)
      */
     destroy() {
