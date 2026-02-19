@@ -57,6 +57,23 @@
     outline: none;
 }
 
+.temp-select-sm {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+}
+
+.temp-select-sm:hover,
+.temp-select-sm:focus {
+    border-color: var(--accent-blue);
+    outline: none;
+}
+
 /* Summary Cards Grid */
 .temp-summary-grid {
     display: grid;
@@ -130,12 +147,13 @@
     text-overflow: ellipsis;
 }
 
-/* Content Grid */
+/* Content Grid - EQUAL HEIGHT for chart and alerts */
 .temp-content-grid {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 1.5rem;
     margin-bottom: 1.5rem;
+    align-items: stretch; /* Equal height */
 }
 
 @media (max-width: 1024px) {
@@ -170,16 +188,26 @@
     color: var(--text-secondary);
 }
 
+.temp-chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 /* Chart Section */
 .temp-chart-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 380px;
 }
 
 .temp-chart-container {
-    height: 280px;
+    flex: 1;
+    min-height: 280px;
     position: relative;
 }
 
@@ -204,7 +232,7 @@
     color: var(--text-muted);
 }
 
-/* Alerts Section */
+/* Alerts Section - SAME HEIGHT as chart */
 .temp-alerts-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -212,7 +240,7 @@
     padding: 1.25rem;
     display: flex;
     flex-direction: column;
-    max-height: 380px;
+    min-height: 380px;
 }
 
 .temp-alerts-list {
@@ -221,6 +249,7 @@
 }
 
 .empty-alerts {
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -231,15 +260,15 @@
 }
 
 .empty-alerts svg {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     color: var(--success);
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
 }
 
 .empty-alerts p {
     margin: 0;
-    font-size: 0.9375rem;
+    font-size: 1rem;
     font-weight: 500;
 }
 
@@ -348,11 +377,117 @@
     color: #fff;
 }
 
-/* Drives Grid */
+/* Server Groups Container */
+.temp-servers-container {
+    margin-top: 1rem;
+}
+
+/* Server Group - Collapsible */
+.temp-server-group {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.temp-server-group:last-child {
+    margin-bottom: 0;
+}
+
+.temp-server-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.temp-server-header:hover {
+    background: var(--bg-secondary);
+}
+
+.server-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.server-info svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+}
+
+.server-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.server-drive-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+}
+
+.server-stats {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.server-stats .stat {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.server-stats .stat.warning {
+    color: var(--warning);
+    font-weight: 500;
+}
+
+.server-stats .stat.critical {
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.server-stats .stat.avg,
+.server-stats .stat.max {
+    font-family: var(--font-mono);
+}
+
+.toggle-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.temp-server-group.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.temp-server-drives {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+    padding: 0 1rem 1rem 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.temp-server-group.collapsed .temp-server-drives {
+    display: none;
+}
+
+/* Drives Grid (fallback for flat view) */
 .temp-drives-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
     margin-top: 1rem;
 }
 
@@ -386,18 +521,18 @@
     color: var(--text-muted);
 }
 
-/* Drive Card */
+/* Drive Card - Compact version for server groups */
 .temp-drive-card {
-    background: var(--bg-elevated);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 1rem;
+    border-radius: 8px;
+    padding: 0.875rem;
     transition: all 0.2s;
 }
 
 .temp-drive-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .temp-drive-card.selected {
@@ -417,7 +552,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 0.625rem;
+    margin-bottom: 0.5rem;
 }
 
 .drive-info {
@@ -425,7 +560,7 @@
 }
 
 .drive-name {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--text-primary);
     font-family: var(--font-mono);
@@ -438,10 +573,10 @@
 }
 
 .drive-temp {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
     font-weight: 700;
     font-family: var(--font-mono);
-    padding: 0.25rem 0.625rem;
+    padding: 0.1875rem 0.5rem;
     border-radius: 6px;
     flex-shrink: 0;
 }
@@ -462,11 +597,11 @@
 }
 
 .drive-card-body {
-    margin-bottom: 0.625rem;
+    margin-bottom: 0.5rem;
 }
 
 .drive-model {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
@@ -474,7 +609,7 @@
 }
 
 .drive-serial {
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     color: var(--text-muted);
     font-family: var(--font-mono);
     margin-top: 0.125rem;
@@ -483,10 +618,10 @@
 /* Temperature Bar */
 .temp-bar-container {
     height: 4px;
-    background: var(--bg-secondary);
+    background: var(--bg-elevated);
     border-radius: 2px;
     position: relative;
-    margin-bottom: 0.625rem;
+    margin-bottom: 0.5rem;
 }
 
 .temp-bar {
@@ -526,7 +661,7 @@
 }
 
 .last-updated {
-    font-size: 0.625rem;
+    font-size: 0.5625rem;
     color: var(--text-muted);
 }
 
@@ -534,7 +669,7 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
     color: var(--text-secondary);
     cursor: pointer;
 }
@@ -542,6 +677,8 @@
 .compare-checkbox input {
     cursor: pointer;
     accent-color: var(--accent-blue);
+    width: 12px;
+    height: 12px;
 }
 
 /* Utility */
@@ -590,12 +727,17 @@
         grid-template-columns: repeat(2, 1fr);
     }
 
+    .temp-server-drives,
     .temp-drives-grid {
         grid-template-columns: 1fr;
     }
 
     .drive-filter-tabs {
         flex-wrap: wrap;
+    }
+
+    .server-stats {
+        display: none;
     }
 }
 
@@ -611,5 +753,9 @@
 
     .temp-select {
         width: 100%;
+    }
+
+    .temp-chart-controls {
+        flex-wrap: wrap;
     }
 }
