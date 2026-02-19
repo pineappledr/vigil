@@ -15,6 +15,7 @@ import (
 	"vigil/internal/handlers"
 	"vigil/internal/middleware"
 	"vigil/internal/models"
+	"vigil/internal/smart"
 )
 
 // version is set at build time via -ldflags
@@ -36,7 +37,7 @@ func main() {
 	log.Printf("✓ Database: %s", cfg.DBPath)
 
 	// Run SMART attributes migration
-	if err := db.MigrateSmartAttributes(db.DB); err != nil {
+	if err := smart.MigrateSmartAttributes(db.DB); err != nil {
 		log.Printf("⚠️  SMART migration warning: %v", err)
 	}
 

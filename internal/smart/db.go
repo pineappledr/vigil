@@ -1,4 +1,4 @@
-package db
+package smart
 
 import (
 	"database/sql"
@@ -7,24 +7,24 @@ import (
 	"log"
 	"time"
 
-	"vigil/cmd/agent/smart"
+	agentsmart "vigil/cmd/agent/smart"
 )
 
 // StoreSmartAttributes saves SMART attributes to the database
-func StoreSmartAttributes(driveData *smart.DriveSmartData) error {
+func StoreSmartAttributes(db *sql.DB, driveData *agentsmart.DriveSmartData) error {
 	if driveData == nil || len(driveData.Attributes) == 0 {
 		return nil
 	}
 
-	tx, err := DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO smart_attributes 
-		(hostname, serial_number, device_name, attribute_id, attribute_name, 
+		INSERT INTO smart_attributes
+		(hostname, serial_number, device_name, attribute_id, attribute_name,
 		 value, worst, threshold, raw_value, flags, when_failed, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(hostname, serial_number, attribute_id, timestamp) DO UPDATE SET
@@ -78,7 +78,7 @@ func StoreSmartAttributes(driveData *smart.DriveSmartData) error {
 }
 
 // GetSmartAttributeHistory retrieves historical data for a specific attribute
-func GetSmartAttributeHistory(hostname, serialNumber string, attributeID int, limit int) ([]smart.SmartAttribute, error) {
+func GetSmartAttributeHistory(db *sql.DB, hostname, serialNumber string, attributeID int, limit int) ([]agentsmart.SmartAttribute, error) {
 	query := `
 		SELECT attribute_id, attribute_name, value, worst, threshold, raw_value, flags, when_failed, timestamp
 		FROM smart_attributes
@@ -87,7 +87,7 @@ func GetSmartAttributeHistory(hostname, serialNumber string, attributeID int, li
 		LIMIT ?
 	`
 
-	rows, err := DB.Query(query, hostname, serialNumber, attributeID, limit)
+	rows, err := db.Query(query, hostname, serialNumber, attributeID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -97,19 +97,19 @@ func GetSmartAttributeHistory(hostname, serialNumber string, attributeID int, li
 }
 
 // GetLatestSmartAttributes retrieves the most recent SMART attributes for a drive
-func GetLatestSmartAttributes(hostname, serialNumber string) ([]smart.SmartAttribute, error) {
+func GetLatestSmartAttributes(db *sql.DB, hostname, serialNumber string) ([]agentsmart.SmartAttribute, error) {
 	query := `
 		SELECT attribute_id, attribute_name, value, worst, threshold, raw_value, flags, when_failed, timestamp
 		FROM smart_attributes
 		WHERE hostname = ? AND serial_number = ?
 		AND timestamp = (
-			SELECT MAX(timestamp) FROM smart_attributes 
+			SELECT MAX(timestamp) FROM smart_attributes
 			WHERE hostname = ? AND serial_number = ?
 		)
 		ORDER BY attribute_id
 	`
 
-	rows, err := DB.Query(query, hostname, serialNumber, hostname, serialNumber)
+	rows, err := db.Query(query, hostname, serialNumber, hostname, serialNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -119,26 +119,26 @@ func GetLatestSmartAttributes(hostname, serialNumber string) ([]smart.SmartAttri
 }
 
 // GetAllLatestSmartAttributes retrieves the latest SMART data for all drives
-func GetAllLatestSmartAttributes() (map[string][]smart.SmartAttribute, error) {
+func GetAllLatestSmartAttributes(db *sql.DB) (map[string][]agentsmart.SmartAttribute, error) {
 	query := `
 		SELECT DISTINCT hostname, serial_number
 		FROM smart_attributes
 	`
 
-	rows, err := DB.Query(query)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[string][]smart.SmartAttribute)
+	result := make(map[string][]agentsmart.SmartAttribute)
 	for rows.Next() {
 		var hostname, serial string
 		if err := rows.Scan(&hostname, &serial); err != nil {
 			continue
 		}
 
-		attrs, err := GetLatestSmartAttributes(hostname, serial)
+		attrs, err := GetLatestSmartAttributes(db, hostname, serial)
 		if err != nil {
 			continue
 		}
@@ -151,22 +151,22 @@ func GetAllLatestSmartAttributes() (map[string][]smart.SmartAttribute, error) {
 }
 
 // GetCriticalSmartAttributes retrieves all critical SMART attribute definitions
-func GetCriticalSmartAttributes() ([]smart.CriticalAttribute, error) {
+func GetCriticalSmartAttributes(db *sql.DB) ([]agentsmart.CriticalAttribute, error) {
 	query := `
 		SELECT attribute_id, attribute_name, description, drive_type, severity, failure_threshold
 		FROM critical_smart_attributes
 		ORDER BY severity DESC, attribute_id
 	`
 
-	rows, err := DB.Query(query)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var attributes []smart.CriticalAttribute
+	var attributes []agentsmart.CriticalAttribute
 	for rows.Next() {
-		var attr smart.CriticalAttribute
+		var attr agentsmart.CriticalAttribute
 		var failureThreshold sql.NullInt64
 
 		err := rows.Scan(
@@ -193,14 +193,14 @@ func GetCriticalSmartAttributes() ([]smart.CriticalAttribute, error) {
 }
 
 // GetDriveHealthSummary analyzes SMART attributes and returns health status
-func GetDriveHealthSummary(hostname, serialNumber string) (*smart.DriveHealthAnalysis, error) {
-	attributes, err := GetLatestSmartAttributes(hostname, serialNumber)
+func GetDriveHealthSummary(db *sql.DB, hostname, serialNumber string) (*agentsmart.DriveHealthAnalysis, error) {
+	attributes, err := GetLatestSmartAttributes(db, hostname, serialNumber)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build a DriveSmartData object for analysis
-	driveData := &smart.DriveSmartData{
+	driveData := &agentsmart.DriveSmartData{
 		Hostname:     hostname,
 		SerialNumber: serialNumber,
 		Attributes:   attributes,
@@ -209,7 +209,7 @@ func GetDriveHealthSummary(hostname, serialNumber string) (*smart.DriveHealthAna
 	}
 
 	// Get drive info from the latest report
-	driveInfo, err := GetDriveInfo(hostname, serialNumber)
+	driveInfo, err := GetDriveInfo(db, hostname, serialNumber)
 	if err == nil && driveInfo != nil {
 		driveData.ModelName = driveInfo.ModelName
 		driveData.DriveType = driveInfo.DriveType
@@ -217,11 +217,11 @@ func GetDriveHealthSummary(hostname, serialNumber string) (*smart.DriveHealthAna
 	}
 
 	// Perform health analysis
-	return smart.AnalyzeDriveHealth(driveData), nil
+	return agentsmart.AnalyzeDriveHealth(driveData), nil
 }
 
 // GetAllDrivesHealthSummary returns health summaries for all monitored drives
-func GetAllDrivesHealthSummary() ([]*smart.DriveHealthAnalysis, error) {
+func GetAllDrivesHealthSummary(db *sql.DB) ([]*agentsmart.DriveHealthAnalysis, error) {
 	// Get all unique drives
 	query := `
 		SELECT DISTINCT hostname, serial_number
@@ -229,20 +229,20 @@ func GetAllDrivesHealthSummary() ([]*smart.DriveHealthAnalysis, error) {
 		ORDER BY hostname, serial_number
 	`
 
-	rows, err := DB.Query(query)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var summaries []*smart.DriveHealthAnalysis
+	var summaries []*agentsmart.DriveHealthAnalysis
 	for rows.Next() {
 		var hostname, serial string
 		if err := rows.Scan(&hostname, &serial); err != nil {
 			continue
 		}
 
-		summary, err := GetDriveHealthSummary(hostname, serial)
+		summary, err := GetDriveHealthSummary(db, hostname, serial)
 		if err != nil {
 			log.Printf("Warning: Failed to get health summary for %s/%s: %v", hostname, serial, err)
 			continue
@@ -255,7 +255,7 @@ func GetAllDrivesHealthSummary() ([]*smart.DriveHealthAnalysis, error) {
 }
 
 // GetAttributeTrend calculates trend for a specific attribute over time
-func GetAttributeTrend(hostname, serialNumber string, attributeID int, days int) (*AttributeTrend, error) {
+func GetAttributeTrend(db *sql.DB, hostname, serialNumber string, attributeID int, days int) (*AttributeTrend, error) {
 	since := time.Now().AddDate(0, 0, -days).Format("2006-01-02 15:04:05")
 
 	query := `
@@ -266,7 +266,7 @@ func GetAttributeTrend(hostname, serialNumber string, attributeID int, days int)
 		ORDER BY timestamp ASC
 	`
 
-	rows, err := DB.Query(query, hostname, serialNumber, attributeID, since)
+	rows, err := db.Query(query, hostname, serialNumber, attributeID, since)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func determineTrend(attributeID int, rawChange int64, valueChange int) string {
 }
 
 // GetTemperatureHistory retrieves temperature history for a drive
-func GetTemperatureHistory(hostname, serialNumber string, hours int) ([]TemperatureRecord, error) {
+func GetTemperatureHistory(db *sql.DB, hostname, serialNumber string, hours int) ([]TemperatureRecord, error) {
 	since := time.Now().Add(-time.Duration(hours) * time.Hour).Format("2006-01-02 15:04:05")
 
 	query := `
@@ -414,7 +414,7 @@ func GetTemperatureHistory(hostname, serialNumber string, hours int) ([]Temperat
 		ORDER BY timestamp ASC
 	`
 
-	rows, err := DB.Query(query, hostname, serialNumber, since)
+	rows, err := db.Query(query, hostname, serialNumber, since)
 	if err != nil {
 		return nil, err
 	}
@@ -446,18 +446,18 @@ type TemperatureRecord struct {
 }
 
 // CleanupOldSmartData removes SMART data older than specified days
-func CleanupOldSmartData(daysToKeep int) (int64, error) {
+func CleanupOldSmartData(db *sql.DB, daysToKeep int) (int64, error) {
 	cutoffDate := time.Now().AddDate(0, 0, -daysToKeep).Format("2006-01-02 15:04:05")
 
 	// Clean up smart_attributes
-	result, err := DB.Exec(`DELETE FROM smart_attributes WHERE timestamp < ?`, cutoffDate)
+	result, err := db.Exec(`DELETE FROM smart_attributes WHERE timestamp < ?`, cutoffDate)
 	if err != nil {
 		return 0, err
 	}
 	smartDeleted, _ := result.RowsAffected()
 
 	// Clean up temperature_history
-	result, err = DB.Exec(`DELETE FROM temperature_history WHERE timestamp < ?`, cutoffDate)
+	result, err = db.Exec(`DELETE FROM temperature_history WHERE timestamp < ?`, cutoffDate)
 	if err != nil {
 		return smartDeleted, err
 	}
@@ -476,7 +476,7 @@ type DriveInfo struct {
 }
 
 // GetDriveInfo retrieves basic drive info from the latest report
-func GetDriveInfo(hostname, serialNumber string) (*DriveInfo, error) {
+func GetDriveInfo(db *sql.DB, hostname, serialNumber string) (*DriveInfo, error) {
 	query := `
 		SELECT data FROM reports
 		WHERE hostname = ?
@@ -485,7 +485,7 @@ func GetDriveInfo(hostname, serialNumber string) (*DriveInfo, error) {
 	`
 
 	var dataJSON []byte
-	err := DB.QueryRow(query, hostname).Scan(&dataJSON)
+	err := db.QueryRow(query, hostname).Scan(&dataJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -545,26 +545,26 @@ func determineDriveTypeFromReport(drive map[string]interface{}) string {
 	// Check for NVMe
 	if device, ok := drive["device"].(map[string]interface{}); ok {
 		if protocol, ok := device["protocol"].(string); ok && protocol == "NVMe" {
-			return smart.DriveTypeNVMe
+			return agentsmart.DriveTypeNVMe
 		}
 		if dtype, ok := device["type"].(string); ok && dtype == "nvme" {
-			return smart.DriveTypeNVMe
+			return agentsmart.DriveTypeNVMe
 		}
 	}
 
 	// Check rotation rate
 	if rate, ok := drive["rotation_rate"].(float64); ok {
 		if rate == 0 {
-			return smart.DriveTypeSSD
+			return agentsmart.DriveTypeSSD
 		}
-		return smart.DriveTypeHDD
+		return agentsmart.DriveTypeHDD
 	}
 
-	return smart.DriveTypeHDD // Default
+	return agentsmart.DriveTypeHDD // Default
 }
 
 // ProcessReportForSmartStorage extracts and stores SMART data from incoming report
-func ProcessReportForSmartStorage(hostname string, reportData map[string]interface{}) error {
+func ProcessReportForSmartStorage(db *sql.DB, hostname string, reportData map[string]interface{}) error {
 	drives, ok := reportData["drives"].([]interface{})
 	if !ok {
 		return nil // No drives in report
@@ -578,7 +578,7 @@ func ProcessReportForSmartStorage(hostname string, reportData map[string]interfa
 		}
 
 		// Parse SMART data for this drive
-		driveData, err := smart.ParseSmartAttributes(driveMap, hostname)
+		driveData, err := agentsmart.ParseSmartAttributes(driveMap, hostname)
 		if err != nil {
 			log.Printf("Warning: Failed to parse SMART data for drive: %v", err)
 			lastErr = err
@@ -592,7 +592,7 @@ func ProcessReportForSmartStorage(hostname string, reportData map[string]interfa
 
 		// Store the SMART attributes
 		if len(driveData.Attributes) > 0 {
-			if err := StoreSmartAttributes(driveData); err != nil {
+			if err := StoreSmartAttributes(db, driveData); err != nil {
 				log.Printf("Warning: Failed to store SMART attributes for %s: %v", driveData.SerialNumber, err)
 				lastErr = err
 			}
@@ -602,12 +602,14 @@ func ProcessReportForSmartStorage(hostname string, reportData map[string]interfa
 	return lastErr
 }
 
+// ─── Helper Functions ────────────────────────────────────────────────────────
+
 // scanSmartAttributes scans rows into SmartAttribute slice
-func scanSmartAttributes(rows *sql.Rows) ([]smart.SmartAttribute, error) {
-	var attributes []smart.SmartAttribute
+func scanSmartAttributes(rows *sql.Rows) ([]agentsmart.SmartAttribute, error) {
+	var attributes []agentsmart.SmartAttribute
 
 	for rows.Next() {
-		var attr smart.SmartAttribute
+		var attr agentsmart.SmartAttribute
 		var timestampStr string
 		var whenFailed sql.NullString
 

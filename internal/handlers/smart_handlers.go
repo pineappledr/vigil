@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"vigil/internal/db"
+	"vigil/internal/smart"
 )
 
 // GetSmartAttributes returns the latest SMART attributes for a drive
@@ -17,14 +18,14 @@ func GetSmartAttributes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	attributes, err := db.GetLatestSmartAttributes(hostname, serialNumber)
+	attributes, err := smart.GetLatestSmartAttributes(db.DB, hostname, serialNumber)
 	if err != nil {
 		JSONError(w, "Failed to retrieve SMART attributes: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Get additional drive info
-	driveInfo, _ := db.GetDriveInfo(hostname, serialNumber)
+	driveInfo, _ := smart.GetDriveInfo(db.DB, hostname, serialNumber)
 
 	response := map[string]interface{}{
 		"hostname":        hostname,
@@ -67,7 +68,7 @@ func GetSmartAttributeHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	history, err := db.GetSmartAttributeHistory(hostname, serialNumber, attrID, limit)
+	history, err := smart.GetSmartAttributeHistory(db.DB, hostname, serialNumber, attrID, limit)
 	if err != nil {
 		JSONError(w, "Failed to retrieve attribute history: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -107,7 +108,7 @@ func GetSmartAttributeTrend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	trend, err := db.GetAttributeTrend(hostname, serialNumber, attrID, days)
+	trend, err := smart.GetAttributeTrend(db.DB, hostname, serialNumber, attrID, days)
 	if err != nil {
 		JSONError(w, "Failed to retrieve attribute trend: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -126,7 +127,7 @@ func GetDriveHealthSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := db.GetDriveHealthSummary(hostname, serialNumber)
+	summary, err := smart.GetDriveHealthSummary(db.DB, hostname, serialNumber)
 	if err != nil {
 		JSONError(w, "Failed to retrieve health summary: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -137,7 +138,7 @@ func GetDriveHealthSummary(w http.ResponseWriter, r *http.Request) {
 
 // GetCriticalAttributes returns the list of critical SMART attributes and their definitions
 func GetCriticalAttributes(w http.ResponseWriter, r *http.Request) {
-	attributes, err := db.GetCriticalSmartAttributes()
+	attributes, err := smart.GetCriticalSmartAttributes(db.DB)
 	if err != nil {
 		JSONError(w, "Failed to retrieve critical attributes: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -151,7 +152,7 @@ func GetCriticalAttributes(w http.ResponseWriter, r *http.Request) {
 
 // GetAllDrivesHealthSummary returns health summaries for all monitored drives
 func GetAllDrivesHealthSummary(w http.ResponseWriter, r *http.Request) {
-	summaries, err := db.GetAllDrivesHealthSummary()
+	summaries, err := smart.GetAllDrivesHealthSummary(db.DB)
 	if err != nil {
 		JSONError(w, "Failed to retrieve health summaries: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -201,7 +202,7 @@ func GetTemperatureHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	history, err := db.GetTemperatureHistory(hostname, serialNumber, hours)
+	history, err := smart.GetTemperatureHistory(db.DB, hostname, serialNumber, hours)
 	if err != nil {
 		JSONError(w, "Failed to retrieve temperature history: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -249,7 +250,7 @@ func CleanupOldSmartData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	deleted, err := db.CleanupOldSmartData(days)
+	deleted, err := smart.CleanupOldSmartData(db.DB, days)
 	if err != nil {
 		JSONError(w, "Failed to cleanup old data: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -264,7 +265,7 @@ func CleanupOldSmartData(w http.ResponseWriter, r *http.Request) {
 
 // GetDrivesWithIssues returns all drives that have health issues
 func GetDrivesWithIssues(w http.ResponseWriter, r *http.Request) {
-	summaries, err := db.GetAllDrivesHealthSummary()
+	summaries, err := smart.GetAllDrivesHealthSummary(db.DB)
 	if err != nil {
 		JSONError(w, "Failed to retrieve health summaries: "+err.Error(), http.StatusInternalServerError)
 		return

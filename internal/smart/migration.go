@@ -1,4 +1,4 @@
-package db
+package smart
 
 import (
 	"database/sql"
@@ -67,14 +67,14 @@ func MigrateSmartAttributes(db *sql.DB) error {
 				(198, 'Offline Uncorrectable Sector Count', 'Count of uncorrectable errors found offline. Surface damage indicator.', 'BOTH', 'CRITICAL', 0, 0),
 				(187, 'Reported Uncorrectable Errors',      'Count of uncorrectable errors reported to the host.',                    'BOTH', 'CRITICAL', 0, 0),
 				(188, 'Command Timeout',                    'Count of aborted operations due to timeout.',                            'BOTH', 'CRITICAL', 0, 0),
-				
+
 				-- SSD-Specific Critical
 				(181, 'Program Fail Count',                 'Count of flash program (write) failures. NAND wear indicator.',          'SSD',  'CRITICAL', 0, 0),
 				(182, 'Erase Fail Count',                   'Count of flash erase failures. NAND wear indicator.',                    'SSD',  'CRITICAL', 0, 0),
 				(183, 'Runtime Bad Block',                  'Count of bad blocks detected during operation.',                         'SSD',  'CRITICAL', 0, 0),
 				(184, 'End-to-End Error',                   'Count of parity errors in data path.',                                   'SSD',  'CRITICAL', 0, 0),
 				(232, 'Available Reserved Space',           'Percentage of reserved space remaining for bad block replacement.',      'SSD',  'CRITICAL', 10, 1),
-				
+
 				-- Warning Indicators
 				(1,   'Read Error Rate',                    'Rate of hardware read errors. Vendor-specific interpretation.',          'HDD',  'WARNING',  NULL, 0),
 				(7,   'Seek Error Rate',                    'Rate of seek errors of the magnetic heads.',                             'HDD',  'WARNING',  NULL, 0),
@@ -85,11 +85,11 @@ func MigrateSmartAttributes(db *sql.DB) error {
 				(200, 'Multi-Zone Error Rate',              'Count of errors while writing sectors.',                                 'HDD',  'WARNING',  NULL, 0),
 				(201, 'Soft Read Error Rate',               'Count of off-track read errors.',                                        'HDD',  'WARNING',  NULL, 0),
 				(233, 'Media Wearout Indicator',            'SSD wear indicator (percentage used).',                                  'SSD',  'WARNING',  90, 0),
-				
+
 				-- Temperature
 				(194, 'Temperature Celsius',                'Current internal temperature in Celsius.',                               'BOTH', 'WARNING',  60, 0),
 				(190, 'Airflow Temperature',                'Temperature of air flowing across the drive.',                           'BOTH', 'WARNING',  60, 0),
-				
+
 				-- Informational
 				(9,   'Power-On Hours',                     'Total hours the drive has been powered on.',                             'BOTH', 'INFO',     NULL, 0),
 				(12,  'Power Cycle Count',                  'Count of full power on/off cycles.',                                     'BOTH', 'INFO',     NULL, 0),
