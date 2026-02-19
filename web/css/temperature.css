@@ -123,6 +123,17 @@
     color: var(--accent-blue);
 }
 
+.btn-compare.active {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+}
+
+.btn-compare.active:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
 /* Small select for chart controls */
 .temp-select-sm {
     background: var(--bg-elevated);

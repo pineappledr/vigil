@@ -13,6 +13,7 @@ const Temperature = {
     selectedDrives: [],
     currentPeriod: '24h',
     currentServer: 'all', // 'all' or specific hostname
+    compareMode: false,   // Whether we're showing comparison chart
     chartInstance: null,
     refreshInterval: null,
     dashboardData: null,
@@ -678,6 +679,8 @@ const Temperature = {
      */
     changeServer(server) {
         this.currentServer = server;
+        this.compareMode = false; // Exit compare mode when changing server
+        this.updateCompareButton();
         if (this.dashboardData) {
             this.renderChart(this.dashboardData);
         }
@@ -687,34 +690,272 @@ const Temperature = {
      * Toggle drive selection for comparison
      */
     toggleDriveSelection(hostname, serial, checked) {
+        const checkbox = document.querySelector(
+            `.temp-drive-card[data-hostname="${hostname}"][data-serial="${serial}"] input[type="checkbox"]`
+        );
+        
         if (checked) {
             if (this.selectedDrives.length >= 5) {
                 alert('Maximum 5 drives can be compared');
+                if (checkbox) checkbox.checked = false;
                 return;
             }
-            this.selectedDrives.push({ hostname, serial });
+            // Find the drive data
+            const drive = this.findDrive(hostname, serial);
+            if (drive) {
+                this.selectedDrives.push({ 
+                    hostname, 
+                    serial,
+                    device_name: drive.device_name,
+                    temperature: drive.temperature,
+                    model: drive.model
+                });
+            }
         } else {
             this.selectedDrives = this.selectedDrives.filter(
                 d => !(d.hostname === hostname && d.serial === serial)
             );
         }
 
-        // Update compare button
-        const btn = document.getElementById('compare-btn');
-        const count = document.getElementById('compare-count');
-        if (btn) btn.disabled = this.selectedDrives.length < 2;
-        if (count) count.textContent = this.selectedDrives.length;
+        // Update UI
+        this.updateCompareButton();
+        this.updateDriveCardSelection(hostname, serial, checked);
+        
+        // If in compare mode and drives changed, update chart
+        if (this.compareMode && this.selectedDrives.length >= 2) {
+            this.renderComparisonChart();
+        } else if (this.compareMode && this.selectedDrives.length < 2) {
+            // Exit compare mode if less than 2 drives selected
+            this.compareMode = false;
+            this.updateCompareButton();
+            this.renderChart(this.dashboardData);
+        }
     },
 
     /**
-     * Show drive comparison
+     * Find a drive in the dashboard data
+     */
+    findDrive(hostname, serial) {
+        if (!this.dashboardData || !this.dashboardData.drives_by_server) {
+            return null;
+        }
+        const serverDrives = this.dashboardData.drives_by_server[hostname];
+        if (!serverDrives) return null;
+        return serverDrives.find(d => d.serial_number === serial);
+    },
+
+    /**
+     * Update drive card selection visual state
+     */
+    updateDriveCardSelection(hostname, serial, selected) {
+        const card = document.querySelector(
+            `.temp-drive-card[data-hostname="${hostname}"][data-serial="${serial}"]`
+        );
+        if (card) {
+            card.classList.toggle('selected', selected);
+        }
+    },
+
+    /**
+     * Update the compare button state
+     */
+    updateCompareButton() {
+        const btn = document.getElementById('compare-btn');
+        const count = document.getElementById('compare-count');
+        
+        if (count) {
+            count.textContent = this.selectedDrives.length;
+        }
+        
+        if (btn) {
+            btn.disabled = this.selectedDrives.length < 2;
+            
+            // Update button text based on mode
+            if (this.compareMode) {
+                btn.innerHTML = `${this.icons.compare} <span>Exit Compare</span>`;
+                btn.classList.add('active');
+            } else {
+                btn.innerHTML = `${this.icons.compare} <span>Compare (<span id="compare-count">${this.selectedDrives.length}</span>)</span>`;
+                btn.classList.remove('active');
+            }
+        }
+    },
+
+    /**
+     * Toggle comparison mode - show selected drives in chart
      */
     showComparison() {
         if (this.selectedDrives.length < 2) {
             alert('Select at least 2 drives to compare');
             return;
         }
-        console.log('[Temperature] Compare drives:', this.selectedDrives);
+        
+        // Toggle compare mode
+        this.compareMode = !this.compareMode;
+        this.updateCompareButton();
+        
+        if (this.compareMode) {
+            this.renderComparisonChart();
+        } else {
+            // Return to normal view
+            this.renderChart(this.dashboardData);
+        }
+    },
+
+    /**
+     * Render chart with only selected drives for comparison
+     */
+    renderComparisonChart() {
+        const canvas = document.getElementById('temp-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        // Destroy existing chart
+        if (this.chartInstance) {
+            this.chartInstance.destroy();
+        }
+
+        const thresholds = this.dashboardData?.thresholds || { warning: 45, critical: 55 };
+
+        // Generate time labels
+        const labels = [];
+        const now = new Date();
+        for (let i = 23; i >= 0; i--) {
+            const time = new Date(now - i * 3600000);
+            labels.push(time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        }
+
+        // Generate datasets for selected drives
+        const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
+        const datasets = this.selectedDrives.map((drive, idx) => {
+            const baseTemp = drive.temperature || 35;
+            const data = labels.map((_, i) => {
+                const variation = Math.sin(i / 4 + idx * 0.5) * 2 + (Math.random() - 0.5) * 1.5;
+                return Math.round((baseTemp + variation) * 10) / 10;
+            });
+            
+            // Create label with hostname and device
+            const label = `${drive.hostname} - ${drive.device_name || drive.serial}`;
+            
+            return {
+                label: label,
+                data: data,
+                borderColor: colors[idx % colors.length],
+                backgroundColor: colors[idx % colors.length] + '15',
+                fill: false,
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2
+            };
+        });
+
+        const ctx = canvas.getContext('2d');
+        this.chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#94a3b8',
+                            usePointStyle: true,
+                            padding: 15,
+                            font: { size: 11 }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#fff',
+                        bodyColor: '#94a3b8',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}°C`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 20,
+                        max: 70,
+                        grid: { color: 'rgba(255, 255, 255, 0.06)' },
+                        ticks: {
+                            color: '#64748b',
+                            callback: v => `${v}°C`
+                        }
+                    },
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                        ticks: {
+                            color: '#64748b',
+                            maxTicksLimit: 8
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'thresholdLines',
+                beforeDraw: (chart) => {
+                    const ctx = chart.ctx;
+                    const yAxis = chart.scales.y;
+                    const xAxis = chart.scales.x;
+
+                    // Warning line
+                    const warningY = yAxis.getPixelForValue(thresholds.warning);
+                    ctx.save();
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(xAxis.left, warningY);
+                    ctx.lineTo(xAxis.right, warningY);
+                    ctx.stroke();
+
+                    // Critical line
+                    const criticalY = yAxis.getPixelForValue(thresholds.critical);
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.moveTo(xAxis.left, criticalY);
+                    ctx.lineTo(xAxis.right, criticalY);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }]
+        });
+        
+        console.log('[Temperature] Comparison chart rendered with', this.selectedDrives.length, 'drives');
+    },
+
+    /**
+     * Clear all selected drives
+     */
+    clearSelection() {
+        this.selectedDrives = [];
+        this.compareMode = false;
+        
+        // Uncheck all checkboxes
+        document.querySelectorAll('.temp-drive-card input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+        });
+        
+        // Remove selected class from all cards
+        document.querySelectorAll('.temp-drive-card.selected').forEach(card => {
+            card.classList.remove('selected');
+        });
+        
+        this.updateCompareButton();
+        this.renderChart(this.dashboardData);
     },
 
     /**
