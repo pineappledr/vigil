@@ -10,11 +10,15 @@
 
 .temp-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
     gap: 1rem;
+}
+
+.temp-header-spacer {
+    flex: 1;
 }
 
 .temp-title {
@@ -53,6 +57,87 @@
 
 .temp-select:hover,
 .temp-select:focus {
+    border-color: var(--accent-blue);
+    outline: none;
+}
+
+/* Icon + Text Button */
+.btn-icon-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-icon-text svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-icon-text:hover {
+    border-color: var(--accent-blue);
+    background: var(--bg-secondary);
+}
+
+/* Compare Button */
+.btn-compare {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-compare svg {
+    width: 16px;
+    height: 16px;
+}
+
+.btn-compare:hover:not(:disabled) {
+    border-color: var(--accent-blue);
+    color: var(--text-primary);
+}
+
+.btn-compare:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-compare:not(:disabled) {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+/* Small select for chart controls */
+.temp-select-sm {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.temp-select-sm:hover,
+.temp-select-sm:focus {
     border-color: var(--accent-blue);
     outline: none;
 }

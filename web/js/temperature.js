@@ -60,15 +60,16 @@ const Temperature = {
         return `
             <div class="temp-dashboard">
                 <div class="temp-header">
-                    <h1 class="temp-title">${this.icons.thermometer} Temperature Monitor</h1>
+                    <div class="temp-header-spacer"></div>
                     <div class="temp-controls">
                         <select id="temp-period" class="temp-select" onchange="Temperature.changePeriod(this.value)">
                             <option value="24h" ${this.currentPeriod === '24h' ? 'selected' : ''}>Last 24 Hours</option>
                             <option value="7d" ${this.currentPeriod === '7d' ? 'selected' : ''}>Last 7 Days</option>
                             <option value="30d" ${this.currentPeriod === '30d' ? 'selected' : ''}>Last 30 Days</option>
                         </select>
-                        <button class="btn btn-secondary" onclick="Temperature.refresh()">
-                            ${this.icons.refresh} Refresh
+                        <button class="btn btn-icon-text" onclick="Temperature.refresh()">
+                            ${this.icons.refresh}
+                            <span>Refresh</span>
                         </button>
                     </div>
                 </div>
@@ -89,8 +90,9 @@ const Temperature = {
                                     <option value="all" ${this.currentServer === 'all' ? 'selected' : ''}>All Servers</option>
                                     ${serverOptions}
                                 </select>
-                                <button class="btn btn-sm" onclick="Temperature.showComparison()" id="compare-btn" disabled>
-                                    ${this.icons.compare} Compare (<span id="compare-count">0</span>)
+                                <button class="btn btn-compare" onclick="Temperature.showComparison()" id="compare-btn" disabled title="Select drives to compare">
+                                    ${this.icons.compare}
+                                    <span>Compare (<span id="compare-count">0</span>)</span>
                                 </button>
                             </div>
                         </div>
