@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"vigil/internal/middleware"
+	"vigil/internal/auth"
 	"vigil/internal/models"
 )
 
@@ -26,7 +26,7 @@ func JSONError(w http.ResponseWriter, message string, code int) {
 
 // GetSessionFromContext extracts session from request context
 func GetSessionFromContext(r *http.Request) *models.Session {
-	if session, ok := r.Context().Value(middleware.SessionKey).(*models.Session); ok {
+	if session, ok := r.Context().Value(auth.SessionKey).(*models.Session); ok {
 		return session
 	}
 	return nil

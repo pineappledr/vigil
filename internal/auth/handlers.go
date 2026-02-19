@@ -1,4 +1,4 @@
-package handlers
+package auth
 
 import (
 	"encoding/json"
@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"vigil/internal/db"
-	"vigil/internal/middleware"
 	"vigil/internal/models"
 )
 
-// AuthStatus returns authentication status
-func AuthStatus(config models.Config) http.HandlerFunc {
+// Status returns authentication status
+func Status(config models.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		session := middleware.GetSessionFromRequest(r)
+		session := GetSessionFromRequest(r)
 
 		var mustChangePassword bool
 		var username string
@@ -27,7 +26,7 @@ func AuthStatus(config models.Config) http.HandlerFunc {
 			mustChangePassword = mustChange == 1
 		}
 
-		JSONResponse(w, map[string]interface{}{
+		jsonResponse(w, map[string]interface{}{
 			"auth_enabled":         config.AuthEnabled,
 			"authenticated":        session != nil,
 			"username":             username,
@@ -40,7 +39,7 @@ func AuthStatus(config models.Config) http.HandlerFunc {
 func Login(config models.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !config.AuthEnabled {
-			JSONResponse(w, map[string]interface{}{
+			jsonResponse(w, map[string]interface{}{
 				"success": true,
 				"message": "Authentication disabled",
 			})
@@ -53,7 +52,7 @@ func Login(config models.Config) http.HandlerFunc {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-			JSONError(w, "Invalid request", http.StatusBadRequest)
+			jsonError(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
 
@@ -66,14 +65,14 @@ func Login(config models.Config) http.HandlerFunc {
 			creds.Username,
 		).Scan(&user.ID, &user.Username, &user.PasswordHash, &mustChange, &createdAt)
 
-		if err != nil || user.PasswordHash != db.HashPassword(creds.Password) {
-			JSONError(w, "Invalid username or password", http.StatusUnauthorized)
+		if err != nil || user.PasswordHash != HashPassword(creds.Password) {
+			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
 
-		token, expiresAt, err := db.CreateSession(user.ID)
+		token, expiresAt, err := CreateSession(user.ID)
 		if err != nil {
-			JSONError(w, "Failed to create session", http.StatusInternalServerError)
+			jsonError(w, "Failed to create session", http.StatusInternalServerError)
 			return
 		}
 
@@ -87,7 +86,7 @@ func Login(config models.Config) http.HandlerFunc {
 		})
 
 		log.Printf("🔓 Login: %s", user.Username)
-		JSONResponse(w, map[string]interface{}{
+		jsonResponse(w, map[string]interface{}{
 			"success":              true,
 			"token":                token,
 			"username":             user.Username,
@@ -98,9 +97,9 @@ func Login(config models.Config) http.HandlerFunc {
 
 // Logout handles user logout
 func Logout(w http.ResponseWriter, r *http.Request) {
-	session := middleware.GetSessionFromRequest(r)
+	session := GetSessionFromRequest(r)
 	if session != nil {
-		db.DeleteSession(session.Token)
+		DeleteSession(session.Token)
 		log.Printf("🔒 Logout: %s", session.Username)
 	}
 
@@ -112,13 +111,13 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	})
 
-	JSONResponse(w, map[string]string{"status": "logged_out"})
+	jsonResponse(w, map[string]string{"status": "logged_out"})
 }
 
 // GetCurrentUser returns current user info
 func GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	session := GetSessionFromContext(r)
-	JSONResponse(w, map[string]interface{}{
+	jsonResponse(w, map[string]interface{}{
 		"id":       session.UserID,
 		"username": session.Username,
 	})
@@ -134,33 +133,33 @@ func ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		JSONError(w, "Invalid request", http.StatusBadRequest)
+		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	if len(req.NewPassword) < 6 {
-		JSONError(w, "Password must be at least 6 characters", http.StatusBadRequest)
+		jsonError(w, "Password must be at least 6 characters", http.StatusBadRequest)
 		return
 	}
 
 	var currentHash string
 	db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&currentHash)
-	if currentHash != db.HashPassword(req.CurrentPassword) {
-		JSONError(w, "Current password is incorrect", http.StatusUnauthorized)
+	if currentHash != HashPassword(req.CurrentPassword) {
+		jsonError(w, "Current password is incorrect", http.StatusUnauthorized)
 		return
 	}
 
 	_, err := db.DB.Exec(
 		"UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
-		db.HashPassword(req.NewPassword), session.UserID,
+		HashPassword(req.NewPassword), session.UserID,
 	)
 	if err != nil {
-		JSONError(w, "Failed to update password", http.StatusInternalServerError)
+		jsonError(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
 
 	log.Printf("🔑 Password changed: %s", session.Username)
-	JSONResponse(w, map[string]string{"status": "password_changed"})
+	jsonResponse(w, map[string]string{"status": "password_changed"})
 }
 
 // ChangeUsername handles username changes
@@ -173,40 +172,53 @@ func ChangeUsername(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		JSONError(w, "Invalid request", http.StatusBadRequest)
+		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	req.NewUsername = strings.TrimSpace(req.NewUsername)
 	if req.NewUsername == "" {
-		JSONError(w, "Username cannot be empty", http.StatusBadRequest)
+		jsonError(w, "Username cannot be empty", http.StatusBadRequest)
 		return
 	}
 
 	var currentHash string
 	if err := db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&currentHash); err != nil {
-		JSONError(w, "User not found", http.StatusInternalServerError)
+		jsonError(w, "User not found", http.StatusInternalServerError)
 		return
 	}
 
-	if currentHash != db.HashPassword(req.CurrentPassword) {
-		JSONError(w, "Incorrect password", http.StatusUnauthorized)
+	if currentHash != HashPassword(req.CurrentPassword) {
+		jsonError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
 
 	_, err := db.DB.Exec("UPDATE users SET username = ? WHERE id = ?", req.NewUsername, session.UserID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			JSONError(w, "Username already taken", http.StatusConflict)
+			jsonError(w, "Username already taken", http.StatusConflict)
 			return
 		}
-		JSONError(w, "Database error", http.StatusInternalServerError)
+		jsonError(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
 	log.Printf("👤 Username changed: %s -> %s", session.Username, req.NewUsername)
-	JSONResponse(w, map[string]string{
+	jsonResponse(w, map[string]string{
 		"status":       "username_updated",
 		"new_username": req.NewUsername,
 	})
+}
+
+func jsonResponse(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("⚠️  Failed to encode JSON response: %v", err)
+	}
+}
+
+func jsonError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
