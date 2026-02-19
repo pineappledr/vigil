@@ -46,7 +46,7 @@ func (h *SpikeHandler) GetSpikes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"spikes": spikes,
 		"count":  len(spikes),
 	})
@@ -60,7 +60,7 @@ func (h *SpikeHandler) GetUnacknowledgedSpikes(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"spikes": spikes,
 		"count":  len(spikes),
 	})
@@ -86,7 +86,7 @@ func (h *SpikeHandler) GetSpike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, spike)
+	JSONResponse(w, spike)
 }
 
 // AcknowledgeSpike handles POST /api/temperature/spikes/{id}/acknowledge
@@ -112,7 +112,7 @@ func (h *SpikeHandler) AcknowledgeSpike(w http.ResponseWriter, r *http.Request) 
 
 	// Return the updated spike
 	spike, _ := db.GetSpikeByID(h.DB, id)
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message": "spike acknowledged",
 		"spike":   spike,
 	})
@@ -136,7 +136,7 @@ func (h *SpikeHandler) DeleteSpike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message": "spike deleted",
 		"id":      id,
 	})
@@ -150,7 +150,7 @@ func (h *SpikeHandler) GetSpikeSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, summary)
+	JSONResponse(w, summary)
 }
 
 // DetectSpikes handles POST /api/temperature/spikes/detect
@@ -175,7 +175,7 @@ func (h *SpikeHandler) DetectSpikes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message":    "spike detection completed",
 		"new_spikes": spikes,
 		"count":      len(spikes),
@@ -201,7 +201,7 @@ func (h *SpikeHandler) AcknowledgeAllSpikes(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message":      "spikes acknowledged",
 		"acknowledged": acknowledged,
 	})

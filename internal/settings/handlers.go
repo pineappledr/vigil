@@ -1,31 +1,25 @@
-package handlers
+package settings
 
 import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-
-	"vigil/internal/db"
 )
 
-// SettingsHandler handles settings-related API requests
-type SettingsHandler struct {
+// Handler handles settings-related API requests
+type Handler struct {
 	DB *sql.DB
 }
 
-// NewSettingsHandler creates a new settings handler
-func NewSettingsHandler(database *sql.DB) *SettingsHandler {
-	return &SettingsHandler{DB: database}
+// NewHandler creates a new settings handler
+func NewHandler(database *sql.DB) *Handler {
+	return &Handler{DB: database}
 }
 
 // GetAllSettings handles GET /api/settings
-// Returns all settings, optionally grouped by category
-func (h *SettingsHandler) GetAllSettings(w http.ResponseWriter, r *http.Request) {
-	// Check if grouped format requested
-	grouped := r.URL.Query().Get("grouped") == "true"
-
-	if grouped {
-		settings, err := db.GetSettingsGrouped(h.DB)
+func (h *Handler) GetAllSettings(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("grouped") == "true" {
+		settings, err := GetSettingsGrouped(h.DB)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -34,7 +28,7 @@ func (h *SettingsHandler) GetAllSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	settings, err := db.GetAllSettings(h.DB)
+	settings, err := GetAllSettings(h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -44,15 +38,14 @@ func (h *SettingsHandler) GetAllSettings(w http.ResponseWriter, r *http.Request)
 }
 
 // GetSettingsByCategory handles GET /api/settings/{category}
-// Returns all settings for a specific category
-func (h *SettingsHandler) GetSettingsByCategory(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetSettingsByCategory(w http.ResponseWriter, r *http.Request) {
 	category := r.PathValue("category")
 	if category == "" {
 		http.Error(w, "category is required", http.StatusBadRequest)
 		return
 	}
 
-	settings, err := db.GetSettingsByCategory(h.DB, category)
+	settings, err := GetSettingsByCategory(h.DB, category)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -67,8 +60,7 @@ func (h *SettingsHandler) GetSettingsByCategory(w http.ResponseWriter, r *http.R
 }
 
 // GetSetting handles GET /api/settings/{category}/{key}
-// Returns a single setting
-func (h *SettingsHandler) GetSetting(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetSetting(w http.ResponseWriter, r *http.Request) {
 	category := r.PathValue("category")
 	key := r.PathValue("key")
 
@@ -77,7 +69,7 @@ func (h *SettingsHandler) GetSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setting, err := db.GetSetting(h.DB, category, key)
+	setting, err := GetSetting(h.DB, category, key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -92,8 +84,7 @@ func (h *SettingsHandler) GetSetting(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateSetting handles PUT /api/settings/{category}/{key}
-// Updates a single setting value
-func (h *SettingsHandler) UpdateSetting(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateSetting(w http.ResponseWriter, r *http.Request) {
 	category := r.PathValue("category")
 	key := r.PathValue("key")
 
@@ -102,16 +93,13 @@ func (h *SettingsHandler) UpdateSetting(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Parse request body
-	var update db.SettingUpdate
+	var update SettingUpdate
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Update the setting
-	if err := db.UpdateSetting(h.DB, category, key, update.Value); err != nil {
-		// Check if it's a validation error vs not found
+	if err := UpdateSetting(h.DB, category, key, update.Value); err != nil {
 		if err.Error() == "setting "+category+"."+key+" not found" {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -120,8 +108,7 @@ func (h *SettingsHandler) UpdateSetting(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Return the updated setting
-	setting, err := db.GetSetting(h.DB, category, key)
+	setting, err := GetSetting(h.DB, category, key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -131,22 +118,19 @@ func (h *SettingsHandler) UpdateSetting(w http.ResponseWriter, r *http.Request) 
 }
 
 // ResetCategory handles POST /api/settings/reset/{category}
-// Resets all settings in a category to defaults
-func (h *SettingsHandler) ResetCategory(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ResetCategory(w http.ResponseWriter, r *http.Request) {
 	category := r.PathValue("category")
-
 	if category == "" {
 		http.Error(w, "category is required", http.StatusBadRequest)
 		return
 	}
 
-	if err := db.ResetCategoryToDefaults(h.DB, category); err != nil {
+	if err := ResetCategoryToDefaults(h.DB, category); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Return the reset settings
-	settings, err := db.GetSettingsByCategory(h.DB, category)
+	settings, err := GetSettingsByCategory(h.DB, category)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -160,15 +144,13 @@ func (h *SettingsHandler) ResetCategory(w http.ResponseWriter, r *http.Request) 
 }
 
 // ResetAll handles POST /api/settings/reset
-// Resets all settings to defaults
-func (h *SettingsHandler) ResetAll(w http.ResponseWriter, r *http.Request) {
-	if err := db.ResetAllToDefaults(h.DB); err != nil {
+func (h *Handler) ResetAll(w http.ResponseWriter, r *http.Request) {
+	if err := ResetAllToDefaults(h.DB); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Return all reset settings
-	settings, err := db.GetSettingsGrouped(h.DB)
+	settings, err := GetSettingsGrouped(h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -181,9 +163,8 @@ func (h *SettingsHandler) ResetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetCategories handles GET /api/settings/categories
-// Returns list of all setting categories
-func (h *SettingsHandler) GetCategories(w http.ResponseWriter, r *http.Request) {
-	categories, err := db.GetCategories(h.DB)
+func (h *Handler) GetCategories(w http.ResponseWriter, r *http.Request) {
+	categories, err := GetCategories(h.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -194,7 +175,6 @@ func (h *SettingsHandler) GetCategories(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// respondJSON is a helper to write JSON responses
 func respondJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)

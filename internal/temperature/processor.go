@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"vigil/internal/db"
+	"vigil/internal/settings"
 )
 
 // Processor handles temperature data processing and alert generation
@@ -137,7 +138,7 @@ func (p *Processor) periodicTasks() {
 
 // runCleanup removes old temperature data based on retention settings
 func (p *Processor) runCleanup() {
-	retentionDays := db.GetIntSettingWithDefault(p.DB, "temperature", "retention_days", 90)
+	retentionDays := settings.GetIntSettingWithDefault(p.DB, "temperature", "retention_days", 90)
 
 	// Cleanup temperature history
 	deleted, err := db.CleanupOldTemperatureData(p.DB, retentionDays)
@@ -156,7 +157,7 @@ func (p *Processor) runCleanup() {
 	}
 
 	// Cleanup old alerts
-	alertRetention := db.GetIntSettingWithDefault(p.DB, "system", "data_retention_days", 365)
+	alertRetention := settings.GetIntSettingWithDefault(p.DB, "system", "data_retention_days", 365)
 	deleted, err = db.CleanupOldAlerts(p.DB, alertRetention)
 	if err != nil {
 		log.Printf("[Temperature] Alert cleanup error: %v", err)

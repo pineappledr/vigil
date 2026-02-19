@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"vigil/internal/settings"
 )
 
 // AlertType constants
@@ -368,11 +370,11 @@ var alertStateCache = make(map[string]*AlertState)
 // CheckTemperatureAndAlert checks temperature against thresholds and generates alerts
 func CheckTemperatureAndAlert(db *sql.DB, hostname, serial string, temperature int) (*TemperatureAlert, error) {
 	// Get thresholds from settings
-	warningThreshold := GetIntSettingWithDefault(db, "temperature", "warning_threshold", 45)
-	criticalThreshold := GetIntSettingWithDefault(db, "temperature", "critical_threshold", 55)
-	cooldownMinutes := GetIntSettingWithDefault(db, "alerts", "cooldown_minutes", 60)
-	alertsEnabled := GetBoolSettingWithDefault(db, "alerts", "enabled", true)
-	recoveryEnabled := GetBoolSettingWithDefault(db, "alerts", "recovery_enabled", true)
+	warningThreshold := settings.GetIntSettingWithDefault(db, "temperature", "warning_threshold", 45)
+	criticalThreshold := settings.GetIntSettingWithDefault(db, "temperature", "critical_threshold", 55)
+	cooldownMinutes := settings.GetIntSettingWithDefault(db, "alerts", "cooldown_minutes", 60)
+	alertsEnabled := settings.GetBoolSettingWithDefault(db, "alerts", "enabled", true)
+	recoveryEnabled := settings.GetBoolSettingWithDefault(db, "alerts", "recovery_enabled", true)
 
 	if !alertsEnabled {
 		return nil, nil
@@ -446,7 +448,7 @@ func CheckTemperatureAndAlert(db *sql.DB, hostname, serial string, temperature i
 
 // CreateSpikeAlert creates an alert for a temperature spike
 func CreateSpikeAlert(db *sql.DB, spike *TemperatureSpike) (*TemperatureAlert, error) {
-	alertsEnabled := GetBoolSettingWithDefault(db, "alerts", "enabled", true)
+	alertsEnabled := settings.GetBoolSettingWithDefault(db, "alerts", "enabled", true)
 	if !alertsEnabled {
 		return nil, nil
 	}

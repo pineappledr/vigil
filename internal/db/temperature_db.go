@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"vigil/internal/settings"
 )
 
 // GetTemperatureStats retrieves temperature statistics for a specific drive
@@ -573,12 +575,12 @@ func GetHeatmapData(db *sql.DB, period TemperaturePeriod, interval AggregationIn
 func getThresholdsFromSettings(db *sql.DB) TemperatureThresholds {
 	thresholds := DefaultThresholds()
 
-	warning, err := GetIntSetting(db, "temperature", "warning_threshold")
+	warning, err := settings.GetIntSetting(db, "temperature", "warning_threshold")
 	if err == nil {
 		thresholds.Warning = warning
 	}
 
-	critical, err := GetIntSetting(db, "temperature", "critical_threshold")
+	critical, err := settings.GetIntSetting(db, "temperature", "critical_threshold")
 	if err == nil {
 		thresholds.Critical = critical
 	}

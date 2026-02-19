@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"vigil/internal/db"
+	"vigil/internal/settings"
 )
 
 // AlertHandler handles temperature alert-related API requests
@@ -56,7 +57,7 @@ func (h *AlertHandler) GetAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"alerts": alerts,
 		"count":  len(alerts),
 	})
@@ -70,7 +71,7 @@ func (h *AlertHandler) GetActiveAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"alerts": alerts,
 		"count":  len(alerts),
 	})
@@ -96,7 +97,7 @@ func (h *AlertHandler) GetAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, alert)
+	JSONResponse(w, alert)
 }
 
 // GetAlertSummary handles GET /api/alerts/temperature/summary
@@ -107,7 +108,7 @@ func (h *AlertHandler) GetAlertSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, summary)
+	JSONResponse(w, summary)
 }
 
 // AcknowledgeAlert handles POST /api/alerts/temperature/{id}/acknowledge
@@ -132,7 +133,7 @@ func (h *AlertHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) 
 
 	// Return the updated alert
 	alert, _ := db.GetAlertByID(h.DB, id)
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message": "alert acknowledged",
 		"alert":   alert,
 	})
@@ -148,7 +149,7 @@ func (h *AlertHandler) AcknowledgeAllAlerts(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message":      "alerts acknowledged",
 		"acknowledged": count,
 	})
@@ -172,7 +173,7 @@ func (h *AlertHandler) DeleteAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message": "alert deleted",
 		"id":      id,
 	})
@@ -204,7 +205,7 @@ func (h *AlertHandler) GetAlertsByDrive(w http.ResponseWriter, r *http.Request) 
 	// Get current alert status
 	status, _ := db.GetDriveAlertStatus(h.DB, hostname, serial)
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"hostname":      hostname,
 		"serial_number": serial,
 		"status":        status,
@@ -243,7 +244,7 @@ func (h *AlertHandler) TestAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message": "test alert processed",
 		"alerts":  alerts,
 		"count":   len(alerts),
@@ -253,7 +254,7 @@ func (h *AlertHandler) TestAlert(w http.ResponseWriter, r *http.Request) {
 // CleanupAlerts handles POST /api/alerts/temperature/cleanup
 // Removes old alerts based on retention settings
 func (h *AlertHandler) CleanupAlerts(w http.ResponseWriter, r *http.Request) {
-	retentionDays := db.GetIntSettingWithDefault(h.DB, "system", "data_retention_days", 365)
+	retentionDays := settings.GetIntSettingWithDefault(h.DB, "system", "data_retention_days", 365)
 
 	deleted, err := db.CleanupOldAlerts(h.DB, retentionDays)
 	if err != nil {
@@ -261,7 +262,7 @@ func (h *AlertHandler) CleanupAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"message":        "cleanup completed",
 		"deleted":        deleted,
 		"retention_days": retentionDays,

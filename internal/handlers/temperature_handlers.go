@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"vigil/internal/db"
+	"vigil/internal/settings"
 )
 
 // TemperatureHandler handles temperature-related API requests
@@ -43,7 +44,7 @@ func (h *TemperatureHandler) GetTemperatureStats(w http.ResponseWriter, r *http.
 		return
 	}
 
-	respondJSON(w, stats)
+	JSONResponse(w, stats)
 }
 
 // GetAllTemperatureStats handles GET /api/temperature/stats/all
@@ -58,7 +59,7 @@ func (h *TemperatureHandler) GetAllTemperatureStats(w http.ResponseWriter, r *ht
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"period": string(period),
 		"drives": stats,
 		"count":  len(stats),
@@ -97,7 +98,7 @@ func (h *TemperatureHandler) GetTemperatureTimeSeries(w http.ResponseWriter, r *
 		return
 	}
 
-	respondJSON(w, data)
+	JSONResponse(w, data)
 }
 
 // GetCurrentTemperatures handles GET /api/temperature/current
@@ -117,7 +118,7 @@ func (h *TemperatureHandler) GetCurrentTemperatures(w http.ResponseWriter, r *ht
 			http.Error(w, "no temperature data found", http.StatusNotFound)
 			return
 		}
-		respondJSON(w, current)
+		JSONResponse(w, current)
 		return
 	}
 
@@ -128,7 +129,7 @@ func (h *TemperatureHandler) GetCurrentTemperatures(w http.ResponseWriter, r *ht
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"drives": temps,
 		"count":  len(temps),
 	})
@@ -142,7 +143,7 @@ func (h *TemperatureHandler) GetTemperatureSummary(w http.ResponseWriter, r *htt
 		return
 	}
 
-	respondJSON(w, summary)
+	JSONResponse(w, summary)
 }
 
 // GetTemperatureHeatmap handles GET /api/temperature/heatmap
@@ -165,7 +166,7 @@ func (h *TemperatureHandler) GetTemperatureHeatmap(w http.ResponseWriter, r *htt
 		return
 	}
 
-	respondJSON(w, data)
+	JSONResponse(w, data)
 }
 
 // GetTemperatureRange handles GET /api/temperature/range
@@ -211,7 +212,7 @@ func (h *TemperatureHandler) GetTemperatureRange(w http.ResponseWriter, r *http.
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"hostname":      hostname,
 		"serial_number": serial,
 		"from":          from,
@@ -245,8 +246,8 @@ func (h *TemperatureHandler) GetDashboardTemperature(w http.ResponseWriter, r *h
 	}
 
 	// Get thresholds for frontend display
-	warningThreshold := db.GetIntSettingWithDefault(h.DB, "temperature", "warning_threshold", 45)
-	criticalThreshold := db.GetIntSettingWithDefault(h.DB, "temperature", "critical_threshold", 55)
+	warningThreshold := settings.GetIntSettingWithDefault(h.DB, "temperature", "warning_threshold", 45)
+	criticalThreshold := settings.GetIntSettingWithDefault(h.DB, "temperature", "critical_threshold", 55)
 
 	response["thresholds"] = map[string]int{
 		"warning":  warningThreshold,
@@ -266,7 +267,7 @@ func (h *TemperatureHandler) GetDashboardTemperature(w http.ResponseWriter, r *h
 		response["drives_by_status"] = byStatus
 	}
 
-	respondJSON(w, response)
+	JSONResponse(w, response)
 }
 
 // autoSelectInterval chooses an appropriate interval based on period
@@ -288,7 +289,7 @@ func autoSelectInterval(period db.TemperaturePeriod) db.AggregationInterval {
 // respondJSON helper is defined in settings_handlers.go
 // If this file is used standalone, uncomment below:
 /*
-func respondJSON(w http.ResponseWriter, data interface{}) {
+func JSONResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
 }

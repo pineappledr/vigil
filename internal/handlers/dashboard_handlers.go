@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"vigil/internal/db"
+	"vigil/internal/settings"
 )
 
 // DashboardHandler handles dashboard-related API requests
@@ -29,7 +30,7 @@ func (h *DashboardHandler) GetTemperatureDashboard(w http.ResponseWriter, r *htt
 		return
 	}
 
-	respondJSON(w, data)
+	JSONResponse(w, data)
 }
 
 // GetDashboardOverview handles GET /api/dashboard/overview
@@ -41,7 +42,7 @@ func (h *DashboardHandler) GetDashboardOverview(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	respondJSON(w, overview)
+	JSONResponse(w, overview)
 }
 
 // GetTemperatureTrends handles GET /api/dashboard/temperature/trends
@@ -63,7 +64,7 @@ func (h *DashboardHandler) GetTemperatureTrends(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"period": string(period),
 		"trends": trends,
 		"count":  len(trends),
@@ -79,7 +80,7 @@ func (h *DashboardHandler) GetTemperatureDistribution(w http.ResponseWriter, r *
 		return
 	}
 
-	respondJSON(w, dist)
+	JSONResponse(w, dist)
 }
 
 // GetDashboardAlerts handles GET /api/dashboard/alerts
@@ -111,7 +112,7 @@ func (h *DashboardHandler) GetDashboardAlerts(w http.ResponseWriter, r *http.Req
 		activeAlerts = activeAlerts[:10]
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"temperature_alerts": alertSummary,
 		"spikes":             spikeSummary,
 		"active_alerts":      activeAlerts,
@@ -136,7 +137,7 @@ func (h *DashboardHandler) GetDashboardStatus(w http.ResponseWriter, r *http.Req
 		health = "degraded"
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"health":             health,
 		"status":             overview.Status,
 		"total_drives":       overview.TotalDrives,
@@ -175,8 +176,8 @@ func (h *DashboardHandler) getTemperatureGaugeWidget(w http.ResponseWriter, _ *h
 	}
 
 	thresholds := db.DefaultThresholds()
-	warningThreshold, _ := db.GetIntSetting(h.DB, "temperature", "warning_threshold")
-	criticalThreshold, _ := db.GetIntSetting(h.DB, "temperature", "critical_threshold")
+	warningThreshold, _ := settings.GetIntSetting(h.DB, "temperature", "warning_threshold")
+	criticalThreshold, _ := settings.GetIntSetting(h.DB, "temperature", "critical_threshold")
 	if warningThreshold > 0 {
 		thresholds.Warning = warningThreshold
 	}
@@ -184,7 +185,7 @@ func (h *DashboardHandler) getTemperatureGaugeWidget(w http.ResponseWriter, _ *h
 		thresholds.Critical = criticalThreshold
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"avg_temperature": overview.AvgTemperature,
 		"max_temperature": overview.MaxTemperature,
 		"status":          overview.Status,
@@ -219,7 +220,7 @@ func (h *DashboardHandler) getAlertBadgeWidget(w http.ResponseWriter, _ *http.Re
 		}
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"count":    total,
 		"severity": severity,
 	})
@@ -238,7 +239,7 @@ func (h *DashboardHandler) getTemperatureChartWidget(w http.ResponseWriter, r *h
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		respondJSON(w, map[string]interface{}{
+		JSONResponse(w, map[string]interface{}{
 			"type": "distribution",
 			"data": dist,
 		})
@@ -263,7 +264,7 @@ func (h *DashboardHandler) getTemperatureChartWidget(w http.ResponseWriter, r *h
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"type": "timeseries",
 		"data": timeSeries,
 	})
@@ -277,7 +278,7 @@ func (h *DashboardHandler) getDriveStatusWidget(w http.ResponseWriter, _ *http.R
 		return
 	}
 
-	respondJSON(w, map[string]interface{}{
+	JSONResponse(w, map[string]interface{}{
 		"total":    data.TotalDrives,
 		"normal":   data.DrivesNormal,
 		"warning":  data.DrivesWarning,

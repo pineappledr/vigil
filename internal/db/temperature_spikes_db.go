@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"vigil/internal/settings"
 )
 
 // InitTemperatureSpikesTable creates the temperature_spikes table
@@ -370,8 +372,8 @@ func DetectSpikes(db *sql.DB, hostname, serial string, windowMinutes, thresholdD
 // DetectAndRecordSpikes detects spikes and saves new ones to database
 func DetectAndRecordSpikes(db *sql.DB, hostname, serial string) ([]TemperatureSpike, error) {
 	// Get detection settings
-	windowMinutes := GetIntSettingWithDefault(db, "temperature", "spike_window_minutes", 30)
-	thresholdDegrees := GetIntSettingWithDefault(db, "temperature", "spike_threshold", 10)
+	windowMinutes := settings.GetIntSettingWithDefault(db, "temperature", "spike_window_minutes", 30)
+	thresholdDegrees := settings.GetIntSettingWithDefault(db, "temperature", "spike_threshold", 10)
 
 	// Detect spikes
 	detected, err := DetectSpikes(db, hostname, serial, windowMinutes, thresholdDegrees)

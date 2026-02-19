@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"vigil/internal/db"
+	"vigil/internal/settings"
 )
 
 // InitializeTables creates all temperature-related database tables
@@ -12,7 +13,7 @@ func InitializeTables(database *sql.DB) error {
 	log.Println("[Temperature] Initializing database tables...")
 
 	// Initialize settings table (if not already done)
-	if err := db.InitSettingsTable(database); err != nil {
+	if err := settings.InitSettingsTable(database); err != nil {
 		return err
 	}
 

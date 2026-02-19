@@ -1,51 +1,14 @@
-package db
+package settings
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 )
 
-// Setting represents a configuration setting in the database
-type Setting struct {
-	ID          int64     `json:"id"`
-	Category    string    `json:"category"`
-	Key         string    `json:"key"`
-	Value       string    `json:"value"`
-	ValueType   string    `json:"value_type"`
-	Description string    `json:"description,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-// SettingUpdate represents a request to update a setting
-type SettingUpdate struct {
-	Value string `json:"value"`
-}
-
-// DefaultSettings defines the default configuration values
-var DefaultSettings = []Setting{
-	// Temperature settings
-	{Category: "temperature", Key: "warning_threshold", Value: "45", ValueType: "int", Description: "Temperature warning threshold in Celsius"},
-	{Category: "temperature", Key: "critical_threshold", Value: "55", ValueType: "int", Description: "Temperature critical threshold in Celsius"},
-	{Category: "temperature", Key: "spike_threshold", Value: "10", ValueType: "int", Description: "Temperature change considered a spike (degrees)"},
-	{Category: "temperature", Key: "spike_window_minutes", Value: "30", ValueType: "int", Description: "Time window for spike detection in minutes"},
-	{Category: "temperature", Key: "retention_days", Value: "90", ValueType: "int", Description: "Days to keep temperature history"},
-
-	// Alert settings
-	{Category: "alerts", Key: "enabled", Value: "true", ValueType: "bool", Description: "Enable temperature alerts"},
-	{Category: "alerts", Key: "cooldown_minutes", Value: "60", ValueType: "int", Description: "Minutes between duplicate alerts for same drive"},
-	{Category: "alerts", Key: "recovery_enabled", Value: "true", ValueType: "bool", Description: "Generate recovery alerts when temperature returns to normal"},
-
-	// System settings
-	{Category: "system", Key: "data_retention_days", Value: "365", ValueType: "int", Description: "Days to keep historical data"},
-	{Category: "system", Key: "timezone", Value: "UTC", ValueType: "string", Description: "Display timezone for timestamps"},
-}
-
 // InitSettingsTable creates the settings table and populates defaults
 func InitSettingsTable(db *sql.DB) error {
-	// Create settings table
 	createTableSQL := `
 	CREATE TABLE IF NOT EXISTS settings (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,26 +25,23 @@ func InitSettingsTable(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_settings_category_key ON settings(category, key);
 	`
 
-	_, err := db.Exec(createTableSQL)
-	if err != nil {
+	if _, err := db.Exec(createTableSQL); err != nil {
 		return fmt.Errorf("failed to create settings table: %w", err)
 	}
 
-	// Insert default settings (ignore if already exist)
 	insertSQL := `
 	INSERT OR IGNORE INTO settings (category, key, value, value_type, description)
 	VALUES (?, ?, ?, ?, ?)
 	`
 
 	for _, setting := range DefaultSettings {
-		_, err := db.Exec(insertSQL,
+		if _, err := db.Exec(insertSQL,
 			setting.Category,
 			setting.Key,
 			setting.Value,
 			setting.ValueType,
 			setting.Description,
-		)
-		if err != nil {
+		); err != nil {
 			return fmt.Errorf("failed to insert default setting %s.%s: %w",
 				setting.Category, setting.Key, err)
 		}
@@ -107,10 +67,11 @@ func GetAllSettings(db *sql.DB) ([]Setting, error) {
 	var settings []Setting
 	for rows.Next() {
 		var s Setting
-		err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &s.Description, &s.UpdatedAt)
-		if err != nil {
+		var updatedAt string
+		if err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &s.Description, &updatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan setting: %w", err)
 		}
+		s.UpdatedAt, _ = time.Parse("2006-01-02 15:04:05", updatedAt)
 		settings = append(settings, s)
 	}
 
@@ -135,10 +96,11 @@ func GetSettingsByCategory(db *sql.DB, category string) ([]Setting, error) {
 	var settings []Setting
 	for rows.Next() {
 		var s Setting
-		err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &s.Description, &s.UpdatedAt)
-		if err != nil {
+		var updatedAt string
+		if err := rows.Scan(&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &s.Description, &updatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan setting: %w", err)
 		}
+		s.UpdatedAt, _ = time.Parse("2006-01-02 15:04:05", updatedAt)
 		settings = append(settings, s)
 	}
 
@@ -154,22 +116,22 @@ func GetSetting(db *sql.DB, category, key string) (*Setting, error) {
 	`
 
 	var s Setting
+	var updatedAt string
 	err := db.QueryRow(query, category, key).Scan(
-		&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &s.Description, &s.UpdatedAt,
+		&s.ID, &s.Category, &s.Key, &s.Value, &s.ValueType, &s.Description, &updatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil // Setting not found
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get setting %s.%s: %w", category, key, err)
 	}
-
+	s.UpdatedAt, _ = time.Parse("2006-01-02 15:04:05", updatedAt)
 	return &s, nil
 }
 
 // UpdateSetting updates the value of a specific setting
 func UpdateSetting(db *sql.DB, category, key, value string) error {
-	// First, get the setting to validate it exists
 	existing, err := GetSetting(db, category, key)
 	if err != nil {
 		return err
@@ -178,12 +140,10 @@ func UpdateSetting(db *sql.DB, category, key, value string) error {
 		return fmt.Errorf("setting %s.%s not found", category, key)
 	}
 
-	// Validate the value based on type
 	if err := validateSettingValue(existing.ValueType, value); err != nil {
 		return fmt.Errorf("invalid value for %s.%s: %w", category, key, err)
 	}
 
-	// Update the setting
 	query := `
 	UPDATE settings
 	SET value = ?, updated_at = CURRENT_TIMESTAMP
@@ -208,7 +168,6 @@ func UpdateSetting(db *sql.DB, category, key, value string) error {
 
 // ResetCategoryToDefaults resets all settings in a category to their default values
 func ResetCategoryToDefaults(db *sql.DB, category string) error {
-	// Find default settings for this category
 	var defaults []Setting
 	for _, s := range DefaultSettings {
 		if s.Category == category {
@@ -220,10 +179,8 @@ func ResetCategoryToDefaults(db *sql.DB, category string) error {
 		return fmt.Errorf("no default settings found for category: %s", category)
 	}
 
-	// Update each setting to its default value
 	for _, def := range defaults {
-		err := UpdateSetting(db, def.Category, def.Key, def.Value)
-		if err != nil {
+		if err := UpdateSetting(db, def.Category, def.Key, def.Value); err != nil {
 			return fmt.Errorf("failed to reset %s.%s: %w", def.Category, def.Key, err)
 		}
 	}
@@ -234,46 +191,12 @@ func ResetCategoryToDefaults(db *sql.DB, category string) error {
 // ResetAllToDefaults resets all settings to their default values
 func ResetAllToDefaults(db *sql.DB) error {
 	for _, def := range DefaultSettings {
-		err := UpdateSetting(db, def.Category, def.Key, def.Value)
-		if err != nil {
+		if err := UpdateSetting(db, def.Category, def.Key, def.Value); err != nil {
 			return fmt.Errorf("failed to reset %s.%s: %w", def.Category, def.Key, err)
 		}
 	}
 	return nil
 }
-
-// validateSettingValue validates a value against its expected type
-func validateSettingValue(valueType, value string) error {
-	switch valueType {
-	case "int":
-		_, err := strconv.Atoi(value)
-		if err != nil {
-			return fmt.Errorf("value must be an integer")
-		}
-	case "float":
-		_, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return fmt.Errorf("value must be a number")
-		}
-	case "bool":
-		if value != "true" && value != "false" {
-			return fmt.Errorf("value must be 'true' or 'false'")
-		}
-	case "json":
-		if !json.Valid([]byte(value)) {
-			return fmt.Errorf("value must be valid JSON")
-		}
-	case "string":
-		// Any string is valid
-	default:
-		// Unknown type, allow any value
-	}
-	return nil
-}
-
-// ============================================
-// Helper functions for type-safe access
-// ============================================
 
 // GetIntSetting retrieves a setting as an integer
 func GetIntSetting(db *sql.DB, category, key string) (int, error) {
@@ -284,7 +207,6 @@ func GetIntSetting(db *sql.DB, category, key string) (int, error) {
 	if s == nil {
 		return 0, fmt.Errorf("setting %s.%s not found", category, key)
 	}
-
 	val, err := strconv.Atoi(s.Value)
 	if err != nil {
 		return 0, fmt.Errorf("setting %s.%s is not an integer: %w", category, key, err)
@@ -301,7 +223,6 @@ func GetFloatSetting(db *sql.DB, category, key string) (float64, error) {
 	if s == nil {
 		return 0, fmt.Errorf("setting %s.%s not found", category, key)
 	}
-
 	val, err := strconv.ParseFloat(s.Value, 64)
 	if err != nil {
 		return 0, fmt.Errorf("setting %s.%s is not a number: %w", category, key, err)
@@ -318,7 +239,6 @@ func GetBoolSetting(db *sql.DB, category, key string) (bool, error) {
 	if s == nil {
 		return false, fmt.Errorf("setting %s.%s not found", category, key)
 	}
-
 	return s.Value == "true", nil
 }
 
@@ -331,13 +251,8 @@ func GetStringSetting(db *sql.DB, category, key string) (string, error) {
 	if s == nil {
 		return "", fmt.Errorf("setting %s.%s not found", category, key)
 	}
-
 	return s.Value, nil
 }
-
-// ============================================
-// Settings with defaults (no error on missing)
-// ============================================
 
 // GetIntSettingWithDefault retrieves a setting as int, returning default if not found
 func GetIntSettingWithDefault(db *sql.DB, category, key string, defaultVal int) int {
@@ -365,13 +280,6 @@ func GetStringSettingWithDefault(db *sql.DB, category, key, defaultVal string) s
 	}
 	return val
 }
-
-// ============================================
-// Grouped settings response
-// ============================================
-
-// SettingsGrouped represents settings grouped by category
-type SettingsGrouped map[string][]Setting
 
 // GetSettingsGrouped retrieves all settings grouped by category
 func GetSettingsGrouped(db *sql.DB) (SettingsGrouped, error) {
