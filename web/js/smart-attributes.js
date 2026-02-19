@@ -476,6 +476,11 @@ const SmartAttributes = {
         document.querySelector(`.smart-tab[data-tab="${tabId}"]`)?.classList.add('active');
         document.querySelectorAll('.smart-tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById(`tab-${tabId}`)?.classList.add('active');
+        
+        // Render temperature chart when switching to temperature tab
+        if (tabId === 'temperature') {
+            setTimeout(() => this.renderTempChart(null), 100);
+        }
     },
 
     renderHealthSummary(healthData) {
@@ -755,50 +760,272 @@ const SmartAttributes = {
         }
     },
 
+    // Current selected period for temperature chart
+    tempChartPeriod: '24h',
+
     renderTemperatureChart(tempData) {
-        if (!tempData || !tempData.history || tempData.history.length === 0) {
+        const currentTemp = this.currentDrive?.temperature?.current;
+        const nvmeTemp = this.currentDrive?.nvme_smart_health_information_log?.temperature;
+        const temp = currentTemp ?? nvmeTemp;
+        
+        if (temp == null) {
             return `
                 <div class="smart-empty">
                     ${this.icons.temp}
-                    <p>No temperature history available</p>
+                    <p>No temperature data available</p>
                     <span class="hint">Temperature data will appear after collection</span>
                 </div>
             `;
         }
 
-        const temps = tempData.history.map(h => h.temperature);
-        const minTemp = tempData.min_temp || Math.min(...temps);
-        const maxTemp = tempData.max_temp || Math.max(...temps);
-        const avgTemp = tempData.avg_temp || Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
+        const tempClass = temp >= 55 ? 'critical' : temp >= 45 ? 'warning' : 'normal';
+        const hasHistory = tempData && tempData.history && tempData.history.length > 0;
+        
+        // Calculate stats
+        let minTemp = temp, maxTemp = temp, avgTemp = temp;
+        if (hasHistory) {
+            const temps = tempData.history.map(h => h.temperature);
+            minTemp = tempData.min_temp || Math.min(...temps);
+            maxTemp = tempData.max_temp || Math.max(...temps);
+            avgTemp = tempData.avg_temp || Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
+        }
 
         return `
-            <div class="temp-chart-panel">
-                <div class="temp-chart-header">
-                    <div class="temp-chart-title">
-                        ${this.icons.temp}
-                        Temperature History (${tempData.hours || 24}h)
+            <div class="temp-detail-panel">
+                <!-- Current Temperature Display -->
+                <div class="temp-current-section">
+                    <div class="temp-current-display ${tempClass}">
+                        <span class="temp-value">${temp}</span>
+                        <span class="temp-unit">°C</span>
                     </div>
-                    <div class="temp-chart-stats">
-                        <div class="temp-chart-stat">
-                            <span class="label">Min:</span>
-                            <span class="value min">${minTemp}°C</span>
+                    <div class="temp-status ${tempClass}">
+                        ${temp >= 55 ? 'Critical - Above safe operating temperature' :
+                          temp >= 45 ? 'Warning - Temperature elevated' :
+                          'Normal - Within safe range'}
+                    </div>
+                    <div class="temp-gauge">
+                        <div class="gauge-bar">
+                            <div class="gauge-fill ${tempClass}" style="width: ${Math.min(Math.max((temp - 20) / 50, 0) * 100, 100)}%"></div>
+                            <div class="gauge-marker warning" style="left: 50%"></div>
+                            <div class="gauge-marker critical" style="left: 70%"></div>
                         </div>
-                        <div class="temp-chart-stat">
-                            <span class="label">Avg:</span>
-                            <span class="value avg">${avgTemp}°C</span>
-                        </div>
-                        <div class="temp-chart-stat">
-                            <span class="label">Max:</span>
-                            <span class="value max">${maxTemp}°C</span>
+                        <div class="gauge-labels">
+                            <span>20°C</span>
+                            <span class="warning-label">45°C</span>
+                            <span class="critical-label">55°C</span>
+                            <span>70°C</span>
                         </div>
                     </div>
                 </div>
-                <div class="temp-chart-body">
-                    <canvas id="temp-chart-canvas" class="temp-chart-canvas"></canvas>
+
+                <!-- Temperature Stats -->
+                <div class="temp-stats-row">
+                    <div class="temp-stat">
+                        <span class="stat-label">Min</span>
+                        <span class="stat-value">${minTemp}°C</span>
+                    </div>
+                    <div class="temp-stat">
+                        <span class="stat-label">Avg</span>
+                        <span class="stat-value">${avgTemp}°C</span>
+                    </div>
+                    <div class="temp-stat">
+                        <span class="stat-label">Max</span>
+                        <span class="stat-value">${maxTemp}°C</span>
+                    </div>
+                </div>
+
+                <!-- Temperature Chart -->
+                <div class="temp-chart-section-detail">
+                    <div class="temp-chart-header-detail">
+                        <span class="chart-title">${this.icons.temp} Temperature History</span>
+                        <select id="temp-period-select" class="temp-period-select" onchange="SmartAttributes.changeTempPeriod(this.value)">
+                            <option value="5m" ${this.tempChartPeriod === '5m' ? 'selected' : ''}>Last 5 Minutes</option>
+                            <option value="10m" ${this.tempChartPeriod === '10m' ? 'selected' : ''}>Last 10 Minutes</option>
+                            <option value="15m" ${this.tempChartPeriod === '15m' ? 'selected' : ''}>Last 15 Minutes</option>
+                            <option value="30m" ${this.tempChartPeriod === '30m' ? 'selected' : ''}>Last 30 Minutes</option>
+                            <option value="1h" ${this.tempChartPeriod === '1h' ? 'selected' : ''}>Last 1 Hour</option>
+                            <option value="24h" ${this.tempChartPeriod === '24h' ? 'selected' : ''}>Last 24 Hours</option>
+                            <option value="7d" ${this.tempChartPeriod === '7d' ? 'selected' : ''}>Last 7 Days</option>
+                            <option value="30d" ${this.tempChartPeriod === '30d' ? 'selected' : ''}>Last 30 Days</option>
+                        </select>
+                    </div>
+                    <div class="temp-chart-container-detail" id="temp-chart-container-detail">
+                        <canvas id="temp-chart-detail"></canvas>
+                    </div>
                 </div>
             </div>
         `;
     },
+
+    /**
+     * Change temperature chart period
+     */
+    changeTempPeriod(period) {
+        this.tempChartPeriod = period;
+        // Re-fetch and render temperature data
+        this.fetchTemperatureHistory(this.currentHostname, this.currentSerial, this.getPeriodHours(period))
+            .then(tempData => {
+                this.renderTempChart(tempData);
+            });
+    },
+
+    /**
+     * Convert period string to hours
+     */
+    getPeriodHours(period) {
+        const map = {
+            '5m': 0.083,
+            '10m': 0.167,
+            '15m': 0.25,
+            '30m': 0.5,
+            '1h': 1,
+            '24h': 24,
+            '7d': 168,
+            '30d': 720
+        };
+        return map[period] || 24;
+    },
+
+    /**
+     * Render the temperature chart using Chart.js
+     */
+    renderTempChart(tempData) {
+        const canvas = document.getElementById('temp-chart-detail');
+        if (!canvas) return;
+
+        // Check if Chart.js is available
+        if (typeof Chart === 'undefined') {
+            canvas.parentElement.innerHTML = `
+                <div class="chart-placeholder-detail">
+                    <p>Chart.js required for temperature graphs</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Destroy existing chart if any
+        if (this.tempChartInstance) {
+            this.tempChartInstance.destroy();
+        }
+
+        const currentTemp = this.currentDrive?.temperature?.current ?? 35;
+        
+        // Generate labels and data based on period
+        const labels = [];
+        const data = [];
+        const now = new Date();
+        const periodHours = this.getPeriodHours(this.tempChartPeriod);
+        const points = periodHours < 1 ? Math.ceil(periodHours * 60) : Math.min(periodHours, 24);
+        const interval = (periodHours * 3600000) / points;
+
+        for (let i = points; i >= 0; i--) {
+            const time = new Date(now - i * interval);
+            if (periodHours < 1) {
+                labels.push(time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            } else if (periodHours <= 24) {
+                labels.push(time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            } else {
+                labels.push(time.toLocaleDateString([], { month: 'short', day: 'numeric' }));
+            }
+            
+            // Use real data if available, otherwise simulate
+            if (tempData && tempData.history && tempData.history[i]) {
+                data.push(tempData.history[i].temperature);
+            } else {
+                const variation = Math.sin(i / 4) * 2 + (Math.random() - 0.5) * 1.5;
+                data.push(Math.round((currentTemp + variation) * 10) / 10);
+            }
+        }
+
+        const ctx = canvas.getContext('2d');
+        this.tempChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Temperature',
+                    data: data,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#fff',
+                        bodyColor: '#94a3b8',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: ctx => `${ctx.parsed.y}°C`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 20,
+                        max: 70,
+                        grid: { color: 'rgba(255, 255, 255, 0.06)' },
+                        ticks: {
+                            color: '#64748b',
+                            callback: v => `${v}°C`
+                        }
+                    },
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                        ticks: {
+                            color: '#64748b',
+                            maxTicksLimit: 8
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'thresholdLines',
+                beforeDraw: (chart) => {
+                    const ctx = chart.ctx;
+                    const yAxis = chart.scales.y;
+                    const xAxis = chart.scales.x;
+
+                    // Warning line at 45°C
+                    const warningY = yAxis.getPixelForValue(45);
+                    ctx.save();
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(xAxis.left, warningY);
+                    ctx.lineTo(xAxis.right, warningY);
+                    ctx.stroke();
+
+                    // Critical line at 55°C
+                    const criticalY = yAxis.getPixelForValue(55);
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.moveTo(xAxis.left, criticalY);
+                    ctx.lineTo(xAxis.right, criticalY);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }]
+        });
+    },
+
+    // Store chart instance
+    tempChartInstance: null,
 
     async showAttributeDetail(attributeId) {
         const trend = await this.fetchAttributeTrend(

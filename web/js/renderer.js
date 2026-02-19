@@ -397,6 +397,32 @@ const Renderer = {
                         </div>
                     </div>
                 </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                        </svg>
+                        <h3>Updates</h3>
+                    </div>
+                    <div class="settings-card">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Software Updates</div>
+                                <div class="settings-item-desc">Check for new versions of Vigil</div>
+                            </div>
+                            <button id="check-updates-btn" class="check-updates-btn" onclick="Version.manualCheck()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="23 4 23 10 17 10"/>
+                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                                </svg>
+                                Check for Updates
+                            </button>
+                        </div>
+                        <div id="update-check-status"></div>
+                    </div>
+                </div>
                 
                 <div class="settings-section">
                     <div class="settings-section-header">

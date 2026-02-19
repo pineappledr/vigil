@@ -62,7 +62,13 @@ const Data = {
         }
         
         // Update based on current view
-        if (State.activeView === 'zfs') {
+        if (State.activeView === 'temperature') {
+            console.log('[Data] Temperature view active, refreshing temperature data');
+            // Temperature module handles its own refresh
+            if (typeof Temperature !== 'undefined' && Temperature.loadData) {
+                Temperature.loadData();
+            }
+        } else if (State.activeView === 'zfs') {
             console.log('[Data] Rendering ZFS view');
             if (typeof ZFS !== 'undefined' && ZFS.render) {
                 ZFS.render();

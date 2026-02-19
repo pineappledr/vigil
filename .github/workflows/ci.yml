@@ -11,9 +11,14 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.25'
 
 jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # TEST JOB - Runs on every push/PR
+  # ═══════════════════════════════════════════════════════════════════════════
   test:
+    name: Test & Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -22,21 +27,38 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Download dependencies
         run: go mod download
 
-      - name: Build
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests with coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
+      - name: Build check
         run: |
           go build -v ./cmd/server
           go build -v ./cmd/agent
 
-      - name: Test
-        run: go test -v ./...
-
-  # Build preview images for PRs
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PR PREVIEW - Build preview images for pull requests
+  # ═══════════════════════════════════════════════════════════════════════════
   build-pr-preview:
+    name: PR Preview
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
@@ -59,39 +81,41 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Server (PR Preview)
+      - name: Set version
+        id: version
+        run: echo "tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+
+      # Build all images using reusable pattern
+      - name: Build Server
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          build-args: |
-            VERSION=pr-${{ github.event.pull_request.number }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
+          build-args: VERSION=${{ steps.version.outputs.tag }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Alpine (PR Preview)
+      - name: Build Agent (Alpine)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent
           push: true
-          build-args: |
-            VERSION=pr-${{ github.event.pull_request.number }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}
+          build-args: VERSION=${{ steps.version.outputs.tag }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Debian (PR Preview)
+      - name: Build Agent (Debian)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent.debian
           push: true
-          build-args: |
-            VERSION=pr-${{ github.event.pull_request.number }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}-debian
+          build-args: VERSION=${{ steps.version.outputs.tag }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.tag }}-debian
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -99,32 +123,30 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const tag = '${{ steps.version.outputs.tag }}';
+            const registry = '${{ env.REGISTRY }}';
+            const image = '${{ env.IMAGE_NAME }}';
+            
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `## 🐳 Preview Images Built!
               
-              **Server:**
-              \`\`\`bash
-              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
-              \`\`\`
-              
-              **Agent (Alpine - recommended for most Linux):**
-              \`\`\`bash
-              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}
-              \`\`\`
-              
-              **Agent (Debian - for TrueNAS/FreeBSD compatibility):**
-              \`\`\`bash
-              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:pr-${{ github.event.pull_request.number }}-debian
-              \`\`\`
-              
-              These preview images can be used for testing before merging.`
+            | Image | Pull Command |
+            |-------|--------------|
+            | Server | \`docker pull ${registry}/${image}:${tag}\` |
+            | Agent (Alpine) | \`docker pull ${registry}/${image}-agent:${tag}\` |
+            | Agent (Debian) | \`docker pull ${registry}/${image}-agent:${tag}-debian\` |
+            
+            These preview images can be used for testing before merging.`
             })
 
-  # Build dev images and binaries for feature branches (not main, not tags)
-  build-branch-dev:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DEV BUILD - Feature branches (not main, not tags)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-dev:
+    name: Dev Build
     needs: test
     runs-on: ubuntu-latest
     if: |
@@ -142,7 +164,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -154,80 +177,80 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract branch name
-        id: branch
+      - name: Extract metadata
+        id: meta
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          # Replace / with - for valid docker tag
           BRANCH_TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
-          echo "name=$BRANCH_TAG" >> $GITHUB_OUTPUT
-          # Create short SHA for version
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          VERSION="dev-${BRANCH_TAG}-${SHORT_SHA}"
+          
+          echo "branch=$BRANCH_TAG" >> $GITHUB_OUTPUT
+          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build dev agent binaries
+      - name: Build agent binaries
         run: |
           mkdir -p dist
-          VERSION="dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          LDFLAGS="-s -w -X main.version=$VERSION"
           
-          # Agent binaries (no CGO - cross-platform)
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-arm64 ./cmd/agent
           
-          # Checksums
           cd dist && sha256sum * > checksums.txt
 
-      - name: Upload dev agent binaries
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: vigil-agent-dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
+          name: vigil-agent-${{ steps.meta.outputs.version }}
           path: dist/
           retention-days: 14
 
-      - name: Build and push Server (Dev)
+      - name: Build Server
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          build-args: |
-            VERSION=dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.branch.outputs.name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.branch.outputs.name }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.meta.outputs.branch }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.meta.outputs.branch }}-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Alpine (Dev)
+      - name: Build Agent (Alpine)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent
           push: true
-          build-args: |
-            VERSION=dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Debian (Dev)
+      - name: Build Agent (Debian)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent.debian
           push: true
-          build-args: |
-            VERSION=dev-${{ steps.branch.outputs.name }}-${{ steps.branch.outputs.short_sha }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}-debian
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.branch.outputs.name }}-debian-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-debian
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-debian-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Build latest images for main branch
+  # ═══════════════════════════════════════════════════════════════════════════
+  # LATEST BUILD - Main branch
+  # ═══════════════════════════════════════════════════════════════════════════
   build-latest:
+    name: Latest Build
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
@@ -253,33 +276,31 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get short SHA
-        id: sha
-        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        id: meta
+        run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Build and push Server
+      - name: Build Server
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            VERSION=latest-${{ steps.sha.outputs.short }}
+          build-args: VERSION=latest-${{ steps.meta.outputs.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Alpine
+      - name: Build Agent (Alpine)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            VERSION=latest-${{ steps.sha.outputs.short }}
+          build-args: VERSION=latest-${{ steps.meta.outputs.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:alpine
@@ -287,15 +308,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Debian
+      - name: Build Agent (Debian)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent.debian
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            VERSION=latest-${{ steps.sha.outputs.short }}
+          build-args: VERSION=latest-${{ steps.meta.outputs.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:debian
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest-debian
@@ -303,8 +323,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Build release images and binaries for version tags
+  # ═══════════════════════════════════════════════════════════════════════════
+  # RELEASE - Version tags (v*)
+  # ═══════════════════════════════════════════════════════════════════════════
   release:
+    name: Release
     needs: test
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -318,16 +341,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Extract version
         id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${{ contains(github.ref, '-') }}" >> $GITHUB_OUTPUT
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -342,30 +367,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Server (Release)
+      - name: Build Server
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
+          build-args: VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Alpine (Release)
+      - name: Build Agent (Alpine)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
+          build-args: VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}-alpine
@@ -374,15 +397,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Agent Debian (Release)
+      - name: Build Agent (Debian)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.agent.debian
           push: true
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
+          build-args: VERSION=${{ steps.version.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ steps.version.outputs.version }}-debian
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:debian
@@ -392,14 +414,15 @@ jobs:
       - name: Build release binaries
         run: |
           mkdir -p dist
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION="${{ steps.version.outputs.version }}"
+          LDFLAGS="-s -w -X main.version=$VERSION"
           
           # Agent binaries (no CGO - cross-platform)
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-amd64 ./cmd/agent
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-agent-linux-arm64 ./cmd/agent
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-arm64 ./cmd/agent
           
           # Server binary (amd64 only - requires CGO for SQLite)
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/vigil-server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/vigil-server-linux-amd64 ./cmd/server
           
           # Checksums
           cd dist && sha256sum * > checksums.txt
@@ -431,61 +454,50 @@ jobs:
             
             ### 🐳 Docker Images
             
-            **Server:**
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
-            ```
-            
-            **Agent (Alpine - recommended for most Linux systems):**
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}
-            # or explicitly:
-            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}-alpine
-            ```
-            
-            **Agent (Debian - for TrueNAS/FreeBSD or when mounting host ZFS tools):**
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}-debian
-            ```
+            | Image | Command |
+            |-------|---------|
+            | Server | `docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}` |
+            | Agent (Alpine) | `docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}` |
+            | Agent (Debian) | `docker pull ghcr.io/${{ github.repository }}-agent:${{ steps.version.outputs.version }}-debian` |
             
             #### Which Agent Image Should I Use?
             
-            | System | Recommended Image | Notes |
-            |--------|-------------------|-------|
-            | Ubuntu/Debian | `latest` (Alpine) | ZFS tools included |
-            | Alpine Linux | `latest` (Alpine) | Native compatibility |
-            | TrueNAS SCALE | `debian` | Mount host ZFS tools |
-            | TrueNAS CORE | `debian` | Mount host ZFS tools |
-            | Proxmox | `latest` (Alpine) | ZFS tools included |
-            | Unraid | `latest` (Alpine) | No ZFS needed |
+            | System | Recommended | Notes |
+            |--------|-------------|-------|
+            | Ubuntu/Debian | Alpine | ZFS tools included |
+            | Alpine Linux | Alpine | Native compatibility |
+            | TrueNAS SCALE | Debian | Mount host ZFS tools |
+            | TrueNAS CORE | Debian | Mount host ZFS tools |
+            | Proxmox | Alpine | ZFS tools included |
+            | Unraid | Alpine | No ZFS needed |
             
-            **Multi-Architecture Support:** Both variants support `linux/amd64` and `linux/arm64`
+            **Multi-Architecture:** Both variants support `linux/amd64` and `linux/arm64`
             
             ---
             
             ### 📦 Binaries
             
             ```bash
+            # Download and install
+            VERSION=${{ steps.version.outputs.version }}
+            
             # Server (AMD64)
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-server-linux-amd64 -o vigil-server
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${VERSION}/vigil-server-linux-amd64 -o vigil-server
             chmod +x vigil-server
             
             # Agent (AMD64)
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-amd64 -o vigil-agent
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${VERSION}/vigil-agent-linux-amd64 -o vigil-agent
             chmod +x vigil-agent
             
             # Agent (ARM64)
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/vigil-agent-linux-arm64 -o vigil-agent
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${VERSION}/vigil-agent-linux-arm64 -o vigil-agent
             chmod +x vigil-agent
             ```
-            
-            ---
             
             ### ✅ Verify Checksums
             
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/checksums.txt -o checksums.txt
-            sha256sum -c checksums.txt
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${VERSION}/checksums.txt | sha256sum -c
             ```
           files: |
             dist/vigil-server-linux-amd64
@@ -493,4 +505,4 @@ jobs:
             dist/vigil-agent-linux-arm64
             dist/checksums.txt
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
