@@ -690,6 +690,8 @@ const Temperature = {
      * Toggle drive selection for comparison
      */
     toggleDriveSelection(hostname, serial, checked) {
+        console.log('[Temperature] toggleDriveSelection:', hostname, serial, checked);
+        
         const checkbox = document.querySelector(
             `.temp-drive-card[data-hostname="${hostname}"][data-serial="${serial}"] input[type="checkbox"]`
         );
@@ -700,21 +702,37 @@ const Temperature = {
                 if (checkbox) checkbox.checked = false;
                 return;
             }
-            // Find the drive data
-            const drive = this.findDrive(hostname, serial);
-            if (drive) {
-                this.selectedDrives.push({ 
-                    hostname, 
-                    serial,
-                    device_name: drive.device_name,
-                    temperature: drive.temperature,
-                    model: drive.model
-                });
+            
+            // Find the drive data from the card itself
+            const card = document.querySelector(
+                `.temp-drive-card[data-hostname="${hostname}"][data-serial="${serial}"]`
+            );
+            
+            let deviceName = serial;
+            let temperature = 30;
+            
+            if (card) {
+                const nameEl = card.querySelector('.drive-name');
+                const tempEl = card.querySelector('.drive-temp');
+                if (nameEl) deviceName = nameEl.textContent.trim();
+                if (tempEl) temperature = parseInt(tempEl.textContent) || 30;
             }
+            
+            this.selectedDrives.push({ 
+                hostname, 
+                serial,
+                device_name: deviceName,
+                temperature: temperature
+            });
+            
+            console.log('[Temperature] Added drive:', { hostname, serial, deviceName, temperature });
+            console.log('[Temperature] Selected drives:', this.selectedDrives);
+            
         } else {
             this.selectedDrives = this.selectedDrives.filter(
                 d => !(d.hostname === hostname && d.serial === serial)
             );
+            console.log('[Temperature] Removed drive, remaining:', this.selectedDrives);
         }
 
         // Update UI
@@ -725,7 +743,6 @@ const Temperature = {
         if (this.compareMode && this.selectedDrives.length >= 2) {
             this.renderComparisonChart();
         } else if (this.compareMode && this.selectedDrives.length < 2) {
-            // Exit compare mode if less than 2 drives selected
             this.compareMode = false;
             this.updateCompareButton();
             this.renderChart(this.dashboardData);
@@ -785,6 +802,8 @@ const Temperature = {
      * Toggle comparison mode - show selected drives in chart
      */
     showComparison() {
+        console.log('[Temperature] showComparison called, selectedDrives:', this.selectedDrives);
+        
         if (this.selectedDrives.length < 2) {
             alert('Select at least 2 drives to compare');
             return;
@@ -792,12 +811,15 @@ const Temperature = {
         
         // Toggle compare mode
         this.compareMode = !this.compareMode;
+        console.log('[Temperature] compareMode toggled to:', this.compareMode);
+        
         this.updateCompareButton();
         
         if (this.compareMode) {
+            console.log('[Temperature] Entering compare mode, rendering comparison chart...');
             this.renderComparisonChart();
         } else {
-            // Return to normal view
+            console.log('[Temperature] Exiting compare mode, rendering normal chart...');
             this.renderChart(this.dashboardData);
         }
     },
@@ -806,12 +828,23 @@ const Temperature = {
      * Render chart with only selected drives for comparison
      */
     renderComparisonChart() {
+        console.log('[Temperature] renderComparisonChart called with drives:', this.selectedDrives);
+        
         const canvas = document.getElementById('temp-chart');
-        if (!canvas || typeof Chart === 'undefined') return;
+        if (!canvas) {
+            console.error('[Temperature] Canvas not found!');
+            return;
+        }
+        
+        if (typeof Chart === 'undefined') {
+            console.error('[Temperature] Chart.js not loaded!');
+            return;
+        }
 
         // Destroy existing chart
         if (this.chartInstance) {
             this.chartInstance.destroy();
+            this.chartInstance = null;
         }
 
         const thresholds = this.dashboardData?.thresholds || { warning: 45, critical: 55 };
@@ -833,8 +866,9 @@ const Temperature = {
                 return Math.round((baseTemp + variation) * 10) / 10;
             });
             
-            // Create label with hostname and device
-            const label = `${drive.hostname} - ${drive.device_name || drive.serial}`;
+            // Create label with device name
+            const label = `${drive.device_name} (${drive.hostname})`;
+            console.log('[Temperature] Creating dataset for:', label, 'baseTemp:', baseTemp);
             
             return {
                 label: label,
@@ -848,6 +882,8 @@ const Temperature = {
                 borderWidth: 2
             };
         });
+
+        console.log('[Temperature] Creating chart with', datasets.length, 'datasets');
 
         const ctx = canvas.getContext('2d');
         this.chartInstance = new Chart(ctx, {
@@ -934,7 +970,7 @@ const Temperature = {
             }]
         });
         
-        console.log('[Temperature] Comparison chart rendered with', this.selectedDrives.length, 'drives');
+        console.log('[Temperature] Comparison chart rendered successfully');
     },
 
     /**
