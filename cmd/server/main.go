@@ -6,11 +6,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"vigil/internal/agents"
 	"vigil/internal/auth"
 	"vigil/internal/config"
+	"vigil/internal/crypto"
 	"vigil/internal/db"
 	"vigil/internal/handlers"
 	"vigil/internal/middleware"
@@ -46,6 +49,25 @@ func main() {
 		log.Printf("⚠️  Schema migration warning: %v", err)
 	}
 
+	// Run agent authentication migration
+	if err := agents.Migrate(db.DB); err != nil {
+		log.Printf("⚠️  Agent auth migration warning: %v", err)
+	}
+
+	// Load or generate server Ed25519 key pair
+	dataDir := filepath.Dir(cfg.DBPath)
+	if dataDir == "." {
+		if cwd, err := os.Getwd(); err == nil {
+			dataDir = cwd
+		}
+	}
+	keys, err := crypto.LoadOrGenerate(dataDir)
+	if err != nil {
+		log.Fatalf("❌ Failed to initialise server keys: %v", err)
+	}
+	handlers.ServerKeys = keys
+	log.Printf("✓ Server keys: %s", filepath.Join(dataDir, "vigil.key"))
+
 	// Auth initialisation
 	if cfg.AuthEnabled {
 		auth.CreateDefaultAdmin(cfg)
@@ -54,6 +76,7 @@ func main() {
 		log.Printf("⚠️  Authentication: disabled (set AUTH_ENABLED=true to enable)")
 	}
 	auth.CleanupExpiredSessions()
+	agents.CleanupExpiredAgentSessions(db.DB)
 
 	mux := setupRoutes(cfg)
 	handler := middleware.Logging(middleware.CORS(mux))
@@ -89,12 +112,24 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
 	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
 
-	// Agent endpoint (no auth)
-	mux.HandleFunc("POST /api/report", handlers.Report)
-
 	// Auth endpoints
 	mux.HandleFunc("POST /api/auth/login", auth.Login(cfg))
 	mux.HandleFunc("POST /api/auth/logout", auth.Logout)
+
+	// ─── Agent authentication (public — agents identify themselves) ───────
+	mux.HandleFunc("GET /api/v1/server/pubkey", handlers.GetServerPublicKey)
+	mux.HandleFunc("POST /api/v1/agents/register", handlers.RegisterAgent)
+	mux.HandleFunc("POST /api/v1/agents/auth", handlers.AuthAgent)
+
+	// Agent report endpoint — requires valid agent session token
+	mux.HandleFunc("POST /api/report", handlers.Report)
+
+	// ─── Agent management (admin-protected) ───────────────────────────────
+	mux.HandleFunc("GET /api/v1/agents", protect(handlers.ListAgents))
+	mux.HandleFunc("DELETE /api/v1/agents/{id}", protect(handlers.DeleteRegisteredAgent))
+	mux.HandleFunc("POST /api/v1/tokens", protect(handlers.CreateToken))
+	mux.HandleFunc("GET /api/v1/tokens", protect(handlers.ListTokens))
+	mux.HandleFunc("DELETE /api/v1/tokens/{id}", protect(handlers.DeleteToken))
 
 	// Protected endpoints
 	mux.HandleFunc("GET /api/history", protect(handlers.History))
