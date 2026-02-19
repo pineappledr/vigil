@@ -63,6 +63,11 @@ const Temperature = {
                     <div class="temp-header-spacer"></div>
                     <div class="temp-controls">
                         <select id="temp-period" class="temp-select" onchange="Temperature.changePeriod(this.value)">
+                            <option value="5m" ${this.currentPeriod === '5m' ? 'selected' : ''}>Last 5 Minutes</option>
+                            <option value="10m" ${this.currentPeriod === '10m' ? 'selected' : ''}>Last 10 Minutes</option>
+                            <option value="15m" ${this.currentPeriod === '15m' ? 'selected' : ''}>Last 15 Minutes</option>
+                            <option value="30m" ${this.currentPeriod === '30m' ? 'selected' : ''}>Last 30 Minutes</option>
+                            <option value="1h" ${this.currentPeriod === '1h' ? 'selected' : ''}>Last 1 Hour</option>
                             <option value="24h" ${this.currentPeriod === '24h' ? 'selected' : ''}>Last 24 Hours</option>
                             <option value="7d" ${this.currentPeriod === '7d' ? 'selected' : ''}>Last 7 Days</option>
                             <option value="30d" ${this.currentPeriod === '30d' ? 'selected' : ''}>Last 30 Days</option>

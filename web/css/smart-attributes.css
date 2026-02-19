@@ -877,70 +877,52 @@ tr.warning-row .attr-tooltip-trigger::after {
     }
 }
 /* ============================================
-   TEMPERATURE CURRENT DISPLAY
-   When no history is available
+   TEMPERATURE DETAIL PANEL
+   For drive detail Temperature tab
    ============================================ */
 
-.temp-current-panel {
+.temp-detail-panel {
+    padding: 1rem;
+}
+
+.temp-current-section {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 2rem;
-    text-align: center;
-}
-
-.temp-current-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9375rem;
-    color: var(--text-secondary);
+    padding: 1.5rem;
     margin-bottom: 1.5rem;
-}
-
-.temp-current-header svg {
-    width: 20px;
-    height: 20px;
 }
 
 .temp-current-display {
     display: flex;
     align-items: baseline;
     gap: 0.25rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .temp-current-display .temp-value {
-    font-size: 4rem;
+    font-size: 3.5rem;
     font-weight: 700;
     font-family: var(--font-mono);
     line-height: 1;
 }
 
 .temp-current-display .temp-unit {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 500;
     color: var(--text-secondary);
 }
 
-.temp-current-display.normal .temp-value {
-    color: var(--success);
-}
-
-.temp-current-display.warning .temp-value {
-    color: var(--warning);
-}
-
-.temp-current-display.critical .temp-value {
-    color: var(--danger);
-}
+.temp-current-display.normal .temp-value { color: var(--success); }
+.temp-current-display.warning .temp-value { color: var(--warning); }
+.temp-current-display.critical .temp-value { color: var(--danger); }
 
 .temp-status {
     font-size: 0.875rem;
     font-weight: 500;
     padding: 0.375rem 1rem;
     border-radius: 9999px;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
 }
 
 .temp-status.normal {
@@ -958,68 +940,156 @@ tr.warning-row .attr-tooltip-trigger::after {
     color: var(--danger);
 }
 
-.temp-thresholds {
+/* Temperature Gauge */
+.temp-gauge {
     width: 100%;
-    max-width: 400px;
-    margin-bottom: 1.5rem;
+    max-width: 350px;
 }
 
-.threshold-bar {
+.gauge-bar {
     height: 8px;
     background: var(--bg-elevated);
     border-radius: 4px;
     position: relative;
     overflow: visible;
-    margin-bottom: 0.5rem;
 }
 
-.threshold-fill {
+.gauge-fill {
     height: 100%;
     border-radius: 4px;
-    background: linear-gradient(90deg, #22c55e 0%, #22c55e 60%, #f59e0b 75%, #ef4444 100%);
     transition: width 0.3s ease;
 }
 
-.threshold-marker {
+.gauge-fill.normal { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.gauge-fill.warning { background: linear-gradient(90deg, #22c55e, #f59e0b); }
+.gauge-fill.critical { background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444); }
+
+.gauge-marker {
     position: absolute;
     top: -4px;
     width: 2px;
     height: 16px;
     border-radius: 1px;
+    transform: translateX(-50%);
 }
 
-.threshold-marker.warning {
-    background: var(--warning);
-}
+.gauge-marker.warning { background: var(--warning); }
+.gauge-marker.critical { background: var(--danger); }
 
-.threshold-marker.critical {
-    background: var(--danger);
-}
-
-.threshold-labels {
+.gauge-labels {
     display: flex;
     justify-content: space-between;
     font-size: 0.6875rem;
     color: var(--text-muted);
+    margin-top: 0.375rem;
+    position: relative;
 }
 
-.threshold-labels .warning-label {
+.gauge-labels .warning-label {
     color: var(--warning);
     position: absolute;
-    left: calc(64.3% - 15px);
+    left: 50%;
+    transform: translateX(-50%);
 }
 
-.threshold-labels .critical-label {
+.gauge-labels .critical-label {
     color: var(--danger);
     position: absolute;
-    left: calc(78.6% - 15px);
+    left: 70%;
+    transform: translateX(-50%);
 }
 
-.temp-history-note {
-    margin-top: 1rem;
+/* Temperature Stats Row */
+.temp-stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1rem;
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
 }
 
-.temp-history-note .hint {
-    font-size: 0.8125rem;
+.temp-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.temp-stat .stat-label {
+    font-size: 0.75rem;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.temp-stat .stat-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+/* Temperature Chart Section */
+.temp-chart-section-detail {
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.temp-chart-header-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.chart-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.chart-title svg {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+}
+
+.temp-period-select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.temp-period-select:hover,
+.temp-period-select:focus {
+    border-color: var(--accent-blue);
+    outline: none;
+}
+
+.temp-chart-container-detail {
+    height: 250px;
+    position: relative;
+}
+
+.chart-placeholder-detail {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
 }
