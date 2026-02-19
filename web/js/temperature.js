@@ -152,7 +152,13 @@ const Temperature = {
             this.renderSummaryCards(dashboard);
             this.renderAlerts(alerts);
             this.renderDrivesByServer(dashboard);
-            this.renderChart(dashboard);
+            
+            // Respect compare mode - don't override with server view
+            if (this.compareMode && this.selectedDrives.length >= 2) {
+                this.renderComparisonChart();
+            } else {
+                this.renderChart(dashboard);
+            }
         } catch (error) {
             console.error('[Temperature] Failed to load data:', error);
             this.showError('Failed to load temperature data');
