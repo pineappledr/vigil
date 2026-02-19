@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"vigil/internal/settings"
 )
 
 // setupAlertTestDB creates an in-memory database for alert testing
@@ -30,7 +32,7 @@ func setupAlertTestDB(t *testing.T) *sql.DB {
 	}
 
 	// Initialize tables
-	if err := InitSettingsTable(db); err != nil {
+	if err := settings.InitSettingsTable(db); err != nil {
 		t.Fatalf("Failed to initialize settings table: %v", err)
 	}
 
@@ -55,7 +57,7 @@ func TestInitTemperatureAlertsTable(t *testing.T) {
 	// Verify table exists
 	var name string
 	err := db.QueryRow(`
-		SELECT name FROM sqlite_master 
+		SELECT name FROM sqlite_master
 		WHERE type='table' AND name='temperature_alerts'
 	`).Scan(&name)
 
@@ -396,7 +398,7 @@ func TestCheckTemperatureAndAlert_Cooldown(t *testing.T) {
 	ClearAlertStateCache()
 
 	// Set a very long cooldown for testing
-	UpdateSetting(db, "alerts", "cooldown_minutes", "60")
+	settings.UpdateSetting(db, "alerts", "cooldown_minutes", "60")
 
 	// First warning alert
 	alert1, _ := CheckTemperatureAndAlert(db, "server1", "SERIAL001", 50)
@@ -417,7 +419,7 @@ func TestCheckTemperatureAndAlert_Disabled(t *testing.T) {
 	ClearAlertStateCache()
 
 	// Disable alerts
-	UpdateSetting(db, "alerts", "enabled", "false")
+	settings.UpdateSetting(db, "alerts", "enabled", "false")
 
 	alert, _ := CheckTemperatureAndAlert(db, "server1", "SERIAL001", 60)
 	if alert != nil {

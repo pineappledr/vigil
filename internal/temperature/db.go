@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -33,7 +33,7 @@ func GetTemperatureStats(db *sql.DB, hostname, serial string, period Temperature
 
 	// Query for basic stats
 	query := fmt.Sprintf(`
-		SELECT 
+		SELECT
 			MIN(temperature) as min_temp,
 			MAX(temperature) as max_temp,
 			AVG(temperature) as avg_temp,
@@ -292,7 +292,7 @@ func GetTemperatureTimeSeries(db *sql.DB, hostname, serial string, period Temper
 	timeFormat := IntervalToSQLite(interval)
 
 	query := fmt.Sprintf(`
-		SELECT 
+		SELECT
 			strftime('%s', timestamp) as time_bucket,
 			MIN(temperature) as min_temp,
 			MAX(temperature) as max_temp,
@@ -395,8 +395,8 @@ func GetAllCurrentTemperatures(db *sql.DB) ([]CurrentTemperature, error) {
 			SELECT hostname, serial_number, MAX(timestamp) as max_ts
 			FROM temperature_history
 			GROUP BY hostname, serial_number
-		) latest ON th.hostname = latest.hostname 
-			AND th.serial_number = latest.serial_number 
+		) latest ON th.hostname = latest.hostname
+			AND th.serial_number = latest.serial_number
 			AND th.timestamp = latest.max_ts
 		ORDER BY th.hostname, th.serial_number
 	`
@@ -496,7 +496,9 @@ func GetTemperatureRange(db *sql.DB, hostname, serial string, from, to time.Time
 		ORDER BY timestamp ASC
 	`
 
-	rows, err := db.Query(query, hostname, serial, from, to)
+	rows, err := db.Query(query, hostname, serial,
+		from.UTC().Format("2006-01-02 15:04:05"),
+		to.UTC().Format("2006-01-02 15:04:05"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get temperature range: %w", err)
 	}

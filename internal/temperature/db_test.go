@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -7,6 +7,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"vigil/internal/settings"
 )
 
 // setupTempTestDB creates an in-memory database with temperature tables
@@ -25,7 +27,7 @@ func setupTempTestDB(t *testing.T) *sql.DB {
 			temperature INTEGER NOT NULL,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
-		
+
 		CREATE INDEX idx_temp_hist_host_serial ON temperature_history(hostname, serial_number);
 		CREATE INDEX idx_temp_hist_timestamp ON temperature_history(timestamp);
 	`)
@@ -49,7 +51,7 @@ func setupTempTestDB(t *testing.T) *sql.DB {
 	}
 
 	// Initialize settings table for thresholds
-	if err := InitSettingsTable(db); err != nil {
+	if err := settings.InitSettingsTable(db); err != nil {
 		t.Fatalf("Failed to initialize settings: %v", err)
 	}
 
@@ -189,7 +191,7 @@ func TestGetAllDrivesTemperatureStats(t *testing.T) {
 	// Insert data directly with simple timestamps
 	_, err := db.Exec(`
 		INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
-		VALUES 
+		VALUES
 			('server1', 'SERIAL001', 35, datetime('now')),
 			('server1', 'SERIAL001', 36, datetime('now', '-1 hour')),
 			('server1', 'SERIAL002', 40, datetime('now')),
@@ -330,7 +332,7 @@ func TestGetAllCurrentTemperatures(t *testing.T) {
 	}
 }
 
-func TestGetTemperatureSummary(t *testing.T) {
+func TestGetTemperatureSummaryFunc(t *testing.T) {
 	db := setupTempTestDB(t)
 	defer db.Close()
 

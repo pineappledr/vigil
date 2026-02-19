@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -424,7 +424,7 @@ func getRecentDashboardAlerts(db *sql.DB, limit int) []DashboardAlert {
 // Helper: get recent spikes for dashboard
 func getRecentDashboardSpikes(db *sql.DB, limit int) []DashboardSpike {
 	query := `
-		SELECT id, hostname, serial_number, start_temp, end_temp, 
+		SELECT id, hostname, serial_number, start_temp, end_temp,
 			   change_degrees, direction, created_at
 		FROM temperature_spikes
 		WHERE acknowledged = 0

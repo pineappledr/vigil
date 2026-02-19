@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"time"
@@ -114,7 +114,6 @@ type TemperatureStats struct {
 }
 
 // TempReading represents a single temperature reading from the database
-// Note: If TemperatureRecord already exists in smart_db.go, use that instead
 type TempReading struct {
 	ID           int64     `json:"id,omitempty"`
 	Hostname     string    `json:"hostname"`

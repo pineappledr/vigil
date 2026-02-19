@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"vigil/internal/settings"
 )
 
 // setupSpikeTestDB creates an in-memory database for spike testing
@@ -35,7 +37,7 @@ func setupSpikeTestDB(t *testing.T) *sql.DB {
 	}
 
 	// Initialize settings table
-	if err := InitSettingsTable(db); err != nil {
+	if err := settings.InitSettingsTable(db); err != nil {
 		t.Fatalf("Failed to initialize settings table: %v", err)
 	}
 
@@ -49,7 +51,7 @@ func TestInitTemperatureSpikesTable(t *testing.T) {
 	// Verify table exists
 	var name string
 	err := db.QueryRow(`
-		SELECT name FROM sqlite_master 
+		SELECT name FROM sqlite_master
 		WHERE type='table' AND name='temperature_spikes'
 	`).Scan(&name)
 

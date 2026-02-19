@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -73,17 +73,17 @@ func InitTemperatureAlertsTable(db *sql.DB) error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_temp_alerts_host 
+	CREATE INDEX IF NOT EXISTS idx_temp_alerts_host
 		ON temperature_alerts(hostname);
-	CREATE INDEX IF NOT EXISTS idx_temp_alerts_serial 
+	CREATE INDEX IF NOT EXISTS idx_temp_alerts_serial
 		ON temperature_alerts(serial_number);
-	CREATE INDEX IF NOT EXISTS idx_temp_alerts_type 
+	CREATE INDEX IF NOT EXISTS idx_temp_alerts_type
 		ON temperature_alerts(alert_type);
-	CREATE INDEX IF NOT EXISTS idx_temp_alerts_ack 
+	CREATE INDEX IF NOT EXISTS idx_temp_alerts_ack
 		ON temperature_alerts(acknowledged);
-	CREATE INDEX IF NOT EXISTS idx_temp_alerts_created 
+	CREATE INDEX IF NOT EXISTS idx_temp_alerts_created
 		ON temperature_alerts(created_at);
-	CREATE INDEX IF NOT EXISTS idx_temp_alerts_host_serial 
+	CREATE INDEX IF NOT EXISTS idx_temp_alerts_host_serial
 		ON temperature_alerts(hostname, serial_number);
 	`
 
@@ -99,7 +99,7 @@ func InitTemperatureAlertsTable(db *sql.DB) error {
 func CreateAlert(db *sql.DB, alert *TemperatureAlert) error {
 	query := `
 		INSERT INTO temperature_alerts (
-			hostname, serial_number, alert_type, temperature, 
+			hostname, serial_number, alert_type, temperature,
 			threshold, message
 		) VALUES (?, ?, ?, ?, ?, ?)
 	`
@@ -128,7 +128,7 @@ func CreateAlert(db *sql.DB, alert *TemperatureAlert) error {
 func GetAlerts(db *sql.DB, filter AlertFilter) ([]TemperatureAlert, error) {
 	query := `
 		SELECT id, hostname, serial_number, alert_type, temperature,
-			   COALESCE(threshold, 0), message, acknowledged, 
+			   COALESCE(threshold, 0), message, acknowledged,
 			   COALESCE(acknowledged_by, ''), acknowledged_at, created_at
 		FROM temperature_alerts
 		WHERE 1=1
@@ -183,7 +183,7 @@ func GetActiveAlerts(db *sql.DB) ([]TemperatureAlert, error) {
 func GetAlertByID(db *sql.DB, id int64) (*TemperatureAlert, error) {
 	query := `
 		SELECT id, hostname, serial_number, alert_type, temperature,
-			   COALESCE(threshold, 0), message, acknowledged, 
+			   COALESCE(threshold, 0), message, acknowledged,
 			   COALESCE(acknowledged_by, ''), acknowledged_at, created_at
 		FROM temperature_alerts
 		WHERE id = ?
@@ -256,7 +256,7 @@ func DeleteAlert(db *sql.DB, id int64) error {
 // GetAlertSummary returns alert statistics
 func GetAlertSummary(db *sql.DB) (*AlertSummary, error) {
 	query := `
-		SELECT 
+		SELECT
 			COUNT(*) as total,
 			SUM(CASE WHEN acknowledged = 0 THEN 1 ELSE 0 END) as unacknowledged,
 			SUM(CASE WHEN acknowledged = 1 THEN 1 ELSE 0 END) as acknowledged,
@@ -512,12 +512,12 @@ func GetDriveAlertStatus(db *sql.DB, hostname, serial string) (string, error) {
 		SELECT alert_type
 		FROM temperature_alerts
 		WHERE hostname = ? AND serial_number = ? AND acknowledged = 0
-		ORDER BY 
-			CASE alert_type 
-				WHEN 'critical' THEN 1 
-				WHEN 'warning' THEN 2 
-				WHEN 'spike' THEN 3 
-				ELSE 4 
+		ORDER BY
+			CASE alert_type
+				WHEN 'critical' THEN 1
+				WHEN 'warning' THEN 2
+				WHEN 'spike' THEN 3
+				ELSE 4
 			END,
 			created_at DESC
 		LIMIT 1

@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"vigil/internal/settings"
 )
 
 // setupDashboardTestDB creates an in-memory database for dashboard testing
@@ -24,7 +26,7 @@ func setupDashboardTestDB(t *testing.T) *sql.DB {
 			temperature INTEGER NOT NULL,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
-		
+
 		CREATE TABLE smart_results (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			hostname TEXT NOT NULL,
@@ -39,7 +41,7 @@ func setupDashboardTestDB(t *testing.T) *sql.DB {
 	}
 
 	// Initialize settings, spikes, alerts tables
-	if err := InitSettingsTable(db); err != nil {
+	if err := settings.InitSettingsTable(db); err != nil {
 		t.Fatalf("Failed to initialize settings: %v", err)
 	}
 	if err := InitTemperatureSpikesTable(db); err != nil {
@@ -230,7 +232,7 @@ func TestGetTemperatureTrends(t *testing.T) {
 	// Insert data directly with simple timestamps
 	_, err := db.Exec(`
 		INSERT INTO temperature_history (hostname, serial_number, temperature, timestamp)
-		VALUES 
+		VALUES
 			('server1', 'SERIAL001', 35, datetime('now')),
 			('server1', 'SERIAL001', 36, datetime('now', '-1 hour')),
 			('server1', 'SERIAL001', 37, datetime('now', '-2 hours')),

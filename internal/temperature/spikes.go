@@ -1,4 +1,4 @@
-package db
+package temperature
 
 import (
 	"database/sql"
@@ -29,13 +29,13 @@ func InitTemperatureSpikesTable(db *sql.DB) error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_spikes_host_serial 
+	CREATE INDEX IF NOT EXISTS idx_spikes_host_serial
 		ON temperature_spikes(hostname, serial_number);
-	CREATE INDEX IF NOT EXISTS idx_spikes_time 
+	CREATE INDEX IF NOT EXISTS idx_spikes_time
 		ON temperature_spikes(start_time);
-	CREATE INDEX IF NOT EXISTS idx_spikes_acknowledged 
+	CREATE INDEX IF NOT EXISTS idx_spikes_acknowledged
 		ON temperature_spikes(acknowledged);
-	CREATE INDEX IF NOT EXISTS idx_spikes_created 
+	CREATE INDEX IF NOT EXISTS idx_spikes_created
 		ON temperature_spikes(created_at);
 	`
 
@@ -205,7 +205,7 @@ func DeleteSpike(db *sql.DB, id int64) error {
 // GetSpikeSummary returns counts of spikes by status
 func GetSpikeSummary(db *sql.DB) (*SpikeSummary, error) {
 	query := `
-		SELECT 
+		SELECT
 			COUNT(*) as total,
 			SUM(CASE WHEN acknowledged = 0 THEN 1 ELSE 0 END) as unacknowledged,
 			SUM(CASE WHEN acknowledged = 1 THEN 1 ELSE 0 END) as acknowledged,

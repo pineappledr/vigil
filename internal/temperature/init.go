@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"log"
 
-	"vigil/internal/db"
 	"vigil/internal/settings"
 )
 
@@ -18,12 +17,12 @@ func InitializeTables(database *sql.DB) error {
 	}
 
 	// Initialize temperature spikes table
-	if err := db.InitTemperatureSpikesTable(database); err != nil {
+	if err := InitTemperatureSpikesTable(database); err != nil {
 		return err
 	}
 
 	// Initialize temperature alerts table
-	if err := db.InitTemperatureAlertsTable(database); err != nil {
+	if err := InitTemperatureAlertsTable(database); err != nil {
 		return err
 	}
 
@@ -116,7 +115,7 @@ func ProcessDriveTemperature(database *sql.DB, hostname, serial string, temperat
 		return nil // Invalid temperature, skip silently
 	}
 
-	alerts, err := db.ProcessTemperatureReading(database, hostname, serial, temperature)
+	alerts, err := ProcessTemperatureReading(database, hostname, serial, temperature)
 	if err != nil {
 		return err
 	}
