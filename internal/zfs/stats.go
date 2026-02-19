@@ -1,17 +1,18 @@
-package db
+package zfs
 
 import (
+	"database/sql"
 	"fmt"
 )
 
 // ─── Statistics and Aggregation ──────────────────────────────────────────────
 
 // GetZFSPoolSummary returns aggregate stats for a hostname
-func GetZFSPoolSummary(hostname string) (*ZFSPoolSummary, error) {
+func GetZFSPoolSummary(db *sql.DB, hostname string) (*ZFSPoolSummary, error) {
 	summary := &ZFSPoolSummary{Hostname: hostname}
 
-	err := DB.QueryRow(`
-		SELECT 
+	err := db.QueryRow(`
+		SELECT
 			COUNT(*) as total_pools,
 			SUM(CASE WHEN health = 'ONLINE' THEN 1 ELSE 0 END) as healthy,
 			SUM(CASE WHEN health = 'DEGRADED' THEN 1 ELSE 0 END) as degraded,
@@ -43,12 +44,11 @@ func GetZFSPoolSummary(hostname string) (*ZFSPoolSummary, error) {
 }
 
 // GetGlobalZFSSummary returns system-wide ZFS summary (all hosts combined)
-// This is the function called by the handler
-func GetGlobalZFSSummary() (*ZFSPoolSummary, error) {
+func GetGlobalZFSSummary(db *sql.DB) (*ZFSPoolSummary, error) {
 	summary := &ZFSPoolSummary{Hostname: "all"}
 
-	err := DB.QueryRow(`
-		SELECT 
+	err := db.QueryRow(`
+		SELECT
 			COUNT(*) as total_pools,
 			SUM(CASE WHEN health = 'ONLINE' THEN 1 ELSE 0 END) as healthy,
 			SUM(CASE WHEN health = 'DEGRADED' THEN 1 ELSE 0 END) as degraded,
@@ -79,11 +79,11 @@ func GetGlobalZFSSummary() (*ZFSPoolSummary, error) {
 }
 
 // GetZFSGlobalStats returns system-wide ZFS statistics (alternative format)
-func GetZFSGlobalStats() (*ZFSGlobalStats, error) {
+func GetZFSGlobalStats(db *sql.DB) (*ZFSGlobalStats, error) {
 	stats := &ZFSGlobalStats{}
 
-	err := DB.QueryRow(`
-		SELECT 
+	err := db.QueryRow(`
+		SELECT
 			COUNT(*) as total_pools,
 			SUM(CASE WHEN health = 'ONLINE' THEN 1 ELSE 0 END) as healthy,
 			SUM(CASE WHEN health = 'DEGRADED' THEN 1 ELSE 0 END) as degraded,
@@ -105,15 +105,15 @@ func GetZFSGlobalStats() (*ZFSGlobalStats, error) {
 	}
 
 	// Get device count
-	DB.QueryRow("SELECT COUNT(*) FROM zfs_pool_devices").Scan(&stats.TotalDevices)
+	db.QueryRow("SELECT COUNT(*) FROM zfs_pool_devices").Scan(&stats.TotalDevices)
 
 	return stats, nil
 }
 
 // GetZFSPoolListItems returns lightweight pool data for list views
-func GetZFSPoolListItems() ([]ZFSPoolListItem, error) {
-	rows, err := DB.Query(`
-		SELECT 
+func GetZFSPoolListItems(db *sql.DB) ([]ZFSPoolListItem, error) {
+	rows, err := db.Query(`
+		SELECT
 			p.id, p.hostname, p.pool_name, p.status, p.health,
 			p.size_bytes, p.allocated_bytes, p.free_bytes, p.capacity_pct,
 			p.read_errors, p.write_errors, p.checksum_errors,
@@ -155,27 +155,27 @@ func GetZFSPoolListItems() ([]ZFSPoolListItem, error) {
 }
 
 // GetPoolsWithErrors returns pools that have errors
-func GetPoolsWithErrors() ([]ZFSPool, error) {
-	return queryPools(`
-		SELECT * FROM zfs_pools 
+func GetPoolsWithErrors(db *sql.DB) ([]ZFSPool, error) {
+	return queryPools(db, `
+		SELECT * FROM zfs_pools
 		WHERE read_errors > 0 OR write_errors > 0 OR checksum_errors > 0
 		ORDER BY hostname, pool_name
 	`)
 }
 
 // GetDegradedPools returns pools with non-ONLINE status
-func GetDegradedPools() ([]ZFSPool, error) {
-	return queryPools(`
-		SELECT * FROM zfs_pools 
+func GetDegradedPools(db *sql.DB) ([]ZFSPool, error) {
+	return queryPools(db, `
+		SELECT * FROM zfs_pools
 		WHERE health != 'ONLINE'
 		ORDER BY hostname, pool_name
 	`)
 }
 
 // GetPoolsNeedingScrub returns pools that haven't been scrubbed recently
-func GetPoolsNeedingScrub(daysSinceLastScrub int) ([]ZFSPoolListItem, error) {
-	rows, err := DB.Query(`
-		SELECT 
+func GetPoolsNeedingScrub(db *sql.DB, daysSinceLastScrub int) ([]ZFSPoolListItem, error) {
+	rows, err := db.Query(`
+		SELECT
 			p.id, p.hostname, p.pool_name, p.status, p.health,
 			p.size_bytes, p.allocated_bytes, p.free_bytes, p.capacity_pct,
 			p.read_errors, p.write_errors, p.checksum_errors,
@@ -184,8 +184,8 @@ func GetPoolsNeedingScrub(daysSinceLastScrub int) ([]ZFSPoolListItem, error) {
 			(SELECT MAX(start_time) FROM zfs_scrub_history s WHERE s.pool_id = p.id) as last_scrub
 		FROM zfs_pools p
 		WHERE NOT EXISTS (
-			SELECT 1 FROM zfs_scrub_history s 
-			WHERE s.pool_id = p.id 
+			SELECT 1 FROM zfs_scrub_history s
+			WHERE s.pool_id = p.id
 			AND s.start_time > datetime('now', ?)
 		)
 		ORDER BY p.hostname, p.pool_name

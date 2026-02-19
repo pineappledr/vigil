@@ -1,4 +1,4 @@
-package db
+package zfs
 
 import (
 	"database/sql"
@@ -10,11 +10,11 @@ import (
 
 // UpsertZFSPool inserts or updates a ZFS pool record
 // Uses SELECT + INSERT/UPDATE pattern for SQLite compatibility
-func UpsertZFSPool(pool *ZFSPool) (int64, error) {
-	now := NowString()
+func UpsertZFSPool(db *sql.DB, pool *ZFSPool) (int64, error) {
+	now := nowString()
 
 	// Check if pool exists
-	existingID, err := GetID(
+	existingID, err := getID(db,
 		"SELECT id FROM zfs_pools WHERE hostname = ? AND pool_name = ?",
 		pool.Hostname, pool.PoolName,
 	)
@@ -24,7 +24,7 @@ func UpsertZFSPool(pool *ZFSPool) (int64, error) {
 
 	if existingID == 0 {
 		// Insert new pool
-		result, err := DB.Exec(`
+		result, err := db.Exec(`
 			INSERT INTO zfs_pools (
 				hostname, pool_name, pool_guid, status, health,
 				size_bytes, allocated_bytes, free_bytes,
@@ -38,7 +38,7 @@ func UpsertZFSPool(pool *ZFSPool) (int64, error) {
 			pool.SizeBytes, pool.AllocatedBytes, pool.FreeBytes,
 			pool.Fragmentation, pool.CapacityPct, pool.DedupRatio, pool.Altroot,
 			pool.ReadErrors, pool.WriteErrors, pool.ChecksumErrors,
-			pool.ScanFunction, pool.ScanState, pool.ScanProgress, NullTimeString(pool.LastScanTime),
+			pool.ScanFunction, pool.ScanState, pool.ScanProgress, nullTimeString(pool.LastScanTime),
 			now, now,
 		)
 		if err != nil {
@@ -48,7 +48,7 @@ func UpsertZFSPool(pool *ZFSPool) (int64, error) {
 	}
 
 	// Update existing pool
-	_, err = DB.Exec(`
+	_, err = db.Exec(`
 		UPDATE zfs_pools SET
 			pool_guid = ?, status = ?, health = ?,
 			size_bytes = ?, allocated_bytes = ?, free_bytes = ?,
@@ -62,7 +62,7 @@ func UpsertZFSPool(pool *ZFSPool) (int64, error) {
 		pool.SizeBytes, pool.AllocatedBytes, pool.FreeBytes,
 		pool.Fragmentation, pool.CapacityPct, pool.DedupRatio, pool.Altroot,
 		pool.ReadErrors, pool.WriteErrors, pool.ChecksumErrors,
-		pool.ScanFunction, pool.ScanState, pool.ScanProgress, NullTimeString(pool.LastScanTime),
+		pool.ScanFunction, pool.ScanState, pool.ScanProgress, nullTimeString(pool.LastScanTime),
 		now, existingID,
 	)
 	if err != nil {
@@ -73,11 +73,11 @@ func UpsertZFSPool(pool *ZFSPool) (int64, error) {
 }
 
 // GetZFSPool retrieves a single ZFS pool by hostname and name
-func GetZFSPool(hostname, poolName string) (*ZFSPool, error) {
+func GetZFSPool(db *sql.DB, hostname, poolName string) (*ZFSPool, error) {
 	pool := &ZFSPool{}
 	var lastScanTime, lastSeen, createdAt sql.NullString
 
-	err := DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT id, hostname, pool_name, pool_guid, status, health,
 			size_bytes, allocated_bytes, free_bytes,
 			fragmentation, capacity_pct, dedup_ratio, altroot,
@@ -102,19 +102,19 @@ func GetZFSPool(hostname, poolName string) (*ZFSPool, error) {
 		return nil, fmt.Errorf("get ZFS pool: %w", err)
 	}
 
-	pool.LastScanTime = ParseNullTime(lastScanTime)
-	pool.LastSeen = ParseNullTime(lastSeen)
-	pool.CreatedAt = ParseNullTime(createdAt)
+	pool.LastScanTime = parseNullTime(lastScanTime)
+	pool.LastSeen = parseNullTime(lastSeen)
+	pool.CreatedAt = parseNullTime(createdAt)
 
 	return pool, nil
 }
 
 // GetZFSPoolByID retrieves a ZFS pool by ID
-func GetZFSPoolByID(id int64) (*ZFSPool, error) {
+func GetZFSPoolByID(db *sql.DB, id int64) (*ZFSPool, error) {
 	pool := &ZFSPool{}
 	var lastScanTime, lastSeen, createdAt sql.NullString
 
-	err := DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT id, hostname, pool_name, pool_guid, status, health,
 			size_bytes, allocated_bytes, free_bytes,
 			fragmentation, capacity_pct, dedup_ratio, altroot,
@@ -138,32 +138,32 @@ func GetZFSPoolByID(id int64) (*ZFSPool, error) {
 		return nil, fmt.Errorf("get ZFS pool by ID: %w", err)
 	}
 
-	pool.LastScanTime = ParseNullTime(lastScanTime)
-	pool.LastSeen = ParseNullTime(lastSeen)
-	pool.CreatedAt = ParseNullTime(createdAt)
+	pool.LastScanTime = parseNullTime(lastScanTime)
+	pool.LastSeen = parseNullTime(lastSeen)
+	pool.CreatedAt = parseNullTime(createdAt)
 
 	return pool, nil
 }
 
 // GetZFSPoolsByHostname retrieves all ZFS pools for a hostname
-func GetZFSPoolsByHostname(hostname string) ([]ZFSPool, error) {
-	return queryPools("SELECT * FROM zfs_pools WHERE hostname = ? ORDER BY pool_name", hostname)
+func GetZFSPoolsByHostname(db *sql.DB, hostname string) ([]ZFSPool, error) {
+	return queryPools(db, "SELECT * FROM zfs_pools WHERE hostname = ? ORDER BY pool_name", hostname)
 }
 
 // GetAllZFSPools retrieves all ZFS pools
-func GetAllZFSPools() ([]ZFSPool, error) {
-	return queryPools("SELECT * FROM zfs_pools ORDER BY hostname, pool_name")
+func GetAllZFSPools(db *sql.DB) ([]ZFSPool, error) {
+	return queryPools(db, "SELECT * FROM zfs_pools ORDER BY hostname, pool_name")
 }
 
 // DeleteZFSPool removes a ZFS pool (cascades to devices/scrub history)
-func DeleteZFSPool(hostname, poolName string) error {
-	_, err := DB.Exec("DELETE FROM zfs_pools WHERE hostname = ? AND pool_name = ?", hostname, poolName)
+func DeleteZFSPool(db *sql.DB, hostname, poolName string) error {
+	_, err := db.Exec("DELETE FROM zfs_pools WHERE hostname = ? AND pool_name = ?", hostname, poolName)
 	return err
 }
 
 // DeleteStaleZFSPools removes pools not seen since cutoff time
-func DeleteStaleZFSPools(hostname string, cutoff time.Time) (int64, error) {
-	result, err := DB.Exec(
+func DeleteStaleZFSPools(db *sql.DB, hostname string, cutoff time.Time) (int64, error) {
+	result, err := db.Exec(
 		"DELETE FROM zfs_pools WHERE hostname = ? AND last_seen < ?",
 		hostname, cutoff.Format(timeFormat),
 	)
@@ -175,8 +175,8 @@ func DeleteStaleZFSPools(hostname string, cutoff time.Time) (int64, error) {
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
-func queryPools(query string, args ...interface{}) ([]ZFSPool, error) {
-	rows, err := DB.Query(query, args...)
+func queryPools(db *sql.DB, query string, args ...interface{}) ([]ZFSPool, error) {
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query ZFS pools: %w", err)
 	}
@@ -204,9 +204,9 @@ func scanPools(rows *sql.Rows) ([]ZFSPool, error) {
 			return nil, fmt.Errorf("scan ZFS pool row: %w", err)
 		}
 
-		pool.LastScanTime = ParseNullTime(lastScanTime)
-		pool.LastSeen = ParseNullTime(lastSeen)
-		pool.CreatedAt = ParseNullTime(createdAt)
+		pool.LastScanTime = parseNullTime(lastScanTime)
+		pool.LastSeen = parseNullTime(lastSeen)
+		pool.CreatedAt = parseNullTime(createdAt)
 
 		pools = append(pools, pool)
 	}

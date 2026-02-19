@@ -1,4 +1,4 @@
-package db
+package zfs
 
 import (
 	"database/sql"
@@ -9,14 +9,14 @@ import (
 // ─── Scrub History Operations ────────────────────────────────────────────────
 
 // InsertZFSScrubHistory adds a new scrub/resilver history record
-func InsertZFSScrubHistory(record *ZFSScrubHistory) (int64, error) {
+func InsertZFSScrubHistory(db *sql.DB, record *ZFSScrubHistory) (int64, error) {
 	// CRITICAL: Validate start_time - use current time if not set (NOT NULL constraint)
 	startTime := record.StartTime
 	if startTime.IsZero() {
 		startTime = time.Now()
 	}
 
-	result, err := DB.Exec(`
+	result, err := db.Exec(`
 		INSERT INTO zfs_scrub_history (
 			pool_id, hostname, pool_name, scan_type, state,
 			start_time, end_time, duration_secs,
@@ -27,11 +27,11 @@ func InsertZFSScrubHistory(record *ZFSScrubHistory) (int64, error) {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		record.PoolID, record.Hostname, record.PoolName, record.ScanType, record.State,
-		startTime.Format(timeFormat), NullTimeString(record.EndTime), record.DurationSecs,
+		startTime.Format(timeFormat), nullTimeString(record.EndTime), record.DurationSecs,
 		record.DataExamined, record.DataTotal, record.ErrorsFound,
 		record.BytesRepaired, record.BlocksRepaired,
 		record.ProgressPct, record.RateBytesPerSec, record.TimeRemaining,
-		NowString(),
+		nowString(),
 	)
 
 	if err != nil {
@@ -42,12 +42,12 @@ func InsertZFSScrubHistory(record *ZFSScrubHistory) (int64, error) {
 }
 
 // GetZFSScrubHistory retrieves scrub history for a pool
-func GetZFSScrubHistory(poolID int64, limit int) ([]ZFSScrubHistory, error) {
+func GetZFSScrubHistory(db *sql.DB, poolID int64, limit int) ([]ZFSScrubHistory, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
-	rows, err := DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, pool_id, hostname, pool_name, scan_type, state,
 			start_time, end_time, duration_secs,
 			data_examined, data_total, errors_found,
@@ -68,8 +68,8 @@ func GetZFSScrubHistory(poolID int64, limit int) ([]ZFSScrubHistory, error) {
 }
 
 // GetLastScrub retrieves the most recent scrub for a pool
-func GetLastScrub(poolID int64) (*ZFSScrubHistory, error) {
-	history, err := GetZFSScrubHistory(poolID, 1)
+func GetLastScrub(db *sql.DB, poolID int64) (*ZFSScrubHistory, error) {
+	history, err := GetZFSScrubHistory(db, poolID, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -80,12 +80,12 @@ func GetLastScrub(poolID int64) (*ZFSScrubHistory, error) {
 }
 
 // GetScrubHistoryByHostname retrieves scrub history for all pools on a host
-func GetScrubHistoryByHostname(hostname string, limit int) ([]ZFSScrubHistory, error) {
+func GetScrubHistoryByHostname(db *sql.DB, hostname string, limit int) ([]ZFSScrubHistory, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 
-	rows, err := DB.Query(`
+	rows, err := db.Query(`
 		SELECT id, pool_id, hostname, pool_name, scan_type, state,
 			start_time, end_time, duration_secs,
 			data_examined, data_total, errors_found,
@@ -106,21 +106,21 @@ func GetScrubHistoryByHostname(hostname string, limit int) ([]ZFSScrubHistory, e
 }
 
 // ScrubRecordExists checks if a scrub record already exists
-func ScrubRecordExists(poolID int64, startTime time.Time) (bool, error) {
+func ScrubRecordExists(db *sql.DB, poolID int64, startTime time.Time) (bool, error) {
 	if startTime.IsZero() {
 		return false, nil
 	}
 
-	return ExistsQuery(
+	return existsQuery(db,
 		"SELECT 1 FROM zfs_scrub_history WHERE pool_id = ? AND start_time = ?",
 		poolID, startTime.Format(timeFormat),
 	)
 }
 
 // DeleteOldScrubHistory removes scrub records older than retention period
-func DeleteOldScrubHistory(retentionDays int) (int64, error) {
+func DeleteOldScrubHistory(db *sql.DB, retentionDays int) (int64, error) {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
-	result, err := DB.Exec(
+	result, err := db.Exec(
 		"DELETE FROM zfs_scrub_history WHERE start_time < ?",
 		cutoff.Format(timeFormat),
 	)
@@ -151,9 +151,9 @@ func scanScrubHistory(rows *sql.Rows) ([]ZFSScrubHistory, error) {
 			return nil, fmt.Errorf("scan scrub history row: %w", err)
 		}
 
-		rec.StartTime = ParseNullTime(startTime)
-		rec.EndTime = ParseNullTime(endTime)
-		rec.CreatedAt = ParseNullTime(createdAt)
+		rec.StartTime = parseNullTime(startTime)
+		rec.EndTime = parseNullTime(endTime)
+		rec.CreatedAt = parseNullTime(createdAt)
 
 		history = append(history, rec)
 	}

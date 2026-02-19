@@ -1,4 +1,4 @@
-package db
+package zfs
 
 import (
 	"database/sql"
@@ -10,11 +10,11 @@ import (
 // ─── Device Operations ───────────────────────────────────────────────────────
 
 // UpsertZFSPoolDevice inserts or updates a ZFS device
-func UpsertZFSPoolDevice(poolID int64, device *ZFSPoolDevice) error {
+func UpsertZFSPoolDevice(db *sql.DB, poolID int64, device *ZFSPoolDevice) error {
 	device.PoolID = poolID
 	device.LastSeen = time.Now()
 
-	existingID, err := GetID(
+	existingID, err := getID(db,
 		"SELECT id FROM zfs_pool_devices WHERE pool_id = ? AND device_name = ?",
 		poolID, device.DeviceName,
 	)
@@ -24,7 +24,7 @@ func UpsertZFSPoolDevice(poolID int64, device *ZFSPoolDevice) error {
 
 	if existingID == 0 {
 		device.CreatedAt = time.Now()
-		result, err := DB.Exec(`
+		result, err := db.Exec(`
 			INSERT INTO zfs_pool_devices (
 				pool_id, hostname, pool_name, device_name, device_path, device_guid,
 				serial_number, vdev_type, vdev_parent, vdev_index, state,
@@ -44,7 +44,7 @@ func UpsertZFSPoolDevice(poolID int64, device *ZFSPoolDevice) error {
 		}
 		device.ID, _ = result.LastInsertId()
 	} else {
-		_, err := DB.Exec(`
+		_, err := db.Exec(`
 			UPDATE zfs_pool_devices SET
 				hostname = ?, pool_name = ?, device_path = ?, device_guid = ?,
 				serial_number = ?, vdev_type = ?, vdev_parent = ?, vdev_index = ?,
@@ -69,8 +69,8 @@ func UpsertZFSPoolDevice(poolID int64, device *ZFSPoolDevice) error {
 }
 
 // GetZFSPoolDevices returns all devices for a pool
-func GetZFSPoolDevices(poolID int64) ([]ZFSPoolDevice, error) {
-	rows, err := DB.Query(`
+func GetZFSPoolDevices(db *sql.DB, poolID int64) ([]ZFSPoolDevice, error) {
+	rows, err := db.Query(`
 		SELECT id, pool_id, hostname, pool_name, device_name, device_path, device_guid,
 			   serial_number, vdev_type, vdev_parent, vdev_index, state,
 			   read_errors, write_errors, checksum_errors, size_bytes, allocated_bytes,
@@ -103,9 +103,9 @@ func GetZFSPoolDevices(poolID int64) ([]ZFSPoolDevice, error) {
 }
 
 // CountZFSDevices returns total device count for a pool
-func CountZFSDevices(poolID int64) (int, error) {
+func CountZFSDevices(db *sql.DB, poolID int64) (int, error) {
 	var count int
-	err := DB.QueryRow(
+	err := db.QueryRow(
 		"SELECT COUNT(*) FROM zfs_pool_devices WHERE pool_id = ?",
 		poolID,
 	).Scan(&count)
@@ -117,17 +117,17 @@ func CountZFSDevices(poolID int64) (int, error) {
 // 1. vdev_parent + vdev_index (same position = same physical disk)
 // 2. Base device name (mmcblk0p3 -> mmcblk0, sda2 -> sda)
 // This handles GUID/device name duplicates AND partition duplicates
-func CountZFSDisks(poolID int64) (int, error) {
+func CountZFSDisks(db *sql.DB, poolID int64) (int, error) {
 	// First try position-based counting (for mirrors/raidz with vdev_parent)
 	var countByPosition int
-	err := DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT COUNT(DISTINCT vdev_parent || ':' || vdev_index)
-		FROM zfs_pool_devices 
-		WHERE pool_id = ? 
+		FROM zfs_pool_devices
+		WHERE pool_id = ?
 		AND vdev_type = 'disk'
 		AND vdev_parent != ''
-		AND is_spare = 0 
-		AND is_log = 0 
+		AND is_spare = 0
+		AND is_log = 0
 		AND is_cache = 0`,
 		poolID,
 	).Scan(&countByPosition)
@@ -140,18 +140,18 @@ func CountZFSDisks(poolID int64) (int, error) {
 	// This groups mmcblk0p1, mmcblk0p2, mmcblk0p3 as one device
 	// And sda1, sda2 as one device
 	var countByName int
-	err = DB.QueryRow(`
-		SELECT COUNT(DISTINCT 
-			CASE 
+	err = db.QueryRow(`
+		SELECT COUNT(DISTINCT
+			CASE
 				-- Handle mmcblk devices: mmcblk0p3 -> mmcblk0
-				WHEN device_name LIKE 'mmcblk%' THEN 
-					SUBSTR(device_name, 1, INSTR(device_name || 'p', 'p') + 
-						CASE WHEN INSTR(SUBSTR(device_name, INSTR(device_name, 'mmcblk') + 6), 'p') > 0 
+				WHEN device_name LIKE 'mmcblk%' THEN
+					SUBSTR(device_name, 1, INSTR(device_name || 'p', 'p') +
+						CASE WHEN INSTR(SUBSTR(device_name, INSTR(device_name, 'mmcblk') + 6), 'p') > 0
 						THEN INSTR(SUBSTR(device_name, INSTR(device_name, 'mmcblk') + 6), 'p') + 5
 						ELSE LENGTH(device_name) END)
 				-- Handle nvme devices: nvme0n1p1 -> nvme0n1
 				WHEN device_name LIKE 'nvme%' THEN
-					CASE WHEN INSTR(device_name, 'p') > 0 
+					CASE WHEN INSTR(device_name, 'p') > 0
 					THEN SUBSTR(device_name, 1, INSTR(device_name, 'n1p') + 1)
 					ELSE device_name END
 				-- Handle sd/hd devices: sda2 -> sda
@@ -161,11 +161,11 @@ func CountZFSDisks(poolID int64) (int, error) {
 				ELSE device_name
 			END
 		)
-		FROM zfs_pool_devices 
-		WHERE pool_id = ? 
+		FROM zfs_pool_devices
+		WHERE pool_id = ?
 		AND vdev_type = 'disk'
-		AND is_spare = 0 
-		AND is_log = 0 
+		AND is_spare = 0
+		AND is_log = 0
 		AND is_cache = 0`,
 		poolID,
 	).Scan(&countByName)
@@ -178,9 +178,9 @@ func CountZFSDisks(poolID int64) (int, error) {
 }
 
 // GetZFSDeviceBySerial finds a device by its serial number
-func GetZFSDeviceBySerial(hostname, serial string) (*ZFSPoolDevice, error) {
+func GetZFSDeviceBySerial(db *sql.DB, hostname, serial string) (*ZFSPoolDevice, error) {
 	var d ZFSPoolDevice
-	err := DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT id, pool_id, hostname, pool_name, device_name, device_path, device_guid,
 			   serial_number, vdev_type, vdev_parent, vdev_index, state,
 			   read_errors, write_errors, checksum_errors, size_bytes, allocated_bytes,
@@ -208,9 +208,9 @@ func GetZFSDeviceBySerial(hostname, serial string) (*ZFSPoolDevice, error) {
 }
 
 // GetZFSDeviceByPath finds a device by its path
-func GetZFSDeviceByPath(hostname, devicePath string) (*ZFSPoolDevice, error) {
+func GetZFSDeviceByPath(db *sql.DB, hostname, devicePath string) (*ZFSPoolDevice, error) {
 	var d ZFSPoolDevice
-	err := DB.QueryRow(`
+	err := db.QueryRow(`
 		SELECT id, pool_id, hostname, pool_name, device_name, device_path, device_guid,
 			   serial_number, vdev_type, vdev_parent, vdev_index, state,
 			   read_errors, write_errors, checksum_errors, size_bytes, allocated_bytes,
@@ -238,8 +238,8 @@ func GetZFSDeviceByPath(hostname, devicePath string) (*ZFSPoolDevice, error) {
 }
 
 // DeleteStaleZFSDevices removes devices not seen since cutoff
-func DeleteStaleZFSDevices(poolID int64, cutoff time.Time) (int64, error) {
-	result, err := DB.Exec(
+func DeleteStaleZFSDevices(db *sql.DB, poolID int64, cutoff time.Time) (int64, error) {
+	result, err := db.Exec(
 		"DELETE FROM zfs_pool_devices WHERE pool_id = ? AND last_seen < ?",
 		poolID, cutoff,
 	)
@@ -250,14 +250,14 @@ func DeleteStaleZFSDevices(poolID int64, cutoff time.Time) (int64, error) {
 }
 
 // DeleteZFSPoolDevices removes all devices for a pool
-func DeleteZFSPoolDevices(poolID int64) error {
-	_, err := DB.Exec("DELETE FROM zfs_pool_devices WHERE pool_id = ?", poolID)
+func DeleteZFSPoolDevices(db *sql.DB, poolID int64) error {
+	_, err := db.Exec("DELETE FROM zfs_pool_devices WHERE pool_id = ?", poolID)
 	return err
 }
 
 // GetDevicesWithErrors returns devices that have errors
-func GetDevicesWithErrors(poolID int64) ([]ZFSPoolDevice, error) {
-	rows, err := DB.Query(`
+func GetDevicesWithErrors(db *sql.DB, poolID int64) ([]ZFSPoolDevice, error) {
+	rows, err := db.Query(`
 		SELECT id, pool_id, hostname, pool_name, device_name, device_path, device_guid,
 			   serial_number, vdev_type, vdev_parent, vdev_index, state,
 			   read_errors, write_errors, checksum_errors, size_bytes, allocated_bytes,

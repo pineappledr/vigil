@@ -1,6 +1,7 @@
-package db
+package zfs
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -79,7 +80,7 @@ type ZFSAgentDevice struct {
 // ─── Report Processing ───────────────────────────────────────────────────────
 
 // ProcessZFSReport handles incoming ZFS data from an agent report
-func ProcessZFSReport(hostname string, zfsData json.RawMessage) error {
+func ProcessZFSReport(db *sql.DB, hostname string, zfsData json.RawMessage) error {
 	if len(zfsData) == 0 || string(zfsData) == "null" {
 		return nil
 	}
@@ -94,7 +95,7 @@ func ProcessZFSReport(hostname string, zfsData json.RawMessage) error {
 	}
 
 	for _, pool := range report.Pools {
-		if err := processPool(hostname, pool); err != nil {
+		if err := processPool(db, hostname, pool); err != nil {
 			log.Printf("⚠️  Failed to process pool %s: %v", pool.Name, err)
 		}
 	}
@@ -103,7 +104,7 @@ func ProcessZFSReport(hostname string, zfsData json.RawMessage) error {
 }
 
 // processPool handles a single pool from the agent report
-func processPool(hostname string, pool ZFSAgentPool) error {
+func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) error {
 	// Build pool record
 	dbPool := &ZFSPool{
 		Hostname:       hostname,
@@ -134,7 +135,7 @@ func processPool(hostname string, pool ZFSAgentPool) error {
 	}
 
 	// Upsert pool
-	poolID, err := UpsertZFSPool(dbPool)
+	poolID, err := UpsertZFSPool(db, dbPool)
 	if err != nil {
 		return fmt.Errorf("upsert pool: %w", err)
 	}
@@ -142,12 +143,12 @@ func processPool(hostname string, pool ZFSAgentPool) error {
 	// Process devices - including children (disks inside mirrors/raidz)
 	vdevIndex := 0
 	for _, dev := range pool.Devices {
-		processDeviceRecursive(poolID, hostname, pool.Name, dev, "", &vdevIndex)
+		processDeviceRecursive(db, poolID, hostname, pool.Name, dev, "", &vdevIndex)
 	}
 
 	// Record scrub history if applicable
 	if pool.Scan != nil {
-		processScrubHistory(poolID, hostname, pool.Name, pool.Scan)
+		processScrubHistory(db, poolID, hostname, pool.Name, pool.Scan)
 	}
 
 	return nil
@@ -155,7 +156,7 @@ func processPool(hostname string, pool ZFSAgentPool) error {
 
 // processDeviceRecursive processes a device and all its children
 // This flattens the hierarchy while maintaining parent-child relationships via VdevParent
-func processDeviceRecursive(poolID int64, hostname, poolName string, dev ZFSAgentDevice, parentName string, index *int) {
+func processDeviceRecursive(db *sql.DB, poolID int64, hostname, poolName string, dev ZFSAgentDevice, parentName string, index *int) {
 	// Determine parent
 	vdevParent := dev.VdevParent
 	if vdevParent == "" && parentName != "" {
@@ -186,7 +187,7 @@ func processDeviceRecursive(poolID int64, hostname, poolName string, dev ZFSAgen
 		IsReplacing:    dev.IsReplacing,
 	}
 
-	if err := UpsertZFSPoolDevice(poolID, dbDevice); err != nil {
+	if err := UpsertZFSPoolDevice(db, poolID, dbDevice); err != nil {
 		log.Printf("⚠️  Failed to upsert ZFS device %s: %v", dev.Name, err)
 	} else {
 		log.Printf("✅ Processed ZFS device: %s (type=%s, parent=%s, serial=%s)",
@@ -200,18 +201,18 @@ func processDeviceRecursive(poolID int64, hostname, poolName string, dev ZFSAgen
 		// Child's parent is this device
 		child.VdevParent = dev.Name
 		child.VdevIndex = childIdx
-		processDeviceRecursive(poolID, hostname, poolName, child, dev.Name, index)
+		processDeviceRecursive(db, poolID, hostname, poolName, child, dev.Name, index)
 	}
 }
 
 // processScrubHistory records scrub history if needed
-func processScrubHistory(poolID int64, hostname, poolName string, scan *ZFSAgentScan) {
+func processScrubHistory(db *sql.DB, poolID int64, hostname, poolName string, scan *ZFSAgentScan) {
 	if scan.Function == "" || scan.Function == "none" {
 		return
 	}
 
 	// Check if we should record this scrub
-	lastScrub, _ := GetLastScrub(poolID)
+	lastScrub, _ := GetLastScrub(db, poolID)
 	shouldRecord := shouldRecordScrub(lastScrub, scan)
 
 	if !shouldRecord {
@@ -236,7 +237,7 @@ func processScrubHistory(poolID int64, hostname, poolName string, scan *ZFSAgent
 		TimeRemaining:   scan.TimeRemaining,
 	}
 
-	if _, err := InsertZFSScrubHistory(record); err != nil {
+	if _, err := InsertZFSScrubHistory(db, record); err != nil {
 		log.Printf("⚠️  Failed to insert scrub history: %v", err)
 	}
 }
@@ -264,17 +265,17 @@ func shouldRecordScrub(lastScrub *ZFSScrubHistory, scan *ZFSAgentScan) bool {
 // ─── Batch Operations ────────────────────────────────────────────────────────
 
 // CleanupStaleZFSData removes old ZFS data not seen in the specified duration
-func CleanupStaleZFSData(hostname string, staleDuration time.Duration) error {
+func CleanupStaleZFSData(db *sql.DB, hostname string, staleDuration time.Duration) error {
 	cutoff := time.Now().Add(-staleDuration)
 
 	// Get pools to check for stale devices
-	pools, err := GetZFSPoolsByHostname(hostname)
+	pools, err := GetZFSPoolsByHostname(db, hostname)
 	if err != nil {
 		return err
 	}
 
 	for _, pool := range pools {
-		if deleted, err := DeleteStaleZFSDevices(pool.ID, cutoff); err != nil {
+		if deleted, err := DeleteStaleZFSDevices(db, pool.ID, cutoff); err != nil {
 			log.Printf("⚠️  Failed to cleanup stale devices for pool %s: %v", pool.PoolName, err)
 		} else if deleted > 0 {
 			log.Printf("🧹 Removed %d stale devices from pool %s", deleted, pool.PoolName)
@@ -282,7 +283,7 @@ func CleanupStaleZFSData(hostname string, staleDuration time.Duration) error {
 	}
 
 	// Remove stale pools
-	if deleted, err := DeleteStaleZFSPools(hostname, cutoff); err != nil {
+	if deleted, err := DeleteStaleZFSPools(db, hostname, cutoff); err != nil {
 		return fmt.Errorf("cleanup stale pools: %w", err)
 	} else if deleted > 0 {
 		log.Printf("🧹 Removed %d stale pools from host %s", deleted, hostname)
