@@ -193,18 +193,27 @@ volumes:
 ### Agent: Systemd Service (Recommended)
 
 ```bash
-# 1. Register the agent first (one-time setup)
-sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token YOUR_REGISTRATION_TOKEN
+# Install dependencies (Debian/Ubuntu)
+sudo apt update && sudo apt install -y smartmontools nvme-cli zfsutils-linux
 
-# 2. Create service file
+# Download and install vigil-agent
+curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent \
+  && chmod +x /tmp/vigil-agent \
+  && sudo mv /tmp/vigil-agent /usr/local/bin/
+
+# Register agent with server
+sudo vigil-agent --register --server http://YOUR_SERVER_IP:9080 --token YOUR_REGISTRATION_TOKEN --hostname my-server
+
+# Create systemd service
 sudo tee /etc/systemd/system/vigil-agent.service > /dev/null <<EOF
 [Unit]
 Description=Vigil Monitoring Agent
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
+ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:9080 --hostname my-server --interval 60
 Restart=always
 RestartSec=10
 
@@ -212,10 +221,8 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# 3. Enable and start
-sudo systemctl daemon-reload
-sudo systemctl enable vigil-agent
-sudo systemctl start vigil-agent
+# Enable and start the service
+sudo systemctl daemon-reload && sudo systemctl enable --now vigil-agent
 ```
 
 ### Agent: Docker (Standard Linux)

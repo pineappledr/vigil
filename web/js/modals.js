@@ -506,13 +506,36 @@ volumes:
             fedora: 'sudo dnf install -y smartmontools nvme-cli zfs',
             arch: 'sudo pacman -S --noconfirm smartmontools nvme-cli zfs-utils'
         };
-        return `curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent && chmod +x /tmp/vigil-agent && sudo mv /tmp/vigil-agent /usr/local/bin/ && sudo vigil-agent --server ${serverURL} --register --token ${token} --hostname ${name}
+        return `# Install dependencies
+${deps[platform] || deps.debian}
 
-# Prerequisites (if not already installed):
-# ${deps[platform] || deps.debian}
+# Download and install vigil-agent
+curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent \\
+  && chmod +x /tmp/vigil-agent \\
+  && sudo mv /tmp/vigil-agent /usr/local/bin/
 
-# After registration, set up as a systemd service:
-# sudo vigil-agent --server ${serverURL} --interval 60`;
+# Register agent with server
+sudo vigil-agent --register --server ${serverURL} --token ${token} --hostname ${name}
+
+# Create systemd service
+sudo tee /etc/systemd/system/vigil-agent.service > /dev/null <<EOF
+[Unit]
+Description=Vigil Monitoring Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vigil-agent --server ${serverURL} --hostname ${name} --interval 60
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start the service
+sudo systemctl daemon-reload && sudo systemctl enable --now vigil-agent`;
     },
 
     _copyToClipboard(text, onSuccess) {
