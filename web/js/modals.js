@@ -261,6 +261,185 @@ const Modals = {
         }
     },
 
+    // ─── Add Agent Modal ────────────────────────────────────────────────────
+
+    async showAddAgent() {
+        let serverPubKey = '';
+        try {
+            const resp = await API.getServerPubKey();
+            const data = await resp.json();
+            serverPubKey = data.public_key || '';
+        } catch (e) {
+            console.error('Failed to fetch server public key:', e);
+        }
+
+        let token = '';
+        try {
+            const resp = await API.createRegistrationToken('');
+            const data = await resp.json();
+            token = data.token || '';
+        } catch (e) {
+            console.error('Failed to create registration token:', e);
+        }
+
+        const serverURL = window.location.origin;
+
+        const modal = this.create(`
+            <div class="modal modal-add-agent">
+                <div class="modal-header">
+                    <h3>Add System</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body" style="padding-bottom: 0;">
+                    <div class="agent-tab-bar">
+                        <button class="agent-tab active" data-tab="docker" onclick="Modals.switchAgentTab('docker')">Docker</button>
+                        <button class="agent-tab" data-tab="binary" onclick="Modals.switchAgentTab('binary')">Binary</button>
+                    </div>
+                    <p class="agent-tab-hint" id="agent-tab-hint">
+                        Copy the <code>docker-compose.yml</code> content for the agent below, or register agents automatically with a <strong>universal token</strong>.
+                    </p>
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="agent-name" class="form-input" placeholder="my-server-01">
+                    </div>
+                    <div class="form-group">
+                        <label>Host / IP</label>
+                        <input type="text" id="agent-host" class="form-input" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label>Public Key</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="agent-pubkey" class="form-input form-input-mono" value="${serverPubKey}" readonly>
+                            <button class="btn-copy" onclick="Modals.copyField('agent-pubkey')" title="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Token</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="agent-token" class="form-input form-input-mono" value="${token}" readonly>
+                            <button class="btn-copy" onclick="Modals.copyField('agent-token')" title="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="agent-error" class="form-error"></div>
+                </div>
+                <div class="modal-footer agent-modal-footer">
+                    <div class="agent-copy-group">
+                        <button class="btn btn-secondary btn-with-icon" id="agent-copy-btn" onclick="Modals.copyAgentInstall()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                            </svg>
+                            <span id="agent-copy-label">Copy docker compose</span>
+                        </button>
+                    </div>
+                    <button class="btn btn-primary" onclick="Modals.submitAddAgent()">Add system</button>
+                </div>
+            </div>
+        `);
+
+        modal._agentState = { tab: 'docker', serverURL, serverPubKey, token };
+        document.getElementById('agent-name').focus();
+    },
+
+    switchAgentTab(tab) {
+        document.querySelectorAll('.agent-tab').forEach(el => {
+            el.classList.toggle('active', el.dataset.tab === tab);
+        });
+        const hint = document.getElementById('agent-tab-hint');
+        const label = document.getElementById('agent-copy-label');
+        if (tab === 'docker') {
+            hint.innerHTML = 'Copy the <code>docker-compose.yml</code> content for the agent below, or register agents automatically with a <strong>universal token</strong>.';
+            label.textContent = 'Copy docker compose';
+        } else {
+            hint.innerHTML = 'Copy the installation command for the agent below, or register agents automatically with a <strong>universal token</strong>.';
+            label.textContent = 'Copy Linux command';
+        }
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay?._agentState) overlay._agentState.tab = tab;
+    },
+
+    copyField(inputId) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        navigator.clipboard.writeText(input.value).then(() => {
+            const btn = input.parentElement.querySelector('.btn-copy');
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
+                setTimeout(() => { btn.innerHTML = orig; }, 2000);
+            }
+        });
+    },
+
+    copyAgentInstall() {
+        const overlay = document.querySelector('.modal-overlay');
+        const st = overlay?._agentState;
+        if (!st) return;
+
+        const name = document.getElementById('agent-name')?.value.trim() || 'vigil-agent';
+        const token = document.getElementById('agent-token')?.value || '';
+        let text;
+
+        if (st.tab === 'docker') {
+            text = `# Vigil Agent - docker-compose.yml
+services:
+  vigil-agent:
+    image: ghcr.io/pineappledr/vigil-agent:latest
+    container_name: vigil-agent
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - SERVER_URL=${st.serverURL}
+      - TOKEN=${token}
+      - HOSTNAME=${name}
+    volumes:
+      - /dev:/dev:ro
+      - vigil-agent-data:/data
+
+volumes:
+  vigil-agent-data:`;
+        } else {
+            text = `# Install and register Vigil Agent
+curl -fsSL ${st.serverURL}/install.sh | sh
+vigil-agent --register \\
+  --server ${st.serverURL} \\
+  --token ${token} \\
+  --hostname ${name}`;
+        }
+
+        navigator.clipboard.writeText(text).then(() => {
+            const label = document.getElementById('agent-copy-label');
+            if (label) {
+                const orig = label.textContent;
+                label.textContent = 'Copied!';
+                setTimeout(() => { label.textContent = orig; }, 2000);
+            }
+        });
+    },
+
+    async submitAddAgent() {
+        const name = document.getElementById('agent-name')?.value.trim();
+        const errorEl = document.getElementById('agent-error');
+        if (!name) {
+            if (errorEl) errorEl.textContent = 'Name is required';
+            return;
+        }
+        document.querySelector('.modal-overlay')?.remove();
+        if (typeof Agents !== 'undefined' && Agents.render) Agents.render();
+    },
+
     validatePassword(newPassword, confirmPassword, currentPassword = null) {
         if (newPassword !== confirmPassword) {
             return 'New passwords do not match';

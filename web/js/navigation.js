@@ -178,6 +178,30 @@ const Navigation = {
         Renderer.filteredDrives(filterFns[filter] || (() => true), filter);
     },
 
+    showAgents() {
+        console.log('[Nav] showAgents');
+
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = null;
+        State.activeView = 'agents';
+
+        document.getElementById('dashboard-view')?.classList.remove('hidden');
+        document.getElementById('details-view')?.classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
+
+        document.getElementById('page-title').textContent = 'Agents';
+        document.getElementById('breadcrumbs')?.classList.add('hidden');
+
+        this._clearNavSelection();
+        const navAgents = document.getElementById('nav-agents');
+        if (navAgents) navAgents.classList.add('active');
+
+        if (typeof Agents !== 'undefined' && Agents.render) {
+            Agents.render();
+        }
+    },
+
     showSettings() {
         console.log('[Nav] showSettings');
         

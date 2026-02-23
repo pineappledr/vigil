@@ -127,5 +127,35 @@ const API = {
      */
     async getZFSDriveInfo(hostname, serial) {
         return this.get(`/api/zfs/drive/${encodeURIComponent(hostname)}/${encodeURIComponent(serial)}`);
+    },
+
+    // ─── Agent Management ─────────────────────────────────────────────────────
+
+    async delete(endpoint) {
+        return fetch(endpoint, { method: 'DELETE' });
+    },
+
+    async getServerPubKey() {
+        return this.get('/api/v1/server/pubkey');
+    },
+
+    async getAgents() {
+        return this.get('/api/v1/agents');
+    },
+
+    async deleteAgent(id) {
+        return this.delete(`/api/v1/agents/${id}`);
+    },
+
+    async createRegistrationToken(name) {
+        return this.post('/api/v1/tokens', { name });
+    },
+
+    async getRegistrationTokens() {
+        return this.get('/api/v1/tokens');
+    },
+
+    async deleteRegistrationToken(id) {
+        return this.delete(`/api/v1/tokens/${id}`);
     }
 };
