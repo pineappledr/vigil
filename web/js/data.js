@@ -109,7 +109,7 @@ const Data = {
                      onclick="navShowServer(${sortedIdx})"
                      title="${isOffline ? 'Offline' : 'Online'}">
                     <span class="status-indicator ${statusClass}"></span>
-                    <span class="server-name">${server.hostname}</span>
+                    <span class="server-name">${Utils.escapeHtml(server.hostname)}</span>
                     ${isOffline ? '<span class="offline-badge">OFFLINE</span>' : ''}
                 </div>
             `;
@@ -176,11 +176,11 @@ const Data = {
 
                         return `
                             <div class="server-nav-item ${statusClass}"
-                                 onclick="navShowZFSPool('${hostname}', '${poolName}')"
-                                 title="${hostname} - ${poolName}">
+                                 onclick="navShowZFSPool('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')"
+                                 title="${Utils.escapeHtml(hostname)} - ${Utils.escapeHtml(poolName)}">
                                 <span class="status-indicator ${statusClass}"></span>
-                                <span class="server-name">${poolName}</span>
-                                <span class="pool-host-label">${hostname}</span>
+                                <span class="server-name">${Utils.escapeHtml(poolName)}</span>
+                                <span class="pool-host-label">${Utils.escapeHtml(hostname)}</span>
                             </div>
                         `;
                     });

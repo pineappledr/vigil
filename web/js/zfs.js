@@ -108,7 +108,7 @@ const ZFS = {
                 <div class="zfs-host-header">
                     <div class="zfs-host-title">
                         ${this.icons.server}
-                        <span>${hostname}</span>
+                        <span>${Utils.escapeHtml(hostname)}</span>
                         <span class="zfs-host-count">${pools.length} pool${pools.length !== 1 ? 's' : ''}</span>
                     </div>
                 </div>
@@ -137,11 +137,11 @@ const ZFS = {
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
 
         return `
-            <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${hostname}', '${poolName}')">
+            <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
                 <div class="zfs-pool-header">
                     <div class="zfs-pool-status">
                         <span class="zfs-status-dot ${stateClass}"></span>
-                        <span class="zfs-pool-name">${poolName}</span>
+                        <span class="zfs-pool-name">${Utils.escapeHtml(poolName)}</span>
                     </div>
                     <span class="zfs-state-badge ${stateClass}">${state}</span>
                 </div>

@@ -80,6 +80,18 @@ const Utils = {
 
     escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/'/g, "\\'");
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    },
+
+    escapeJSString(str) {
+        if (!str) return '';
+        return str
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r');
     }
 };

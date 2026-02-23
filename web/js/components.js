@@ -47,7 +47,7 @@ const Components = {
                             <line x1="14" y1="12" x2="18" y2="12"/>
                         </svg>
                     </div>
-                    <button class="alias-btn" onclick="event.stopPropagation(); Modals.showAlias('${hostname}', '${serial}', '${Utils.escapeHtml(alias)}', '${Utils.escapeHtml(driveName)}')" title="Set alias">
+                    <button class="alias-btn" onclick="event.stopPropagation(); Modals.showAlias('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(serial)}', '${Utils.escapeJSString(alias)}', '${Utils.escapeJSString(driveName)}')" title="Set alias">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -58,8 +58,8 @@ const Components = {
                     </span>
                 </div>
                 <div class="drive-card-body">
-                    <div class="drive-card-model">${driveName}</div>
-                    <div class="drive-card-serial">${serial || 'N/A'}</div>
+                    <div class="drive-card-model">${Utils.escapeHtml(driveName)}</div>
+                    <div class="drive-card-serial">${Utils.escapeHtml(serial) || 'N/A'}</div>
                 </div>
                 ${zfsBadge}
                 <div class="drive-card-stats">
@@ -90,8 +90,8 @@ const Components = {
         
         return `
             <div class="drive-card-zfs-badge ${stateClass}" 
-                 onclick="event.stopPropagation(); ZFS.showPoolDetail('${hostname}', '${zfsInfo.poolName}')"
-                 title="ZFS Pool: ${zfsInfo.poolName} (${zfsInfo.poolState})${zfsInfo.vdev ? ' - ' + zfsInfo.vdev : ''}">
+                 onclick="event.stopPropagation(); ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(zfsInfo.poolName)}')"
+                 title="ZFS Pool: ${Utils.escapeHtml(zfsInfo.poolName)} (${Utils.escapeHtml(zfsInfo.poolState)})${zfsInfo.vdev ? ' - ' + Utils.escapeHtml(zfsInfo.vdev) : ''}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="zfs-badge-icon">
                     <path d="M4 6h16M4 12h16M4 18h16"/>
                     <circle cx="7" cy="6" r="1" fill="currentColor"/>

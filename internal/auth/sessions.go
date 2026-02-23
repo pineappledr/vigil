@@ -5,16 +5,45 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"vigil/internal/db"
 	"vigil/internal/models"
 )
 
-// HashPassword creates a SHA256 hash of the password
-func HashPassword(password string) string {
-	hash := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(hash[:])
+// HashPassword creates a bcrypt hash of the password
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hash), err
+}
+
+// CheckPassword verifies a password against a stored hash.
+// Supports both bcrypt and legacy SHA256 hashes (auto-upgrades on match).
+func CheckPassword(userID int, storedHash, password string) bool {
+	if isBcryptHash(storedHash) {
+		return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
+	}
+
+	// Legacy SHA256 comparison
+	legacyHash := sha256.Sum256([]byte(password))
+	if hex.EncodeToString(legacyHash[:]) != storedHash {
+		return false
+	}
+
+	// Auto-upgrade to bcrypt
+	newHash, err := HashPassword(password)
+	if err == nil {
+		db.DB.Exec("UPDATE users SET password_hash = ? WHERE id = ?", newHash, userID)
+		log.Printf("🔐 Upgraded password hash to bcrypt for user %d", userID)
+	}
+	return true
+}
+
+func isBcryptHash(hash string) bool {
+	return strings.HasPrefix(hash, "$2a$") || strings.HasPrefix(hash, "$2b$")
 }
 
 // GenerateToken creates a secure random token
@@ -89,9 +118,15 @@ func CreateDefaultAdmin(config models.Config) {
 		mustChange = 0
 	}
 
-	_, err := db.DB.Exec(
+	hash, err := HashPassword(password)
+	if err != nil {
+		log.Printf("⚠️  Could not hash admin password: %v", err)
+		return
+	}
+
+	_, err = db.DB.Exec(
 		"INSERT INTO users (username, password_hash, must_change_password) VALUES (?, ?, ?)",
-		config.AdminUser, HashPassword(password), mustChange,
+		config.AdminUser, hash, mustChange,
 	)
 	if err != nil {
 		log.Printf("⚠️  Could not create admin user: %v", err)

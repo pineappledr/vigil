@@ -430,11 +430,11 @@ const Temperature = {
             const criticalCount = drives.filter(d => d.status === 'critical').length;
 
             return `
-                <div class="temp-server-group" data-hostname="${hostname}">
-                    <div class="temp-server-header" onclick="Temperature.toggleServerGroup('${hostname}')">
+                <div class="temp-server-group" data-hostname="${Utils.escapeHtml(hostname)}">
+                    <div class="temp-server-header" onclick="Temperature.toggleServerGroup('${Utils.escapeJSString(hostname)}')">
                         <div class="server-info">
                             ${this.icons.server}
-                            <span class="server-name">${hostname}</span>
+                            <span class="server-name">${Utils.escapeHtml(hostname)}</span>
                             <span class="server-drive-count">${drives.length} drives</span>
                         </div>
                         <div class="server-stats">
