@@ -2,10 +2,10 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log"
-	"strings"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -20,30 +20,9 @@ func HashPassword(password string) (string, error) {
 	return string(hash), err
 }
 
-// CheckPassword verifies a password against a stored hash.
-// Supports both bcrypt and legacy SHA256 hashes (auto-upgrades on match).
-func CheckPassword(userID int, storedHash, password string) bool {
-	if isBcryptHash(storedHash) {
-		return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
-	}
-
-	// Legacy SHA256 comparison
-	legacyHash := sha256.Sum256([]byte(password))
-	if hex.EncodeToString(legacyHash[:]) != storedHash {
-		return false
-	}
-
-	// Auto-upgrade to bcrypt
-	newHash, err := HashPassword(password)
-	if err == nil {
-		db.DB.Exec("UPDATE users SET password_hash = ? WHERE id = ?", newHash, userID)
-		log.Printf("🔐 Upgraded password hash to bcrypt for user %d", userID)
-	}
-	return true
-}
-
-func isBcryptHash(hash string) bool {
-	return strings.HasPrefix(hash, "$2a$") || strings.HasPrefix(hash, "$2b$")
+// CheckPassword verifies a password against a bcrypt hash.
+func CheckPassword(storedHash, password string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
 }
 
 // GenerateToken creates a secure random token
@@ -112,7 +91,8 @@ func CreateDefaultAdmin(config models.Config) {
 
 	if password == "" {
 		password = GenerateToken()[:12]
-		log.Printf("🔑 Generated admin password: %s", password)
+		log.Printf("🔑 Generated admin password — check server logs only on first run")
+		fmt.Fprintf(os.Stderr, "\n  Admin password: %s\n\n", password)
 		log.Printf("   Set ADMIN_PASS environment variable to use a custom password")
 	} else {
 		mustChange = 0

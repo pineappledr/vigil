@@ -74,7 +74,7 @@ func Login(config models.Config) http.HandlerFunc {
 			creds.Username,
 		).Scan(&user.ID, &user.Username, &user.PasswordHash, &mustChange, &createdAt)
 
-		if err != nil || !CheckPassword(user.ID, user.PasswordHash, creds.Password) {
+		if err != nil || !CheckPassword(user.PasswordHash, creds.Password) {
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
@@ -156,7 +156,7 @@ func ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	var currentHash string
 	db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&currentHash)
-	if !CheckPassword(session.UserID, currentHash, req.CurrentPassword) {
+	if !CheckPassword(currentHash, req.CurrentPassword) {
 		jsonError(w, "Current password is incorrect", http.StatusUnauthorized)
 		return
 	}
@@ -206,7 +206,7 @@ func ChangeUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !CheckPassword(session.UserID, currentHash, req.CurrentPassword) {
+	if !CheckPassword(currentHash, req.CurrentPassword) {
 		jsonError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
