@@ -37,6 +37,20 @@ services:
           cpus: "0.10"
           memory: "128M"
 
+  # ─── Agent Registration (run once before starting the agent) ───
+  # docker compose run --rm vigil-agent-register
+  vigil-agent-register:
+    container_name: vigil-agent-register
+    image: ghcr.io/pineappledr/vigil-agent:latest
+    network_mode: host
+    depends_on:
+      vigil-server:
+        condition: service_healthy
+    privileged: true
+    command: ["--server", "http://localhost:9080", "--register", "--token", "YOUR_REGISTRATION_TOKEN"]
+    volumes:
+      - vigil_agent_data:/var/lib/vigil-agent
+
   vigil-agent:
     container_name: vigil-agent
     image: ghcr.io/pineappledr/vigil-agent:latest  # Alpine variant (default)
@@ -50,15 +64,18 @@ services:
     volumes:
       # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
-      
+
       # ─── Required for ZFS detection ───
       - /sys:/sys:ro
       - /proc:/proc:ro
-      
+
       # ─── ZFS kernel device (required for zpool/zfs commands) ───
       # Remove this line if ZFS is not installed on host
       - /dev/zfs:/dev/zfs
-      
+
+      # ─── Agent auth keys and session state ───
+      - vigil_agent_data:/var/lib/vigil-agent
+
     deploy:
       resources:
         limits:
@@ -71,3 +88,5 @@ services:
 volumes:
   vigil_data:
     name: vigil_data
+  vigil_agent_data:
+    name: vigil_agent_data

@@ -394,29 +394,43 @@ const Modals = {
 
         if (st.tab === 'docker') {
             text = `# Vigil Agent - docker-compose.yml
+# Step 1: Register (run once): docker compose run --rm vigil-agent-register
+# Step 2: Start agent: docker compose up -d vigil-agent
+
 services:
+  vigil-agent-register:
+    image: ghcr.io/pineappledr/vigil-agent:latest
+    network_mode: host
+    privileged: true
+    command: ["--server", "${st.serverURL}", "--register", "--token", "${token}", "--hostname", "${name}"]
+    volumes:
+      - vigil_agent_data:/var/lib/vigil-agent
+
   vigil-agent:
     image: ghcr.io/pineappledr/vigil-agent:latest
     container_name: vigil-agent
     restart: unless-stopped
+    network_mode: host
     privileged: true
-    environment:
-      - SERVER_URL=${st.serverURL}
-      - TOKEN=${token}
-      - HOSTNAME=${name}
+    command: ["--server", "${st.serverURL}", "--interval", "60", "--hostname", "${name}"]
     volumes:
       - /dev:/dev:ro
-      - vigil-agent-data:/data
+      - /sys:/sys:ro
+      - /proc:/proc:ro
+      - vigil_agent_data:/var/lib/vigil-agent
 
 volumes:
-  vigil-agent-data:`;
+  vigil_agent_data:`;
         } else {
             text = `# Install and register Vigil Agent
-curl -fsSL ${st.serverURL}/install.sh | sh
-vigil-agent --register \\
-  --server ${st.serverURL} \\
-  --token ${token} \\
-  --hostname ${name}`;
+curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \\
+  -o /usr/local/bin/vigil-agent && chmod +x /usr/local/bin/vigil-agent
+
+# Register (one-time)
+sudo vigil-agent --server ${st.serverURL} --register --token ${token} --hostname ${name}
+
+# Run
+sudo vigil-agent --server ${st.serverURL} --interval 60 --hostname ${name}`;
         }
 
         navigator.clipboard.writeText(text).then(() => {

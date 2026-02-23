@@ -45,10 +45,16 @@ const Data = {
 
     updateCurrentView() {
         console.log('[Data] updateCurrentView, activeView:', State.activeView);
-        
+
+        // Views that manage their own content — don't overwrite
+        if (State.activeView === 'agents' || State.activeView === 'settings') {
+            console.log('[Data] View', State.activeView, 'manages its own content, skipping');
+            return;
+        }
+
         const dashboardView = document.getElementById('dashboard-view');
         const detailsView = document.getElementById('details-view');
-        
+
         // Don't update if details view is showing
         if (detailsView && !detailsView.classList.contains('hidden')) {
             console.log('[Data] Details view is showing, skipping update');
