@@ -335,7 +335,7 @@ func postReport(ctx context.Context, serverURL string, report DriveReport, sessi
 	req.Header.Set("User-Agent", fmt.Sprintf("vigil-agent/%s", version))
 	req.Header.Set("Authorization", "Bearer "+sessionToken)
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G107 -- URL is the configured server endpoint
 	if err != nil {
 		return fmt.Errorf("connection failed: %v", err)
 	}
