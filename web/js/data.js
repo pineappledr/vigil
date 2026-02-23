@@ -1,25 +1,22 @@
 /**
  * Vigil Dashboard - Data Management
- * DEBUG VERSION
  */
 
 const Data = {
     async fetch() {
-        console.log('[Data] fetch called, activeView:', State.activeView);
-        
         try {
             const [historyResponse, zfsResponse] = await Promise.all([
                 API.getHistory(),
                 API.getZFSPools().catch(() => null)
             ]);
-            
+
             if (!historyResponse.ok) {
                 throw new Error(`HTTP ${historyResponse.status}`);
             }
-            
+
             State.data = await historyResponse.json() || [];
             State.resolveActiveServer();
-            
+
             if (zfsResponse && zfsResponse.ok) {
                 State.zfsPools = await zfsResponse.json() || [];
                 State.buildZFSDriveMap();
@@ -27,28 +24,22 @@ const Data = {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
             }
-            
-            console.log('[Data] Data loaded:', State.data.length, 'servers,', State.zfsPools.length, 'pools');
-            console.log('[Data] Before updateCurrentView, activeView:', State.activeView);
-            
+
             this.updateCurrentView();
             this.updateSidebar();
             this.updateStats();
             this.setOnlineStatus(true);
             this.updateLastRefresh();
-            
+
         } catch (error) {
-            console.error('[Data] Fetch error:', error);
+            console.error('Fetch error:', error);
             this.setOnlineStatus(false);
         }
     },
 
     updateCurrentView() {
-        console.log('[Data] updateCurrentView, activeView:', State.activeView);
-
         // Views that manage their own content — don't overwrite
         if (State.activeView === 'agents' || State.activeView === 'settings') {
-            console.log('[Data] View', State.activeView, 'manages its own content, skipping');
             return;
         }
 
@@ -56,42 +47,30 @@ const Data = {
         const detailsView = document.getElementById('details-view');
 
         // Don't update if details view is showing
-        if (detailsView && !detailsView.classList.contains('hidden')) {
-            console.log('[Data] Details view is showing, skipping update');
-            return;
-        }
-        
+        if (detailsView && !detailsView.classList.contains('hidden')) return;
+
         // Don't update if dashboard is hidden
-        if (dashboardView && dashboardView.classList.contains('hidden')) {
-            console.log('[Data] Dashboard view is hidden, skipping update');
-            return;
-        }
-        
+        if (dashboardView && dashboardView.classList.contains('hidden')) return;
+
         // Update based on current view
         if (State.activeView === 'temperature') {
-            console.log('[Data] Temperature view active, refreshing temperature data');
-            // Temperature module handles its own refresh
             if (typeof Temperature !== 'undefined' && Temperature.loadData) {
                 Temperature.loadData();
             }
         } else if (State.activeView === 'zfs') {
-            console.log('[Data] Rendering ZFS view');
             if (typeof ZFS !== 'undefined' && ZFS.render) {
                 ZFS.render();
             }
         } else if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
-            console.log('[Data] Rendering server detail:', State.activeServerHostname);
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
         } else if (State.activeFilter) {
-            console.log('[Data] Rendering filter:', State.activeFilter);
-            const filterFn = State.activeFilter === 'attention' 
+            const filterFn = State.activeFilter === 'attention'
                 ? d => Utils.getHealthStatus(d) !== 'healthy'
                 : State.activeFilter === 'healthy'
                 ? d => Utils.getHealthStatus(d) === 'healthy'
                 : () => true;
             Renderer.filteredDrives(filterFn, State.activeFilter);
         } else {
-            console.log('[Data] Rendering main dashboard');
             Renderer.dashboard(State.data);
         }
     },
@@ -105,13 +84,13 @@ const Data = {
     updateServerList() {
         const serverNav = document.getElementById('server-nav-list');
         const serverCount = document.getElementById('server-count');
-        
+
         if (!serverNav) return;
-        
+
         serverCount.textContent = State.data.length;
-        
+
         const sortedData = State.getSortedData();
-        
+
         serverNav.innerHTML = sortedData.map((server, sortedIdx) => {
             const drives = server.details?.drives || [];
             const hasWarning = drives.some(d => Utils.getHealthStatus(d) === 'warning');
@@ -119,14 +98,14 @@ const Data = {
             const isOffline = State.isServerOffline(server);
             const timeSince = State.getTimeSinceUpdate(server);
             const isActive = State.activeServerHostname === server.hostname && State.activeView === 'drives';
-            
+
             let statusClass = '';
             if (isOffline) statusClass = 'offline';
             else if (hasCritical) statusClass = 'critical';
             else if (hasWarning) statusClass = 'warning';
-            
+
             return `
-                <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}" 
+                <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}"
                      onclick="navShowServer(${sortedIdx})"
                      title="${isOffline ? 'Offline' : 'Online'}">
                     <span class="status-indicator ${statusClass}"></span>
@@ -136,7 +115,7 @@ const Data = {
             `;
         }).join('');
     },
-    
+
     updateSortIndicator() {
         const sortBtn = document.getElementById('server-sort-btn');
         if (sortBtn) {
@@ -154,14 +133,14 @@ const Data = {
         if (!zfsNav) return;
 
         const stats = State.getZFSStats();
-        
+
         if (stats.totalPools === 0) {
             zfsNav.classList.add('hidden');
             return;
         }
 
         zfsNav.classList.remove('hidden');
-        
+
         const poolCount = document.getElementById('zfs-pool-count');
         if (poolCount) poolCount.textContent = stats.totalPools;
 
@@ -194,9 +173,9 @@ const Data = {
                         let statusClass = '';
                         if (state === 'DEGRADED') statusClass = 'warning';
                         else if (state === 'FAULTED' || state === 'UNAVAIL') statusClass = 'critical';
-                        
+
                         return `
-                            <div class="server-nav-item ${statusClass}" 
+                            <div class="server-nav-item ${statusClass}"
                                  onclick="navShowZFSPool('${hostname}', '${poolName}')"
                                  title="${hostname} - ${poolName}">
                                 <span class="status-indicator ${statusClass}"></span>
@@ -212,14 +191,14 @@ const Data = {
     updateStats() {
         const stats = State.getStats();
         const zfsStats = State.getZFSStats();
-        
+
         const totalDrives = document.getElementById('total-drives');
         const healthyCount = document.getElementById('healthy-count');
         const warningCount = document.getElementById('warning-count');
-        
+
         if (totalDrives) totalDrives.textContent = stats.totalDrives;
         if (healthyCount) healthyCount.textContent = stats.healthyDrives;
-        
+
         if (warningCount) {
             const total = stats.attentionDrives + zfsStats.attentionPools;
             warningCount.textContent = total;
@@ -240,8 +219,8 @@ const Data = {
     updateLastRefresh() {
         const el = document.getElementById('last-update-time');
         if (el) {
-            el.textContent = new Date().toLocaleTimeString([], { 
-                hour: '2-digit', minute: '2-digit', second: '2-digit' 
+            el.textContent = new Date().toLocaleTimeString([], {
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
         }
     },

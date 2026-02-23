@@ -39,6 +39,37 @@
     color: var(--text-secondary);
 }
 
+/* Platform sub-selector */
+.agent-platform-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.agent-platform-btn {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.agent-platform-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.agent-platform-btn:hover:not(.active) {
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
+}
+
 .agent-tab-hint {
     font-size: 0.8rem;
     color: var(--text-muted);

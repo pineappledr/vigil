@@ -300,16 +300,27 @@ const Modals = {
                         <button class="agent-tab active" data-tab="docker" onclick="Modals.switchAgentTab('docker')">Docker</button>
                         <button class="agent-tab" data-tab="binary" onclick="Modals.switchAgentTab('binary')">Binary</button>
                     </div>
+                    <div class="agent-platform-bar" id="agent-platform-bar">
+                        <button class="agent-platform-btn active" data-platform="linux" onclick="Modals.switchAgentPlatform('linux')">Standard Linux</button>
+                        <button class="agent-platform-btn" data-platform="truenas" onclick="Modals.switchAgentPlatform('truenas')">TrueNAS</button>
+                    </div>
                     <p class="agent-tab-hint" id="agent-tab-hint">
-                        Copy the <code>docker-compose.yml</code> content for the agent below, or register agents automatically with a <strong>universal token</strong>.
+                        Copy the <code>docker-compose.yml</code> to deploy the agent on a standard Linux host.
                     </p>
                     <div class="form-group">
                         <label>Name</label>
                         <input type="text" id="agent-name" class="form-input" placeholder="my-server-01">
                     </div>
                     <div class="form-group">
-                        <label>Host / IP</label>
-                        <input type="text" id="agent-host" class="form-input" placeholder="192.168.1.100">
+                        <label>Server URL</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="agent-server-url" class="form-input form-input-mono" value="${serverURL}" readonly>
+                            <button class="btn-copy" onclick="Modals.copyField('agent-server-url')" title="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Public Key</label>
@@ -349,7 +360,7 @@ const Modals = {
             </div>
         `);
 
-        modal._agentState = { tab: 'docker', serverURL, serverPubKey, token };
+        modal._agentState = { tab: 'docker', platform: 'linux', serverURL, serverPubKey, token };
         document.getElementById('agent-name').focus();
     },
 
@@ -357,23 +368,56 @@ const Modals = {
         document.querySelectorAll('.agent-tab').forEach(el => {
             el.classList.toggle('active', el.dataset.tab === tab);
         });
-        const hint = document.getElementById('agent-tab-hint');
-        const label = document.getElementById('agent-copy-label');
-        if (tab === 'docker') {
-            hint.innerHTML = 'Copy the <code>docker-compose.yml</code> content for the agent below, or register agents automatically with a <strong>universal token</strong>.';
-            label.textContent = 'Copy docker compose';
-        } else {
-            hint.innerHTML = 'Copy the installation command for the agent below, or register agents automatically with a <strong>universal token</strong>.';
-            label.textContent = 'Copy Linux command';
-        }
+
         const overlay = document.querySelector('.modal-overlay');
         if (overlay?._agentState) overlay._agentState.tab = tab;
+
+        const platformBar = document.getElementById('agent-platform-bar');
+        const label = document.getElementById('agent-copy-label');
+
+        if (tab === 'docker') {
+            platformBar.innerHTML = `
+                <button class="agent-platform-btn active" data-platform="linux" onclick="Modals.switchAgentPlatform('linux')">Standard Linux</button>
+                <button class="agent-platform-btn" data-platform="truenas" onclick="Modals.switchAgentPlatform('truenas')">TrueNAS</button>
+            `;
+            if (overlay?._agentState) overlay._agentState.platform = 'linux';
+            label.textContent = 'Copy docker compose';
+            this.switchAgentPlatform('linux');
+        } else {
+            platformBar.innerHTML = `
+                <button class="agent-platform-btn active" data-platform="debian" onclick="Modals.switchAgentPlatform('debian')">Debian / Ubuntu</button>
+                <button class="agent-platform-btn" data-platform="fedora" onclick="Modals.switchAgentPlatform('fedora')">Fedora / RHEL</button>
+                <button class="agent-platform-btn" data-platform="arch" onclick="Modals.switchAgentPlatform('arch')">Arch</button>
+            `;
+            if (overlay?._agentState) overlay._agentState.platform = 'debian';
+            label.textContent = 'Copy install command';
+            this.switchAgentPlatform('debian');
+        }
+    },
+
+    switchAgentPlatform(platform) {
+        document.querySelectorAll('.agent-platform-btn').forEach(el => {
+            el.classList.toggle('active', el.dataset.platform === platform);
+        });
+
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay?._agentState) overlay._agentState.platform = platform;
+
+        const hint = document.getElementById('agent-tab-hint');
+        const hints = {
+            linux: 'Copy the <code>docker-compose.yml</code> to deploy the agent on a standard Linux host.',
+            truenas: 'Copy the <code>docker-compose.yml</code> for <strong>TrueNAS</strong> SCALE/CORE with host ZFS tool mounts.',
+            debian: 'Install dependencies and the agent binary on <strong>Debian / Ubuntu / Proxmox</strong>.',
+            fedora: 'Install dependencies and the agent binary on <strong>Fedora / RHEL / CentOS</strong>.',
+            arch: 'Install dependencies and the agent binary on <strong>Arch Linux</strong>.'
+        };
+        if (hint) hint.innerHTML = hints[platform] || '';
     },
 
     copyField(inputId) {
         const input = document.getElementById(inputId);
         if (!input) return;
-        navigator.clipboard.writeText(input.value).then(() => {
+        this._copyToClipboard(input.value, () => {
             const btn = input.parentElement.querySelector('.btn-copy');
             if (btn) {
                 const orig = btn.innerHTML;
@@ -390,10 +434,59 @@ const Modals = {
 
         const name = document.getElementById('agent-name')?.value.trim() || 'vigil-agent';
         const token = document.getElementById('agent-token')?.value || '';
-        let text;
+        const serverURL = document.getElementById('agent-server-url')?.value || st.serverURL;
+        const text = this._generateInstallContent(st.tab, st.platform, serverURL, token, name);
 
-        if (st.tab === 'docker') {
-            text = `# Vigil Agent - docker-compose.yml
+        this._copyToClipboard(text, () => {
+            const label = document.getElementById('agent-copy-label');
+            if (label) {
+                const orig = label.textContent;
+                label.textContent = 'Copied!';
+                setTimeout(() => { label.textContent = orig; }, 2000);
+            }
+        });
+    },
+
+    _generateInstallContent(tab, platform, serverURL, token, name) {
+        if (tab === 'docker' && platform === 'truenas') {
+            return `# Vigil Agent - docker-compose.yml (TrueNAS)
+# Step 1: Register (run once): docker compose run --rm vigil-agent-register
+# Step 2: Start agent: docker compose up -d vigil-agent
+
+services:
+  vigil-agent-register:
+    image: ghcr.io/pineappledr/vigil-agent:debian
+    network_mode: host
+    privileged: true
+    command: ["--server", "${serverURL}", "--register", "--token", "${token}", "--hostname", "${name}"]
+    volumes:
+      - vigil_agent_data:/var/lib/vigil-agent
+
+  vigil-agent:
+    image: ghcr.io/pineappledr/vigil-agent:debian
+    container_name: vigil-agent
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    privileged: true
+    command: ["--server", "${serverURL}", "--interval", "60", "--hostname", "${name}"]
+    volumes:
+      - /dev:/dev:ro
+      - /sys:/sys:ro
+      - /dev/zfs:/dev/zfs
+      - /sbin/zpool:/sbin/zpool:ro
+      - /sbin/zfs:/sbin/zfs:ro
+      - /lib:/lib:ro
+      - /lib64:/lib64:ro
+      - /usr/lib:/usr/lib:ro
+      - vigil_agent_data:/var/lib/vigil-agent
+
+volumes:
+  vigil_agent_data:`;
+        }
+
+        if (tab === 'docker') {
+            return `# Vigil Agent - docker-compose.yml (Standard Linux)
 # Step 1: Register (run once): docker compose run --rm vigil-agent-register
 # Step 2: Start agent: docker compose up -d vigil-agent
 
@@ -402,7 +495,7 @@ services:
     image: ghcr.io/pineappledr/vigil-agent:latest
     network_mode: host
     privileged: true
-    command: ["--server", "${st.serverURL}", "--register", "--token", "${token}", "--hostname", "${name}"]
+    command: ["--server", "${serverURL}", "--register", "--token", "${token}", "--hostname", "${name}"]
     volumes:
       - vigil_agent_data:/var/lib/vigil-agent
 
@@ -412,35 +505,69 @@ services:
     restart: unless-stopped
     network_mode: host
     privileged: true
-    command: ["--server", "${st.serverURL}", "--interval", "60", "--hostname", "${name}"]
+    command: ["--server", "${serverURL}", "--interval", "60", "--hostname", "${name}"]
     volumes:
       - /dev:/dev:ro
       - /sys:/sys:ro
       - /proc:/proc:ro
+      - /dev/zfs:/dev/zfs
       - vigil_agent_data:/var/lib/vigil-agent
 
 volumes:
   vigil_agent_data:`;
-        } else {
-            text = `# Install and register Vigil Agent
-curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \\
-  -o /usr/local/bin/vigil-agent && chmod +x /usr/local/bin/vigil-agent
-
-# Register (one-time)
-sudo vigil-agent --server ${st.serverURL} --register --token ${token} --hostname ${name}
-
-# Run
-sudo vigil-agent --server ${st.serverURL} --interval 60 --hostname ${name}`;
         }
 
-        navigator.clipboard.writeText(text).then(() => {
-            const label = document.getElementById('agent-copy-label');
-            if (label) {
-                const orig = label.textContent;
-                label.textContent = 'Copied!';
-                setTimeout(() => { label.textContent = orig; }, 2000);
-            }
-        });
+        // Binary install commands
+        const deps = {
+            debian: 'sudo apt update && sudo apt install -y smartmontools nvme-cli',
+            fedora: 'sudo dnf install -y smartmontools nvme-cli',
+            arch: 'sudo pacman -S --noconfirm smartmontools nvme-cli'
+        };
+        const labels = {
+            debian: 'Debian / Ubuntu / Proxmox',
+            fedora: 'Fedora / RHEL / CentOS',
+            arch: 'Arch Linux'
+        };
+        const depCmd = deps[platform] || deps.debian;
+        const label = labels[platform] || labels.debian;
+
+        return `# Install Vigil Agent (${label})
+
+# 1. Install dependencies
+${depCmd}
+
+# 2. Download agent
+sudo curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \\
+  -o /usr/local/bin/vigil-agent && sudo chmod +x /usr/local/bin/vigil-agent
+
+# 3. Register (one-time)
+sudo vigil-agent --server ${serverURL} --register --token ${token} --hostname ${name}
+
+# 4. Run (or set up as a systemd service)
+sudo vigil-agent --server ${serverURL} --interval 60 --hostname ${name}`;
+    },
+
+    _copyToClipboard(text, onSuccess) {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+                this._fallbackCopy(text);
+                if (onSuccess) onSuccess();
+            });
+        } else {
+            this._fallbackCopy(text);
+            if (onSuccess) onSuccess();
+        }
+    },
+
+    _fallbackCopy(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
     },
 
     async submitAddAgent() {
