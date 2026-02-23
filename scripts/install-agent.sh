@@ -15,7 +15,7 @@ usage() {
     echo ""
     echo "Usage: install-agent.sh -s <server_url> -t <token> -n <hostname> [-z] [-v version]"
     echo ""
-    echo "  -s  Server URL (e.g. http://192.168.1.10:9080)"
+    echo "  -s  Server URL (e.g. http://YOUR_SERVER_IP:9080)"
     echo "  -t  Registration token"
     echo "  -n  Agent hostname/name"
     echo "  -z  Enable ZFS monitoring (installs ZFS dependencies)"

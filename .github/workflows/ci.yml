@@ -154,7 +154,7 @@ jobs:
       !startsWith(github.ref, 'refs/tags/') && 
       github.ref != 'refs/heads/main'
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -184,7 +184,7 @@ jobs:
           BRANCH_TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           VERSION="dev-${BRANCH_TAG}-${SHORT_SHA}"
-          
+
           echo "branch=$BRANCH_TAG" >> $GITHUB_OUTPUT
           echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -194,10 +194,10 @@ jobs:
           mkdir -p dist
           VERSION="${{ steps.meta.outputs.version }}"
           LDFLAGS="-s -w -X main.version=$VERSION"
-          
+
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-amd64 ./cmd/agent
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-arm64 ./cmd/agent
-          
+
           cd dist && sha256sum * > checksums.txt
 
       - name: Upload binaries
@@ -206,6 +206,27 @@ jobs:
           name: vigil-agent-${{ steps.meta.outputs.version }}
           path: dist/
           retention-days: 14
+
+      - name: Publish dev release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev-${{ steps.meta.outputs.branch }}
+          name: "Dev: ${{ steps.meta.outputs.branch }}"
+          body: |
+            Dev build from `${{ steps.meta.outputs.branch }}` branch (commit ${{ github.sha }}).
+
+            **Version:** `${{ steps.meta.outputs.version }}`
+
+            Install with:
+            ```bash
+            curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-agent.sh | bash -s -- -s "SERVER_URL" -t "TOKEN" -n "NAME" -v "dev-${{ steps.meta.outputs.branch }}"
+            ```
+          files: |
+            dist/vigil-agent-linux-amd64
+            dist/vigil-agent-linux-arm64
+            dist/checksums.txt
+          prerelease: true
+          make_latest: false
 
       - name: Build Server
         uses: docker/build-push-action@v5
@@ -255,12 +276,18 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -278,6 +305,34 @@ jobs:
       - name: Get short SHA
         id: meta
         run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Build agent binaries
+        run: |
+          mkdir -p dist
+          VERSION="latest-${{ steps.meta.outputs.sha }}"
+          LDFLAGS="-s -w -X main.version=$VERSION"
+
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-amd64 ./cmd/agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-arm64 ./cmd/agent
+
+          cd dist && sha256sum * > checksums.txt
+
+      - name: Update latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: |
+            Rolling release from `main` branch (commit ${{ github.sha }}).
+
+            These binaries are updated on every push to main.
+            For stable releases, use a versioned tag (e.g. `v2.4.0`).
+          files: |
+            dist/vigil-agent-linux-amd64
+            dist/vigil-agent-linux-arm64
+            dist/checksums.txt
+          prerelease: false
+          make_latest: true
 
       - name: Build Server
         uses: docker/build-push-action@v5
@@ -506,3 +561,4 @@ jobs:
             dist/checksums.txt
           draft: false
           prerelease: ${{ steps.version.outputs.is_prerelease }}
+          make_latest: true

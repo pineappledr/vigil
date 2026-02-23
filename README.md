@@ -216,18 +216,22 @@ This one-liner downloads the install script, which automatically:
 | `-t` | Registration token (required) |
 | `-n` | Agent hostname/name (required) |
 | `-z` | Enable ZFS monitoring (installs ZFS packages) |
-| `-v` | Agent version to install (e.g. `v2.4.0`). Defaults to latest. |
+| `-v` | Version or release tag (e.g. `v2.4.0`, `dev-release-v2.4.0`). Defaults to latest. |
 
 **Examples:**
 
 ```bash
 # Install with ZFS support
 curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
-  -s "http://192.168.1.10:9080" -t "YOUR_TOKEN" -n "nas-01" -z
+  -s "http://YOUR_SERVER_IP:9080" -t "YOUR_TOKEN" -n "nas-01" -z
 
 # Install a specific version
 curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
-  -s "http://192.168.1.10:9080" -t "YOUR_TOKEN" -n "web-01" -v "v2.4.0"
+  -s "http://YOUR_SERVER_IP:9080" -t "YOUR_TOKEN" -n "web-01" -v "v2.4.0"
+
+# Install from a dev branch
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" -t "YOUR_TOKEN" -n "test-01" -v "dev-release-v2.4.0"
 ```
 
 ### Agent: Docker (Standard Linux)
@@ -591,14 +595,31 @@ GOOS=linux GOARCH=arm64 go build -o vigil-agent-linux-arm64 ./cmd/agent
 
 ## 🛠️ Development Builds
 
-Dev branch builds are automatically compiled and available as artifacts in GitHub Actions. This is useful for testing new features before they're released.
+Dev branch builds are automatically compiled and published as GitHub prereleases. Each branch gets its own release tag (`dev-{branch-name}`), so you can install dev binaries the same way as stable releases.
 
-### Download Dev Agent Binary
+### Install Dev Agent Binary
 
-1. Go to [GitHub Actions](https://github.com/pineappledr/vigil/actions)
-2. Click on the latest workflow run for your branch (e.g., `develop`)
-3. Scroll down to **Artifacts**
-4. Download `vigil-agent-dev-{branch}-{commit}`
+Use the install script with the `-v` flag pointing to your branch's dev release tag:
+
+```bash
+# Install from a dev branch (e.g., release-v2.4.0)
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" \
+  -t "YOUR_TOKEN" \
+  -n "test-server" \
+  -v "dev-release-v2.4.0"
+```
+
+Or download manually:
+
+```bash
+# Download dev binary directly
+curl -L https://github.com/pineappledr/vigil/releases/download/dev-release-v2.4.0/vigil-agent-linux-amd64 \
+  -o vigil-agent
+chmod +x vigil-agent
+```
+
+> Dev releases are updated on every push to the branch. Find available dev releases on the [Releases page](https://github.com/pineappledr/vigil/releases).
 
 ### Use Dev Docker Images
 
@@ -608,7 +629,7 @@ docker pull ghcr.io/pineappledr/vigil:dev-develop
 docker pull ghcr.io/pineappledr/vigil-agent:dev-develop
 
 # Or for feature branches (slashes replaced with dashes)
-docker pull ghcr.io/pineappledr/vigil-agent:dev-feature-new-feature
+docker pull ghcr.io/pineappledr/vigil-agent:dev-release-v2.4.0
 ```
 
 ---
