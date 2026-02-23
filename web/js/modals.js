@@ -309,7 +309,7 @@ const Modals = {
                     </p>
                     <div class="form-group">
                         <label>Name</label>
-                        <input type="text" id="agent-name" class="form-input" placeholder="my-server-01">
+                        <input type="text" id="agent-name" class="form-input" placeholder="my-server-agent-01">
                     </div>
                     <div class="form-group">
                         <label>Server URL</label>
@@ -448,103 +448,71 @@ const Modals = {
     },
 
     _generateInstallContent(tab, platform, serverURL, token, name) {
-        if (tab === 'docker' && platform === 'truenas') {
-            return `# Vigil Agent - docker-compose.yml (TrueNAS)
-# Step 1: Register (run once): docker compose run --rm vigil-agent-register
-# Step 2: Start agent: docker compose up -d vigil-agent
+        if (tab === 'docker') {
+            return this._generateDockerCompose(platform, serverURL, token, name);
+        }
+        return this._generateBinaryInstall(platform, serverURL, token, name);
+    },
 
-services:
-  vigil-agent-register:
-    image: ghcr.io/pineappledr/vigil-agent:debian
-    network_mode: host
-    privileged: true
-    command: ["--server", "${serverURL}", "--register", "--token", "${token}", "--hostname", "${name}"]
-    volumes:
-      - vigil_agent_data:/var/lib/vigil-agent
+    _generateDockerCompose(platform, serverURL, token, name) {
+        const isTrueNAS = platform === 'truenas';
+        const image = isTrueNAS ? 'ghcr.io/pineappledr/vigil-agent:debian' : 'ghcr.io/pineappledr/vigil-agent:latest';
 
-  vigil-agent:
-    image: ghcr.io/pineappledr/vigil-agent:debian
-    container_name: vigil-agent
-    restart: unless-stopped
-    network_mode: host
-    pid: host
-    privileged: true
-    command: ["--server", "${serverURL}", "--interval", "60", "--hostname", "${name}"]
-    volumes:
-      - /dev:/dev:ro
-      - /sys:/sys:ro
+        let volumes = `      - /dev:/dev:ro
+      - /sys:/sys:ro`;
+
+        if (isTrueNAS) {
+            volumes += `
       - /dev/zfs:/dev/zfs
       - /sbin/zpool:/sbin/zpool:ro
       - /sbin/zfs:/sbin/zfs:ro
       - /lib:/lib:ro
       - /lib64:/lib64:ro
-      - /usr/lib:/usr/lib:ro
-      - vigil_agent_data:/var/lib/vigil-agent
-
-volumes:
-  vigil_agent_data:`;
+      - /usr/lib:/usr/lib:ro`;
+        } else {
+            volumes += `
+      - /proc:/proc:ro
+      - /dev/zfs:/dev/zfs`;
         }
 
-        if (tab === 'docker') {
-            return `# Vigil Agent - docker-compose.yml (Standard Linux)
-# Step 1: Register (run once): docker compose run --rm vigil-agent-register
-# Step 2: Start agent: docker compose up -d vigil-agent
+        volumes += `
+      - vigil_agent_data:/var/lib/vigil-agent`;
 
+        let extras = '';
+        if (isTrueNAS) extras = '\n    pid: host';
+
+        return `# Vigil Agent - docker-compose.yml (${isTrueNAS ? 'TrueNAS' : 'Standard Linux'})
 services:
-  vigil-agent-register:
-    image: ghcr.io/pineappledr/vigil-agent:latest
-    network_mode: host
-    privileged: true
-    command: ["--server", "${serverURL}", "--register", "--token", "${token}", "--hostname", "${name}"]
-    volumes:
-      - vigil_agent_data:/var/lib/vigil-agent
-
   vigil-agent:
-    image: ghcr.io/pineappledr/vigil-agent:latest
+    image: ${image}
     container_name: vigil-agent
     restart: unless-stopped
-    network_mode: host
+    network_mode: host${extras}
     privileged: true
-    command: ["--server", "${serverURL}", "--interval", "60", "--hostname", "${name}"]
+    environment:
+      SERVER: ${serverURL}
+      TOKEN: ${token}
+      HOSTNAME: ${name}
     volumes:
-      - /dev:/dev:ro
-      - /sys:/sys:ro
-      - /proc:/proc:ro
-      - /dev/zfs:/dev/zfs
-      - vigil_agent_data:/var/lib/vigil-agent
+${volumes}
 
 volumes:
   vigil_agent_data:`;
-        }
+    },
 
-        // Binary install commands
+    _generateBinaryInstall(platform, serverURL, token, name) {
         const deps = {
-            debian: 'sudo apt update && sudo apt install -y smartmontools nvme-cli',
-            fedora: 'sudo dnf install -y smartmontools nvme-cli',
-            arch: 'sudo pacman -S --noconfirm smartmontools nvme-cli'
+            debian: 'sudo apt update && sudo apt install -y smartmontools nvme-cli zfsutils-linux',
+            fedora: 'sudo dnf install -y smartmontools nvme-cli zfs',
+            arch: 'sudo pacman -S --noconfirm smartmontools nvme-cli zfs-utils'
         };
-        const labels = {
-            debian: 'Debian / Ubuntu / Proxmox',
-            fedora: 'Fedora / RHEL / CentOS',
-            arch: 'Arch Linux'
-        };
-        const depCmd = deps[platform] || deps.debian;
-        const label = labels[platform] || labels.debian;
+        return `curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent && chmod +x /tmp/vigil-agent && sudo mv /tmp/vigil-agent /usr/local/bin/ && sudo vigil-agent --server ${serverURL} --register --token ${token} --hostname ${name}
 
-        return `# Install Vigil Agent (${label})
+# Prerequisites (if not already installed):
+# ${deps[platform] || deps.debian}
 
-# 1. Install dependencies
-${depCmd}
-
-# 2. Download agent
-sudo curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \\
-  -o /usr/local/bin/vigil-agent && sudo chmod +x /usr/local/bin/vigil-agent
-
-# 3. Register (one-time)
-sudo vigil-agent --server ${serverURL} --register --token ${token} --hostname ${name}
-
-# 4. Run (or set up as a systemd service)
-sudo vigil-agent --server ${serverURL} --interval 60 --hostname ${name}`;
+# After registration, set up as a systemd service:
+# sudo vigil-agent --server ${serverURL} --interval 60`;
     },
 
     _copyToClipboard(text, onSuccess) {

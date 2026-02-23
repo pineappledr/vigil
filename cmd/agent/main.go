@@ -70,24 +70,24 @@ func main() {
 	}
 	log.Printf("✓ Fingerprint: %.24s...", fingerprint)
 
-	// --register mode: one-time enrollment
-	if cfg.register {
+	// Auto-register if TOKEN is set and agent isn't registered yet
+	authSt := loadAuthState(cfg.dataDir)
+
+	if cfg.register && authSt == nil {
 		if cfg.registerToken == "" {
-			log.Fatal("❌ --register requires --token <registration-token>")
+			log.Fatal("❌ Registration requires a token (--token or TOKEN env)")
 		}
 		log.Printf("🔐 Registering with server %s...", cfg.serverURL)
-		state, err := registerAgent(cfg.serverURL, cfg.registerToken, hostname, fingerprint, keys, cfg.dataDir)
-		if err != nil {
-			log.Fatalf("❌ Registration failed: %v", err)
+		state, regErr := registerAgent(cfg.serverURL, cfg.registerToken, hostname, fingerprint, keys, cfg.dataDir)
+		if regErr != nil {
+			log.Fatalf("❌ Registration failed: %v", regErr)
 		}
 		log.Printf("✅ Registered as agent ID %d", state.AgentID)
-		log.Printf("   Session valid until: %s", state.SessionExpires.Format(time.RFC3339))
-		log.Println("   Start the agent normally (without --register) to begin reporting.")
-		return
+		authSt = state
+	} else if cfg.register && authSt != nil {
+		log.Println("✓ Already registered, skipping registration")
 	}
 
-	// Normal operation
-	authSt := loadAuthState(cfg.dataDir)
 	if authSt == nil {
 		log.Fatal("❌ Agent not registered. Run with --register --token <token> --server <url> first.")
 	}
@@ -144,14 +144,30 @@ func parseFlags() agentConfig {
 		os.Exit(0)
 	}
 
-	return agentConfig{
-		serverURL:        *serverURL,
+	// Environment variables override flags (for Docker deployments)
+	cfg := agentConfig{
+		serverURL:        envOrStr("SERVER", *serverURL),
 		interval:         *interval,
-		hostnameOverride: *hostnameOverride,
+		hostnameOverride: envOrStr("HOSTNAME", *hostnameOverride),
 		dataDir:          *dataDir,
 		register:         *register,
-		registerToken:    *token,
+		registerToken:    envOrStr("TOKEN", *token),
 	}
+
+	// If TOKEN env is set but --register wasn't passed, enable auto-registration
+	if cfg.registerToken != "" && !cfg.register {
+		cfg.register = true
+	}
+
+	return cfg
+}
+
+// envOrStr returns the environment variable value if set, otherwise the fallback.
+func envOrStr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func defaultDataDir() string {

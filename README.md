@@ -154,22 +154,13 @@ Open `http://YOUR_SERVER_IP:9080` in your browser.
 
 ### 3. Deploy Agents
 
-On each server you want to monitor:
+Generate a registration token from the web UI (**Agents → Add Agent**), then on each server:
 
 ```bash
-# Download agent
-sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \
-  -o /usr/local/bin/vigil-agent
-sudo chmod +x /usr/local/bin/vigil-agent
-
-# Register agent (one-time — get the token from the web UI under Agents → Add Agent)
-sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token YOUR_REGISTRATION_TOKEN
-
-# Run agent
-sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
+curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent && chmod +x /tmp/vigil-agent && sudo mv /tmp/vigil-agent /usr/local/bin/ && sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token YOUR_TOKEN
 ```
 
-> **Note:** Registration is required before the agent can send reports. Generate a token from the dashboard's **Agents** page.
+> The agent auto-registers on first run when `TOKEN` is provided, then continues reporting normally on subsequent starts.
 
 ---
 
@@ -229,28 +220,22 @@ sudo systemctl start vigil-agent
 
 ### Agent: Docker (Standard Linux)
 
-```bash
-# 1. Register the agent (one-time)
-docker run --rm \
-  --network host \
-  --privileged \
-  -v vigil_agent_data:/var/lib/vigil-agent \
-  ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://localhost:9080 --register --token YOUR_REGISTRATION_TOKEN
+The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts.
 
-# 2. Run the agent
+```bash
 docker run -d \
   --name vigil-agent \
   --restart unless-stopped \
   --network host \
   --privileged \
+  -e SERVER=http://YOUR_SERVER_IP:9080 \
+  -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
   -v /sys:/sys:ro \
   -v /proc:/proc:ro \
   -v /dev/zfs:/dev/zfs \
   -v vigil_agent_data:/var/lib/vigil-agent \
-  ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://localhost:9080 --interval 60
+  ghcr.io/pineappledr/vigil-agent:latest
 ```
 
 ### Agent: Docker (TrueNAS)
@@ -258,21 +243,14 @@ docker run -d \
 For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools:
 
 ```bash
-# 1. Register the agent (one-time)
-docker run --rm \
-  --network host \
-  --privileged \
-  -v vigil_agent_data:/var/lib/vigil-agent \
-  ghcr.io/pineappledr/vigil-agent:debian \
-  --server http://localhost:9080 --register --token YOUR_REGISTRATION_TOKEN
-
-# 2. Run the agent
 docker run -d \
   --name vigil-agent \
   --restart unless-stopped \
   --network host \
   --pid host \
   --privileged \
+  -e SERVER=http://YOUR_SERVER_IP:9080 \
+  -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
   -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
@@ -282,8 +260,7 @@ docker run -d \
   -v /lib64:/lib64:ro \
   -v /usr/lib:/usr/lib:ro \
   -v vigil_agent_data:/var/lib/vigil-agent \
-  ghcr.io/pineappledr/vigil-agent:debian \
-  --server http://localhost:9080 --interval 60
+  ghcr.io/pineappledr/vigil-agent:debian
 ```
 
 ---
@@ -338,17 +315,16 @@ docker run -d \
   --name vigil-agent \
   --net=host \
   --privileged \
+  -e SERVER=http://YOUR_SERVER_IP:9080 \
   -v /dev:/dev \
   -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
   -v vigil_agent_data:/var/lib/vigil-agent \
   --restart unless-stopped \
-  ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:9080 \
-  --interval 60
+  ghcr.io/pineappledr/vigil-agent:latest
 ```
 
-> **Note:** If upgrading from v2.3.x to v2.4.0+, you must register the agent before starting it. See [Upgrading from v2.3.x](#upgrading-from-v23x).
+> **Note:** If upgrading from v2.3.x to v2.4.0+, add `-e TOKEN=YOUR_TOKEN` on first run to auto-register. See [Upgrading from v2.3.x](#upgrading-from-v23x).
 
 ### Upgrade Script (Automated)
 
@@ -421,15 +397,17 @@ sudo systemctl start vigil-agent
 
 ### Agent Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--server` | `http://localhost:9080` | Vigil server URL |
-| `--interval` | `60` | Reporting interval in seconds (0 = single run) |
-| `--hostname` | (auto-detected) | Override hostname |
-| `--data-dir` | `/var/lib/vigil-agent` | Directory for agent keys and auth state |
-| `--register` | - | Run one-time registration, then exit |
-| `--token` | - | Registration token (required with `--register`) |
-| `--version` | - | Show version |
+| Flag | Env Var | Default | Description |
+|------|---------|---------|-------------|
+| `--server` | `SERVER` | `http://localhost:9080` | Vigil server URL |
+| `--interval` | - | `60` | Reporting interval in seconds (0 = single run) |
+| `--hostname` | `HOSTNAME` | (auto-detected) | Override hostname |
+| `--data-dir` | - | `/var/lib/vigil-agent` | Directory for agent keys and auth state |
+| `--register` | - | - | Run one-time registration, then exit |
+| `--token` | `TOKEN` | - | Registration token (auto-enables `--register` if set) |
+| `--version` | - | - | Show version |
+
+> Environment variables override flags. When `TOKEN` is set, the agent auto-registers on first boot and skips registration on subsequent starts — ideal for Docker deployments.
 
 ---
 

@@ -37,30 +37,18 @@ services:
           cpus: "0.10"
           memory: "128M"
 
-  # ─── Agent Registration (run once before starting the agent) ───
-  # docker compose run --rm vigil-agent-register
-  vigil-agent-register:
-    container_name: vigil-agent-register
-    image: ghcr.io/pineappledr/vigil-agent:latest
-    network_mode: host
-    depends_on:
-      vigil-server:
-        condition: service_healthy
-    privileged: true
-    command: ["--server", "http://localhost:9080", "--register", "--token", "YOUR_REGISTRATION_TOKEN"]
-    volumes:
-      - vigil_agent_data:/var/lib/vigil-agent
-
   vigil-agent:
     container_name: vigil-agent
-    image: ghcr.io/pineappledr/vigil-agent:latest  # Alpine variant (default)
+    image: ghcr.io/pineappledr/vigil-agent:latest
     restart: unless-stopped
     network_mode: host
     depends_on:
       vigil-server:
         condition: service_healthy
     privileged: true
-    command: ["--server", "http://localhost:9080", "--interval", "60"]
+    environment:
+      SERVER: http://localhost:9080
+      TOKEN: ${VIGIL_TOKEN}
     volumes:
       # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
