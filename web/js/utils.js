@@ -80,6 +80,21 @@ const Utils = {
 
     escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/'/g, "\\'");
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+
+    escapeJSString(str) {
+        if (!str) return '';
+        return str
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r');
     }
 };

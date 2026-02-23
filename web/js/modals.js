@@ -131,9 +131,9 @@ const Modals = {
                 </div>
                 <div class="modal-body">
                     <div class="alias-drive-info">
-                        <div><strong>Drive:</strong> ${driveName}</div>
-                        <div><strong>Serial:</strong> ${serialNumber}</div>
-                        <div><strong>Server:</strong> ${hostname}</div>
+                        <div><strong>Drive:</strong> ${Utils.escapeHtml(driveName)}</div>
+                        <div><strong>Serial:</strong> ${Utils.escapeHtml(serialNumber)}</div>
+                        <div><strong>Server:</strong> ${Utils.escapeHtml(hostname)}</div>
                     </div>
                     <div class="form-group">
                         <label>Alias (friendly name)</label>
@@ -146,7 +146,7 @@ const Modals = {
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
-                    <button class="btn btn-primary" onclick="Modals.submitAlias('${hostname}', '${serialNumber}')">Save Alias</button>
+                    <button class="btn btn-primary" onclick="Modals.submitAlias('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(serialNumber)}')">Save Alias</button>
                 </div>
             </div>
         `);

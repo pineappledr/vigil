@@ -10,7 +10,7 @@
   <p>
     <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
     <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
-    <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go Version">
+    <img src="https://img.shields.io/badge/Go-1.25.7-00ADD8?logo=go&logoColor=white" alt="Go Version">
     <img src="https://img.shields.io/badge/SQLite-v1.44.0-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
   </p>
 
@@ -32,7 +32,7 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora,
 - **🔍 Deep Analysis:** View raw S.M.A.R.T. attributes, temperature history, and drive details.
 - **🤖 Predictive Checks:** Advanced analysis to determine if a drive is failing or just aging.
 - **📊 Continuous Monitoring:** Configurable reporting intervals with automatic reconnection.
-- **🔐 Authentication:** Built-in login system with secure sessions.
+- **🔐 Authentication:** Built-in login system with bcrypt password hashing, secure cookies, and rate limiting.
 - **🏷️ Drive Aliases:** Set custom names for your drives (e.g., "Plex Media", "Backup Drive").
 - **🔧 HBA Support:** Automatic detection for SATA drives behind SAS HBA controllers (LSI SAS3224, etc.).
 - **🗄️ ZFS Pool Monitoring:** Full ZFS support with pool health, device hierarchy, scrub history, and SMART integration.
@@ -148,7 +148,7 @@ Open `http://YOUR_SERVER_IP:9080` in your browser.
 - Username: `admin`
 - Password: Check server logs or set via `ADMIN_PASS` environment variable
 
-> 💡 To find the generated password in the logs, run: `docker logs vigil-server 2>&1 | grep "Generated admin password"`
+> 💡 To find the generated password, run: `docker logs vigil-server 2>&1 | grep "Admin password"`
 > 
 > On first login with a generated password, you'll be prompted to change it.
 
@@ -486,9 +486,10 @@ sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
 
 When you first start Vigil with authentication enabled:
 
-1. If `ADMIN_PASS` is not set, a random password is generated and logged:
+1. If `ADMIN_PASS` is not set, a random password is generated and printed to stderr on first startup:
    ```
-   🔑 Generated admin password: a1b2c3d4e5f6
+   🔑 Generated admin password — check server logs only on first run
+     Admin password: a1b2c3d4e5f6
    ✓ Created admin user: admin
    ```
 
@@ -503,6 +504,18 @@ For internal networks or testing, you can disable authentication:
 ```bash
 docker run -e AUTH_ENABLED=false ghcr.io/pineappledr/vigil:latest
 ```
+
+### Security Features
+
+| Layer | Protection |
+|-------|-----------|
+| **Passwords** | bcrypt hashing (cost 10) |
+| **Sessions** | Cryptographically random tokens, 7-day TTL, hourly cleanup |
+| **Cookies** | `HttpOnly`, `Secure` (HTTPS), `SameSite=Lax` |
+| **Rate Limiting** | Per-IP token bucket — 5 req/min on login, 10 req/min on agent auth |
+| **XSS** | All user-controlled data escaped in HTML and JavaScript contexts |
+| **CORS** | Origin reflection with `Vary: Origin` (no wildcard) |
+| **CI/CD** | govulncheck, gosec, and Trivy scans gate every build |
 
 ---
 
@@ -676,7 +689,7 @@ The agent's machine fingerprint has changed (e.g., hardware change, VM migration
 
 ### Authentication issues
 
-- Check logs for generated password: `docker logs vigil-server | grep password`
+- Check logs for generated password: `docker logs vigil-server 2>&1 | grep "Admin password"`
 - Reset by deleting the database: `docker volume rm vigil_data`
 
 ### Agent version mismatch

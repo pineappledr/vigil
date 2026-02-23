@@ -11,7 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.25.7'
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
@@ -20,6 +20,8 @@ jobs:
   test:
     name: Test & Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,11 +57,78 @@ jobs:
           go build -v ./cmd/agent
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # SECURITY SCAN - Breaks the build on high/critical vulnerabilities
+  # ═══════════════════════════════════════════════════════════════════════════
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Run gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -severity high -confidence high -quiet ./...
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build server image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: vigil-server:scan
+          cache-from: type=gha
+
+      - name: Build agent image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent
+          push: false
+          load: true
+          tags: vigil-agent:scan
+          cache-from: type=gha
+
+      - name: Trivy scan - Server image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: vigil-server:scan
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+      - name: Trivy scan - Agent image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: vigil-agent:scan
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # PR PREVIEW - Build preview images for pull requests
   # ═══════════════════════════════════════════════════════════════════════════
   build-pr-preview:
     name: PR Preview
-    needs: test
+    needs: [test, security]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
@@ -147,7 +216,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   build-dev:
     name: Dev Build
-    needs: test
+    needs: [test, security]
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'push' && 
@@ -272,22 +341,16 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   build-latest:
     name: Latest Build
-    needs: test
+    needs: [test, security]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
     permissions:
-      contents: write
+      contents: read
       packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -305,34 +368,6 @@ jobs:
       - name: Get short SHA
         id: meta
         run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
-
-      - name: Build agent binaries
-        run: |
-          mkdir -p dist
-          VERSION="latest-${{ steps.meta.outputs.sha }}"
-          LDFLAGS="-s -w -X main.version=$VERSION"
-
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-amd64 ./cmd/agent
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/vigil-agent-linux-arm64 ./cmd/agent
-
-          cd dist && sha256sum * > checksums.txt
-
-      - name: Update latest release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: Latest Build
-          body: |
-            Rolling release from `main` branch (commit ${{ github.sha }}).
-
-            These binaries are updated on every push to main.
-            For stable releases, use a versioned tag (e.g. `v2.4.0`).
-          files: |
-            dist/vigil-agent-linux-amd64
-            dist/vigil-agent-linux-arm64
-            dist/checksums.txt
-          prerelease: false
-          make_latest: true
 
       - name: Build Server
         uses: docker/build-push-action@v5
@@ -383,7 +418,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Release
-    needs: test
+    needs: [test, security]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

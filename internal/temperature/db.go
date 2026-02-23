@@ -304,7 +304,7 @@ func GetTemperatureTimeSeries(db *sql.DB, hostname, serial string, period Temper
 		ORDER BY time_bucket ASC
 	`, timeFormat, timeFilter)
 
-	rows, err := db.Query(query, args...)
+	rows, err := db.Query(query, args...) // #nosec G701 -- query is built from hardcoded format strings, user values are parameterized
 	if err != nil {
 		return nil, fmt.Errorf("failed to get time series: %w", err)
 	}

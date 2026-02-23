@@ -78,6 +78,15 @@ func main() {
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
 
+	// Periodic session cleanup
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		for range ticker.C {
+			auth.CleanupExpiredSessions()
+			agents.CleanupExpiredAgentSessions(db.DB)
+		}
+	}()
+
 	mux := setupRoutes(cfg)
 	handler := middleware.Logging(middleware.CORS(mux))
 
@@ -107,19 +116,23 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 		return auth.Middleware(cfg, h)
 	}
 
+	// Rate limiters for public auth endpoints
+	loginLimiter := middleware.NewRateLimiter(5, time.Minute)
+	agentLimiter := middleware.NewRateLimiter(10, time.Minute)
+
 	// Public endpoints
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
 	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
 
-	// Auth endpoints
-	mux.HandleFunc("POST /api/auth/login", auth.Login(cfg))
+	// Auth endpoints (rate limited)
+	mux.HandleFunc("POST /api/auth/login", loginLimiter.Limit(auth.Login(cfg)))
 	mux.HandleFunc("POST /api/auth/logout", auth.Logout)
 
-	// ─── Agent authentication (public — agents identify themselves) ───────
+	// ─── Agent authentication (public, rate limited) ─────────────────────
 	mux.HandleFunc("GET /api/v1/server/pubkey", handlers.GetServerPublicKey)
-	mux.HandleFunc("POST /api/v1/agents/register", handlers.RegisterAgent)
-	mux.HandleFunc("POST /api/v1/agents/auth", handlers.AuthAgent)
+	mux.HandleFunc("POST /api/v1/agents/register", agentLimiter.Limit(handlers.RegisterAgent))
+	mux.HandleFunc("POST /api/v1/agents/auth", agentLimiter.Limit(handlers.AuthAgent))
 
 	// Agent report endpoint — requires valid agent session token
 	mux.HandleFunc("POST /api/report", handlers.Report)

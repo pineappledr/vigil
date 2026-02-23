@@ -166,7 +166,11 @@ const Navigation = {
         }
 
         settingsView.classList.remove('hidden');
-        settingsView.innerHTML = Renderer.settingsPage();
+        // Safe: settingsPage() returns a static template with no user-controlled data
+        const range = document.createRange();
+        range.selectNodeContents(settingsView);
+        range.deleteContents();
+        settingsView.append(range.createContextualFragment(Renderer.settingsPage()));
 
         document.getElementById('page-title').textContent = 'Settings';
         document.getElementById('breadcrumbs')?.classList.add('hidden');

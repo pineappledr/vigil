@@ -2,19 +2,27 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log"
+	"os"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"vigil/internal/db"
 	"vigil/internal/models"
 )
 
-// HashPassword creates a SHA256 hash of the password
-func HashPassword(password string) string {
-	hash := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(hash[:])
+// HashPassword creates a bcrypt hash of the password
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hash), err
+}
+
+// CheckPassword verifies a password against a bcrypt hash.
+func CheckPassword(storedHash, password string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)) == nil
 }
 
 // GenerateToken creates a secure random token
@@ -83,15 +91,22 @@ func CreateDefaultAdmin(config models.Config) {
 
 	if password == "" {
 		password = GenerateToken()[:12]
-		log.Printf("🔑 Generated admin password: %s", password)
+		log.Printf("🔑 Generated admin password — check server logs only on first run")
+		fmt.Fprintf(os.Stderr, "\n  Admin password: %s\n\n", password)
 		log.Printf("   Set ADMIN_PASS environment variable to use a custom password")
 	} else {
 		mustChange = 0
 	}
 
-	_, err := db.DB.Exec(
+	hash, err := HashPassword(password)
+	if err != nil {
+		log.Printf("⚠️  Could not hash admin password: %v", err)
+		return
+	}
+
+	_, err = db.DB.Exec(
 		"INSERT INTO users (username, password_hash, must_change_password) VALUES (?, ?, ?)",
-		config.AdminUser, HashPassword(password), mustChange,
+		config.AdminUser, hash, mustChange,
 	)
 	if err != nil {
 		log.Printf("⚠️  Could not create admin user: %v", err)

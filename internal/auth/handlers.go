@@ -11,6 +11,15 @@ import (
 	"vigil/internal/models"
 )
 
+// isSecureRequest checks if the request came over HTTPS (directly or via reverse proxy)
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	return strings.EqualFold(proto, "https")
+}
+
 // Status returns authentication status
 func Status(config models.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +74,7 @@ func Login(config models.Config) http.HandlerFunc {
 			creds.Username,
 		).Scan(&user.ID, &user.Username, &user.PasswordHash, &mustChange, &createdAt)
 
-		if err != nil || user.PasswordHash != HashPassword(creds.Password) {
+		if err != nil || !CheckPassword(user.PasswordHash, creds.Password) {
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
@@ -82,6 +91,7 @@ func Login(config models.Config) http.HandlerFunc {
 			Path:     "/",
 			Expires:  expiresAt,
 			HttpOnly: true,
+			Secure:   isSecureRequest(r),
 			SameSite: http.SameSiteLaxMode,
 		})
 
@@ -109,6 +119,8 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
+		Secure:   isSecureRequest(r),
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	jsonResponse(w, map[string]string{"status": "logged_out"})
@@ -144,14 +156,20 @@ func ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	var currentHash string
 	db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&currentHash)
-	if currentHash != HashPassword(req.CurrentPassword) {
+	if !CheckPassword(currentHash, req.CurrentPassword) {
 		jsonError(w, "Current password is incorrect", http.StatusUnauthorized)
 		return
 	}
 
-	_, err := db.DB.Exec(
+	newHash, err := HashPassword(req.NewPassword)
+	if err != nil {
+		jsonError(w, "Failed to hash password", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = db.DB.Exec(
 		"UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
-		HashPassword(req.NewPassword), session.UserID,
+		newHash, session.UserID,
 	)
 	if err != nil {
 		jsonError(w, "Failed to update password", http.StatusInternalServerError)
@@ -188,7 +206,7 @@ func ChangeUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if currentHash != HashPassword(req.CurrentPassword) {
+	if !CheckPassword(currentHash, req.CurrentPassword) {
 		jsonError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
