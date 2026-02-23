@@ -344,6 +344,11 @@ const Modals = {
                             </button>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label>Version</label>
+                        <input type="text" id="agent-version" class="form-input" placeholder="latest" value="">
+                        <span class="form-hint" style="margin-top: 4px;">Leave empty for latest. Use a tag like <code>v2.4.0</code> for a specific version.</span>
+                    </div>
                     <div class="agent-option-row">
                         <label class="agent-checkbox">
                             <input type="checkbox" id="agent-zfs" onchange="Modals.toggleZFS(this.checked)">
@@ -408,6 +413,7 @@ const Modals = {
         });
 
         const overlay = document.querySelector('.modal-overlay');
+        const prevPlatform = overlay?._agentState?.platform;
         if (overlay?._agentState) overlay._agentState.platform = platform;
 
         // Auto-toggle ZFS for TrueNAS
@@ -415,8 +421,8 @@ const Modals = {
         if (platform === 'truenas') {
             if (zfsCheckbox) zfsCheckbox.checked = true;
             this.toggleZFS(true);
-        } else if (zfsCheckbox && overlay?._agentState?.platform !== 'truenas') {
-            if (zfsCheckbox) zfsCheckbox.checked = false;
+        } else if (prevPlatform === 'truenas' && zfsCheckbox) {
+            zfsCheckbox.checked = false;
             this.toggleZFS(false);
         }
 
@@ -457,7 +463,8 @@ const Modals = {
         const name = document.getElementById('agent-name')?.value.trim() || 'vigil-agent';
         const token = document.getElementById('agent-token')?.value || '';
         const serverURL = document.getElementById('agent-server-url')?.value || st.serverURL;
-        const text = this._generateInstallContent(st.tab, st.platform, serverURL, token, name, st.zfs);
+        const version = document.getElementById('agent-version')?.value.trim() || '';
+        const text = this._generateInstallContent(st.tab, st.platform, serverURL, token, name, st.zfs, version);
 
         this._copyToClipboard(text, () => {
             const label = document.getElementById('agent-copy-label');
@@ -469,16 +476,17 @@ const Modals = {
         });
     },
 
-    _generateInstallContent(tab, platform, serverURL, token, name, zfs) {
+    _generateInstallContent(tab, platform, serverURL, token, name, zfs, version) {
         if (tab === 'docker') {
-            return this._generateDockerCompose(platform, serverURL, token, name, zfs);
+            return this._generateDockerCompose(platform, serverURL, token, name, zfs, version);
         }
-        return this._generateBinaryInstall(serverURL, token, name, zfs);
+        return this._generateBinaryInstall(serverURL, token, name, zfs, version);
     },
 
-    _generateDockerCompose(platform, serverURL, token, name, zfs) {
+    _generateDockerCompose(platform, serverURL, token, name, zfs, version) {
         const isTrueNAS = platform === 'truenas';
-        const image = isTrueNAS ? 'ghcr.io/pineappledr/vigil-agent:debian' : 'ghcr.io/pineappledr/vigil-agent:latest';
+        const tag = version || (isTrueNAS ? 'debian' : 'latest');
+        const image = `ghcr.io/pineappledr/vigil-agent:${tag}`;
 
         let volumes = `      - /dev:/dev:ro`;
 
@@ -522,9 +530,10 @@ volumes:
   vigil_agent_data:`;
     },
 
-    _generateBinaryInstall(serverURL, token, name, zfs) {
+    _generateBinaryInstall(serverURL, token, name, zfs, version) {
         const zfsFlag = zfs ? ' -z' : '';
-        return `curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s "${serverURL}" -t "${token}" -n "${name}"${zfsFlag}`;
+        const versionFlag = version ? ` -v "${version}"` : '';
+        return `curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s "${serverURL}" -t "${token}" -n "${name}"${zfsFlag}${versionFlag}`;
     },
 
     _copyToClipboard(text, onSuccess) {

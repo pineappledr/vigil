@@ -157,10 +157,13 @@ Open `http://YOUR_SERVER_IP:9080` in your browser.
 Generate a registration token from the web UI (**Agents → Add Agent**), then on each server:
 
 ```bash
-curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent && chmod +x /tmp/vigil-agent && sudo mv /tmp/vigil-agent /usr/local/bin/ && sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token YOUR_TOKEN
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" \
+  -t "YOUR_REGISTRATION_TOKEN" \
+  -n "my-server"
 ```
 
-> The agent auto-registers on first run when `TOKEN` is provided, then continues reporting normally on subsequent starts.
+> This installs dependencies, downloads the agent, registers with the server, and creates a systemd service — all in one command. Add `-z` for ZFS support or `-v "v2.4.0"` for a specific version.
 
 ---
 
@@ -205,6 +208,28 @@ This one-liner downloads the install script, which automatically:
 - Registers with the server
 - Creates and enables a systemd service
 
+**Install Script Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `-s` | Server URL (required) |
+| `-t` | Registration token (required) |
+| `-n` | Agent hostname/name (required) |
+| `-z` | Enable ZFS monitoring (installs ZFS packages) |
+| `-v` | Agent version to install (e.g. `v2.4.0`). Defaults to latest. |
+
+**Examples:**
+
+```bash
+# Install with ZFS support
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://192.168.1.10:9080" -t "YOUR_TOKEN" -n "nas-01" -z
+
+# Install a specific version
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://192.168.1.10:9080" -t "YOUR_TOKEN" -n "web-01" -v "v2.4.0"
+```
+
 ### Agent: Docker (Standard Linux)
 
 The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts.
@@ -218,13 +243,11 @@ docker run -d \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
-  # Uncomment the following for ZFS monitoring:
-  # -v /sys:/sys:ro \
-  # -v /proc:/proc:ro \
-  # -v /dev/zfs:/dev/zfs \
   -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:latest
 ```
+
+> **ZFS Monitoring:** Add `-v /sys:/sys:ro -v /proc:/proc:ro -v /dev/zfs:/dev/zfs` if your host uses ZFS.
 
 ### Agent: Docker (TrueNAS)
 

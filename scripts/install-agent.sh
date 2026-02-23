@@ -2,23 +2,24 @@
 set -e
 
 # Vigil Agent Installer
-# Usage: curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s <server> -t <token> -n <name> [-z]
+# Usage: curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s <server> -t <token> -n <name> [-z] [-v version]
 
 INSTALL_DIR="/usr/local/bin"
 SERVICE_FILE="/etc/systemd/system/vigil-agent.service"
-BINARY_URL="https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64"
+REPO="https://github.com/pineappledr/vigil/releases"
 INTERVAL=60
 
 # ─── Parse arguments ─────────────────────────────────────────────────────────
 usage() {
     echo "Vigil Agent Installer"
     echo ""
-    echo "Usage: install-agent.sh -s <server_url> -t <token> -n <hostname> [-z]"
+    echo "Usage: install-agent.sh -s <server_url> -t <token> -n <hostname> [-z] [-v version]"
     echo ""
     echo "  -s  Server URL (e.g. http://192.168.1.10:9080)"
     echo "  -t  Registration token"
     echo "  -n  Agent hostname/name"
     echo "  -z  Enable ZFS monitoring (installs ZFS dependencies)"
+    echo "  -v  Agent version to install (e.g. v2.4.0). Defaults to latest."
     echo "  -h  Show this help"
     exit 1
 }
@@ -27,13 +28,15 @@ SERVER=""
 TOKEN=""
 NAME=""
 ZFS=false
+VERSION=""
 
-while getopts "s:t:n:zh" opt; do
+while getopts "s:t:n:v:zh" opt; do
     case $opt in
         s) SERVER="$OPTARG" ;;
         t) TOKEN="$OPTARG" ;;
         n) NAME="$OPTARG" ;;
         z) ZFS=true ;;
+        v) VERSION="$OPTARG" ;;
         h) usage ;;
         *) usage ;;
     esac
@@ -43,6 +46,13 @@ if [ -z "$SERVER" ] || [ -z "$TOKEN" ] || [ -z "$NAME" ]; then
     echo "Error: -s, -t, and -n are all required."
     echo ""
     usage
+fi
+
+# Build download URL based on version
+if [ -n "$VERSION" ]; then
+    BINARY_URL="$REPO/download/$VERSION/vigil-agent-linux-amd64"
+else
+    BINARY_URL="$REPO/latest/download/vigil-agent-linux-amd64"
 fi
 
 # ─── Detect distro and install dependencies ──────────────────────────────────
@@ -68,7 +78,7 @@ install_deps() {
 
 # ─── Download and install binary ─────────────────────────────────────────────
 install_binary() {
-    echo "→ Downloading vigil-agent..."
+    echo "→ Downloading vigil-agent${VERSION:+ $VERSION}..."
     curl -sL "$BINARY_URL" -o /tmp/vigil-agent
     chmod +x /tmp/vigil-agent
     sudo mv /tmp/vigil-agent "$INSTALL_DIR/vigil-agent"
@@ -114,6 +124,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Server:   $SERVER"
 echo "  Name:     $NAME"
+echo "  Version:  ${VERSION:-latest}"
 echo "  ZFS:      $ZFS"
 echo ""
 
