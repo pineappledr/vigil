@@ -193,37 +193,17 @@ volumes:
 ### Agent: Systemd Service (Recommended)
 
 ```bash
-# Install dependencies (Debian/Ubuntu)
-sudo apt update && sudo apt install -y smartmontools nvme-cli zfsutils-linux
-
-# Download and install vigil-agent
-curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent \
-  && chmod +x /tmp/vigil-agent \
-  && sudo mv /tmp/vigil-agent /usr/local/bin/
-
-# Register agent with server
-sudo vigil-agent --register --server http://YOUR_SERVER_IP:9080 --token YOUR_REGISTRATION_TOKEN --hostname my-server
-
-# Create systemd service
-sudo tee /etc/systemd/system/vigil-agent.service > /dev/null <<EOF
-[Unit]
-Description=Vigil Monitoring Agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:9080 --hostname my-server --interval 60
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start the service
-sudo systemctl daemon-reload && sudo systemctl enable --now vigil-agent
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" \
+  -t "YOUR_REGISTRATION_TOKEN" \
+  -n "my-server"
 ```
+
+This one-liner downloads the install script, which automatically:
+- Detects your distro and installs dependencies (smartmontools, nvme-cli)
+- Downloads the latest vigil-agent binary
+- Registers with the server
+- Creates and enables a systemd service
 
 ### Agent: Docker (Standard Linux)
 
@@ -238,9 +218,10 @@ docker run -d \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
-  -v /sys:/sys:ro \
-  -v /proc:/proc:ro \
-  -v /dev/zfs:/dev/zfs \
+  # Uncomment the following for ZFS monitoring:
+  # -v /sys:/sys:ro \
+  # -v /proc:/proc:ro \
+  # -v /dev/zfs:/dev/zfs \
   -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:latest
 ```

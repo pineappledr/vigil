@@ -6,11 +6,10 @@ import (
 	"log"
 )
 
-// MigrateSmartAttributes creates all tables required for Phase 1.2 of the
-// health monitoring roadmap: S.M.A.R.T. tracking, temperature history,
-// and critical attribute definitions.
+// MigrateSmartAttributes creates the tables for S.M.A.R.T. tracking,
+// temperature history, and critical attribute definitions.
 func MigrateSmartAttributes(db *sql.DB) error {
-	log.Println("📊 Running migration: Phase 1.2 SMART attributes schema")
+	log.Println("📊 Running migration: SMART attributes schema")
 
 	// Each statement is executed individually so that a failure in one block
 	// does not prevent the others from running, and the log pinpoints exactly
@@ -143,6 +142,6 @@ func MigrateSmartAttributes(db *sql.DB) error {
 		log.Printf("  ✓ %s", s.label)
 	}
 
-	log.Println("📊 Migration completed: Phase 1.2 tables ready")
+	log.Println("📊 Migration completed: SMART tables ready")
 	return nil
 }

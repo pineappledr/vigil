@@ -458,8 +458,7 @@ const Modals = {
         const isTrueNAS = platform === 'truenas';
         const image = isTrueNAS ? 'ghcr.io/pineappledr/vigil-agent:debian' : 'ghcr.io/pineappledr/vigil-agent:latest';
 
-        let volumes = `      - /dev:/dev:ro
-      - /sys:/sys:ro`;
+        let volumes = `      - /dev:/dev:ro`;
 
         if (isTrueNAS) {
             volumes += `
@@ -471,8 +470,10 @@ const Modals = {
       - /usr/lib:/usr/lib:ro`;
         } else {
             volumes += `
-      - /proc:/proc:ro
-      - /dev/zfs:/dev/zfs`;
+      # ─── Uncomment for ZFS monitoring ───
+      # - /sys:/sys:ro
+      # - /proc:/proc:ro
+      # - /dev/zfs:/dev/zfs`;
         }
 
         volumes += `
@@ -500,42 +501,8 @@ volumes:
   vigil_agent_data:`;
     },
 
-    _generateBinaryInstall(platform, serverURL, token, name) {
-        const deps = {
-            debian: 'sudo apt update && sudo apt install -y smartmontools nvme-cli zfsutils-linux',
-            fedora: 'sudo dnf install -y smartmontools nvme-cli zfs',
-            arch: 'sudo pacman -S --noconfirm smartmontools nvme-cli zfs-utils'
-        };
-        return `# Install dependencies
-${deps[platform] || deps.debian}
-
-# Download and install vigil-agent
-curl -sL https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 -o /tmp/vigil-agent \\
-  && chmod +x /tmp/vigil-agent \\
-  && sudo mv /tmp/vigil-agent /usr/local/bin/
-
-# Register agent with server
-sudo vigil-agent --register --server ${serverURL} --token ${token} --hostname ${name}
-
-# Create systemd service
-sudo tee /etc/systemd/system/vigil-agent.service > /dev/null <<EOF
-[Unit]
-Description=Vigil Monitoring Agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/vigil-agent --server ${serverURL} --hostname ${name} --interval 60
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start the service
-sudo systemctl daemon-reload && sudo systemctl enable --now vigil-agent`;
+    _generateBinaryInstall(_platform, serverURL, token, name) {
+        return `curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s "${serverURL}" -t "${token}" -n "${name}"`;
     },
 
     _copyToClipboard(text, onSuccess) {

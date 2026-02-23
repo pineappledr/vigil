@@ -1,6 +1,6 @@
 /**
  * Vigil Dashboard - SMART Attributes Module
- * Phase 1.3: Enhanced S.M.A.R.T. Monitoring UI with NVMe Health
+ * Enhanced S.M.A.R.T. Monitoring UI with NVMe Health
  */
 
 const SmartAttributes = {

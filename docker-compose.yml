@@ -53,13 +53,10 @@ services:
       # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
 
-      # ─── Required for ZFS detection ───
-      - /sys:/sys:ro
-      - /proc:/proc:ro
-
-      # ─── ZFS kernel device (required for zpool/zfs commands) ───
-      # Remove this line if ZFS is not installed on host
-      - /dev/zfs:/dev/zfs
+      # ─── Optional: Uncomment for ZFS monitoring ───
+      # - /sys:/sys:ro
+      # - /proc:/proc:ro
+      # - /dev/zfs:/dev/zfs
 
       # ─── Agent auth keys and session state ───
       - vigil_agent_data:/var/lib/vigil-agent
