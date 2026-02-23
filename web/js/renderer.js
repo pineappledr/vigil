@@ -384,7 +384,7 @@ const Renderer = {
                         <div class="settings-item">
                             <div class="settings-item-info">
                                 <div class="settings-item-title">Username</div>
-                                <div class="settings-item-desc">Currently signed in as <strong>${State.currentUser || 'admin'}</strong></div>
+                                <div class="settings-item-desc">Currently signed in as <strong>${Utils.escapeHtml(State.currentUser || 'admin')}</strong></div>
                             </div>
                             <button class="btn btn-secondary" onclick="Modals.showChangeUsername()">Change</button>
                         </div>
