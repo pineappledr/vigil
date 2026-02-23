@@ -140,7 +140,7 @@ func (c *Checker) fetchLatestRelease() (*ReleaseInfo, error) {
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", fmt.Sprintf("Vigil/%s", c.currentVersion))
 
-	resp, err := c.httpClient.Do(req) // #nosec G107 -- URL is constructed from hardcoded GitHub API pattern
+	resp, err := c.httpClient.Do(req) // #nosec G107 G704 -- URL is constructed from hardcoded GitHub API pattern
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch release info: %w", err)
 	}
