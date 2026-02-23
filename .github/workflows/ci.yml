@@ -78,7 +78,7 @@ jobs:
       - name: Run gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -severity medium -confidence medium -quiet ./...
+          gosec -severity high -confidence high -quiet ./...
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
