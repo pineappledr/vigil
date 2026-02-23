@@ -2,7 +2,7 @@
 set -e
 
 # Vigil Agent Installer
-# Usage: curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s <server> -t <token> -n <name>
+# Usage: curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s <server> -t <token> -n <name> [-z]
 
 INSTALL_DIR="/usr/local/bin"
 SERVICE_FILE="/etc/systemd/system/vigil-agent.service"
@@ -13,11 +13,12 @@ INTERVAL=60
 usage() {
     echo "Vigil Agent Installer"
     echo ""
-    echo "Usage: install-agent.sh -s <server_url> -t <token> -n <hostname>"
+    echo "Usage: install-agent.sh -s <server_url> -t <token> -n <hostname> [-z]"
     echo ""
     echo "  -s  Server URL (e.g. http://192.168.1.10:9080)"
     echo "  -t  Registration token"
     echo "  -n  Agent hostname/name"
+    echo "  -z  Enable ZFS monitoring (installs ZFS dependencies)"
     echo "  -h  Show this help"
     exit 1
 }
@@ -25,12 +26,14 @@ usage() {
 SERVER=""
 TOKEN=""
 NAME=""
+ZFS=false
 
-while getopts "s:t:n:h" opt; do
+while getopts "s:t:n:zh" opt; do
     case $opt in
         s) SERVER="$OPTARG" ;;
         t) TOKEN="$OPTARG" ;;
         n) NAME="$OPTARG" ;;
+        z) ZFS=true ;;
         h) usage ;;
         *) usage ;;
     esac
@@ -47,13 +50,19 @@ install_deps() {
     echo "→ Installing dependencies..."
     if command -v apt-get &>/dev/null; then
         sudo apt-get update -qq
-        sudo apt-get install -y -qq smartmontools nvme-cli
+        local pkgs="smartmontools nvme-cli"
+        if [ "$ZFS" = true ]; then pkgs="$pkgs zfsutils-linux"; fi
+        sudo apt-get install -y -qq $pkgs
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y -q smartmontools nvme-cli
+        local pkgs="smartmontools nvme-cli"
+        if [ "$ZFS" = true ]; then pkgs="$pkgs zfs"; fi
+        sudo dnf install -y -q $pkgs
     elif command -v pacman &>/dev/null; then
-        sudo pacman -S --noconfirm --needed smartmontools nvme-cli
+        local pkgs="smartmontools nvme-cli"
+        if [ "$ZFS" = true ]; then pkgs="$pkgs zfs-utils"; fi
+        sudo pacman -S --noconfirm --needed $pkgs
     else
-        echo "⚠ Could not detect package manager. Please install smartmontools and nvme-cli manually."
+        echo "⚠ Could not detect package manager. Please install dependencies manually."
     fi
 }
 
@@ -105,6 +114,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Server:   $SERVER"
 echo "  Name:     $NAME"
+echo "  ZFS:      $ZFS"
 echo ""
 
 install_deps

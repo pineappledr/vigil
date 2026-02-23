@@ -344,6 +344,13 @@ const Modals = {
                             </button>
                         </div>
                     </div>
+                    <div class="agent-option-row">
+                        <label class="agent-checkbox">
+                            <input type="checkbox" id="agent-zfs" onchange="Modals.toggleZFS(this.checked)">
+                            ZFS Monitoring
+                        </label>
+                        <span class="form-hint">Include ZFS volumes and dependencies</span>
+                    </div>
                     <div id="agent-error" class="form-error"></div>
                 </div>
                 <div class="modal-footer agent-modal-footer">
@@ -360,7 +367,7 @@ const Modals = {
             </div>
         `);
 
-        modal._agentState = { tab: 'docker', platform: 'linux', serverURL, serverPubKey, token };
+        modal._agentState = { tab: 'docker', platform: 'linux', zfs: false, serverURL, serverPubKey, token };
         document.getElementById('agent-name').focus();
     },
 
@@ -403,6 +410,16 @@ const Modals = {
         const overlay = document.querySelector('.modal-overlay');
         if (overlay?._agentState) overlay._agentState.platform = platform;
 
+        // Auto-toggle ZFS for TrueNAS
+        const zfsCheckbox = document.getElementById('agent-zfs');
+        if (platform === 'truenas') {
+            if (zfsCheckbox) zfsCheckbox.checked = true;
+            this.toggleZFS(true);
+        } else if (zfsCheckbox && overlay?._agentState?.platform !== 'truenas') {
+            if (zfsCheckbox) zfsCheckbox.checked = false;
+            this.toggleZFS(false);
+        }
+
         const hint = document.getElementById('agent-tab-hint');
         const hints = {
             linux: 'Copy the <code>docker-compose.yml</code> to deploy the agent on a standard Linux host.',
@@ -412,6 +429,11 @@ const Modals = {
             arch: 'Install dependencies and the agent binary on <strong>Arch Linux</strong>.'
         };
         if (hint) hint.innerHTML = hints[platform] || '';
+    },
+
+    toggleZFS(enabled) {
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay?._agentState) overlay._agentState.zfs = enabled;
     },
 
     copyField(inputId) {
@@ -435,7 +457,7 @@ const Modals = {
         const name = document.getElementById('agent-name')?.value.trim() || 'vigil-agent';
         const token = document.getElementById('agent-token')?.value || '';
         const serverURL = document.getElementById('agent-server-url')?.value || st.serverURL;
-        const text = this._generateInstallContent(st.tab, st.platform, serverURL, token, name);
+        const text = this._generateInstallContent(st.tab, st.platform, serverURL, token, name, st.zfs);
 
         this._copyToClipboard(text, () => {
             const label = document.getElementById('agent-copy-label');
@@ -447,20 +469,20 @@ const Modals = {
         });
     },
 
-    _generateInstallContent(tab, platform, serverURL, token, name) {
+    _generateInstallContent(tab, platform, serverURL, token, name, zfs) {
         if (tab === 'docker') {
-            return this._generateDockerCompose(platform, serverURL, token, name);
+            return this._generateDockerCompose(platform, serverURL, token, name, zfs);
         }
-        return this._generateBinaryInstall(platform, serverURL, token, name);
+        return this._generateBinaryInstall(serverURL, token, name, zfs);
     },
 
-    _generateDockerCompose(platform, serverURL, token, name) {
+    _generateDockerCompose(platform, serverURL, token, name, zfs) {
         const isTrueNAS = platform === 'truenas';
         const image = isTrueNAS ? 'ghcr.io/pineappledr/vigil-agent:debian' : 'ghcr.io/pineappledr/vigil-agent:latest';
 
         let volumes = `      - /dev:/dev:ro`;
 
-        if (isTrueNAS) {
+        if (zfs && isTrueNAS) {
             volumes += `
       - /dev/zfs:/dev/zfs
       - /sbin/zpool:/sbin/zpool:ro
@@ -468,12 +490,11 @@ const Modals = {
       - /lib:/lib:ro
       - /lib64:/lib64:ro
       - /usr/lib:/usr/lib:ro`;
-        } else {
+        } else if (zfs) {
             volumes += `
-      # ─── Uncomment for ZFS monitoring ───
-      # - /sys:/sys:ro
-      # - /proc:/proc:ro
-      # - /dev/zfs:/dev/zfs`;
+      - /sys:/sys:ro
+      - /proc:/proc:ro
+      - /dev/zfs:/dev/zfs`;
         }
 
         volumes += `
@@ -501,8 +522,9 @@ volumes:
   vigil_agent_data:`;
     },
 
-    _generateBinaryInstall(_platform, serverURL, token, name) {
-        return `curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s "${serverURL}" -t "${token}" -n "${name}"`;
+    _generateBinaryInstall(serverURL, token, name, zfs) {
+        const zfsFlag = zfs ? ' -z' : '';
+        return `curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- -s "${serverURL}" -t "${token}" -n "${name}"${zfsFlag}`;
     },
 
     _copyToClipboard(text, onSuccess) {
