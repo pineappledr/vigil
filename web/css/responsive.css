@@ -1,0 +1,281 @@
+/* ============================================
+   RESPONSIVE / MOBILE
+   Consolidated mobile breakpoints for Vigil
+   ============================================ */
+
+/* ─── Hamburger Button (hidden on desktop) ──────────────────────────────────── */
+
+.hamburger-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.hamburger-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+.hamburger-btn svg { width: 18px; height: 18px; }
+
+/* ─── Sidebar Overlay (tap outside to close) ────────────────────────────────── */
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+}
+
+/* ─── Tablet (≤900px) ───────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+    .hamburger-btn {
+        display: flex;
+    }
+
+    .sidebar-overlay.active {
+        display: block;
+    }
+
+    /* Close sidebar when navigating */
+    .sidebar.open ~ .main-content .nav-item {
+        pointer-events: auto;
+    }
+}
+
+/* ─── Small Tablet / Large Phone (≤768px) ───────────────────────────────────── */
+
+@media (max-width: 768px) {
+    /* Header */
+    .header-right {
+        gap: 8px;
+    }
+
+    .last-update {
+        display: none;
+    }
+
+    .header-left h1 {
+        font-size: 1.1rem;
+    }
+
+    /* Details layout: stack sidebar above content */
+    .details-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .detail-sidebar {
+        position: static;
+    }
+
+    /* Sidebar footer stats */
+    .stats-mini {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+    }
+
+    .stat-value {
+        font-size: 1rem;
+    }
+
+    /* ZFS disk rows: stack vertically */
+    .zfs-disk-row,
+    .zfs-device-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .zfs-disk-info,
+    .zfs-device-info {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .zfs-scrub-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .zfs-scrub-stats {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Modals: nearly full width */
+    .modal {
+        max-width: calc(100vw - 32px);
+    }
+
+    .modal-add-agent {
+        max-width: calc(100vw - 32px);
+    }
+
+    /* Smart attributes tooltip */
+    .attribute-tooltip {
+        width: calc(100vw - 40px);
+        max-width: 400px;
+    }
+}
+
+/* ─── Phone (≤480px) ────────────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    /* Header compact */
+    .main-header {
+        height: auto;
+        min-height: var(--header-height);
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .header-left h1 {
+        font-size: 1rem;
+    }
+
+    .breadcrumbs {
+        font-size: 0.7rem;
+    }
+
+    .user-btn span {
+        display: none;
+    }
+
+    .user-btn .chevron {
+        display: none;
+    }
+
+    /* View padding */
+    .view {
+        padding: 12px;
+    }
+
+    /* Summary cards: single column */
+    .summary-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .summary-card {
+        padding: 14px;
+    }
+
+    .summary-card .value {
+        font-size: 1.5rem;
+    }
+
+    /* Drive cards: compact */
+    .drive-grid {
+        gap: 8px;
+        padding: 8px;
+    }
+
+    .drive-card {
+        padding: 10px;
+    }
+
+    /* Detail card padding */
+    .detail-card {
+        padding: 14px;
+    }
+
+    .detail-sidebar {
+        padding: 16px;
+    }
+
+    /* Modals: full width with thin margin */
+    .modal-overlay {
+        padding: 8px;
+    }
+
+    .modal {
+        border-radius: 12px;
+    }
+
+    .modal-header {
+        padding: 14px 16px;
+    }
+
+    .modal-body {
+        padding: 16px;
+    }
+
+    .modal-footer {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+    }
+
+    /* Agent modal: compact tabs */
+    .agent-tab-bar {
+        gap: 0;
+    }
+
+    .agent-tab {
+        font-size: 0.8rem;
+        padding: 8px 12px;
+    }
+
+    .agent-platform-bar {
+        flex-wrap: wrap;
+    }
+
+    .agent-platform-btn {
+        font-size: 0.7rem;
+        padding: 4px 8px;
+    }
+
+    /* Form inputs touch-friendly */
+    .form-input {
+        padding: 12px 14px;
+        font-size: 16px; /* prevents iOS zoom on focus */
+    }
+
+    /* Table horizontal scroll */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .smart-table th,
+    .smart-table td {
+        padding: 8px 6px;
+        font-size: 0.75rem;
+    }
+
+    /* ZFS detail grid: single column */
+    .zfs-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .zfs-errors-row {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    /* Server section headers */
+    .drive-section-header {
+        padding: 10px 12px;
+    }
+
+    .drive-section-meta .timestamp {
+        display: none;
+    }
+
+    /* Back button */
+    .btn-back {
+        font-size: 0.8rem;
+        padding: 6px 12px;
+    }
+}
