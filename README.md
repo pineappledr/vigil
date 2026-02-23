@@ -16,6 +16,8 @@
 
 </div>
 
+> **⚠️ BREAKING CHANGE in v2.4.0:** This release introduces **Ed25519 key-based mutual authentication** between the server and agents. All existing agents **must be re-registered** using a one-time registration token. Agents running older versions will be rejected by the server. See [Agent Authentication](#-agent-authentication) for the new setup workflow.
+
 **Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, and comprehensive ZFS pool monitoring, ensuring you never miss a critical hardware failure.
 
 Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
@@ -152,17 +154,16 @@ Open `http://YOUR_SERVER_IP:9080` in your browser.
 
 ### 3. Deploy Agents
 
-On each server you want to monitor:
+Generate a registration token from the web UI (**Agents → Add Agent**), then on each server:
 
 ```bash
-# Download agent
-sudo curl -L https://github.com/pineappledr/vigil/releases/latest/download/vigil-agent-linux-amd64 \
-  -o /usr/local/bin/vigil-agent
-sudo chmod +x /usr/local/bin/vigil-agent
-
-# Run agent
-sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" \
+  -t "YOUR_REGISTRATION_TOKEN" \
+  -n "my-server"
 ```
+
+> This installs dependencies, downloads the agent, registers with the server, and creates a systemd service — all in one command. Add `-z` for ZFS support or `-v "v2.4.0"` for a specific version.
 
 ---
 
@@ -195,29 +196,47 @@ volumes:
 ### Agent: Systemd Service (Recommended)
 
 ```bash
-# Create service file
-sudo tee /etc/systemd/system/vigil-agent.service > /dev/null <<EOF
-[Unit]
-Description=Vigil Monitoring Agent
-After=network.target
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" \
+  -t "YOUR_REGISTRATION_TOKEN" \
+  -n "my-server"
+```
 
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
-Restart=always
-RestartSec=10
+This one-liner downloads the install script, which automatically:
+- Detects your distro and installs dependencies (smartmontools, nvme-cli)
+- Downloads the latest vigil-agent binary
+- Registers with the server
+- Creates and enables a systemd service
 
-[Install]
-WantedBy=multi-user.target
-EOF
+**Install Script Flags:**
 
-# Enable and start
-sudo systemctl daemon-reload
-sudo systemctl enable vigil-agent
-sudo systemctl start vigil-agent
+| Flag | Description |
+|------|-------------|
+| `-s` | Server URL (required) |
+| `-t` | Registration token (required) |
+| `-n` | Agent hostname/name (required) |
+| `-z` | Enable ZFS monitoring (installs ZFS packages) |
+| `-v` | Version or release tag (e.g. `v2.4.0`, `dev-release-v2.4.0`). Defaults to latest. |
+
+**Examples:**
+
+```bash
+# Install with ZFS support
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" -t "YOUR_TOKEN" -n "nas-01" -z
+
+# Install a specific version
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" -t "YOUR_TOKEN" -n "web-01" -v "v2.4.0"
+
+# Install from a dev branch
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" -t "YOUR_TOKEN" -n "test-01" -v "dev-release-v2.4.0"
 ```
 
 ### Agent: Docker (Standard Linux)
+
+The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts.
 
 ```bash
 docker run -d \
@@ -225,13 +244,14 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   --privileged \
+  -e SERVER=http://YOUR_SERVER_IP:9080 \
+  -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
-  -v /sys:/sys:ro \
-  -v /proc:/proc:ro \
-  -v /dev/zfs:/dev/zfs \
-  ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://localhost:9080 --interval 60
+  -v vigil_agent_data:/var/lib/vigil-agent \
+  ghcr.io/pineappledr/vigil-agent:latest
 ```
+
+> **ZFS Monitoring:** Add `-v /sys:/sys:ro -v /proc:/proc:ro -v /dev/zfs:/dev/zfs` if your host uses ZFS.
 
 ### Agent: Docker (TrueNAS)
 
@@ -244,6 +264,8 @@ docker run -d \
   --network host \
   --pid host \
   --privileged \
+  -e SERVER=http://YOUR_SERVER_IP:9080 \
+  -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
   -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
@@ -252,8 +274,8 @@ docker run -d \
   -v /lib:/lib:ro \
   -v /lib64:/lib64:ro \
   -v /usr/lib:/usr/lib:ro \
-  ghcr.io/pineappledr/vigil-agent:debian \
-  --server http://localhost:9080 --interval 60
+  -v vigil_agent_data:/var/lib/vigil-agent \
+  ghcr.io/pineappledr/vigil-agent:debian
 ```
 
 ---
@@ -303,19 +325,21 @@ docker pull ghcr.io/pineappledr/vigil-agent:latest
 docker stop vigil-agent
 docker rm vigil-agent
 
-# 3. Start with the new image
+# 3. Start with the new image (keep agent data volume for auth keys)
 docker run -d \
   --name vigil-agent \
   --net=host \
   --privileged \
+  -e SERVER=http://YOUR_SERVER_IP:9080 \
   -v /dev:/dev \
   -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
+  -v vigil_agent_data:/var/lib/vigil-agent \
   --restart unless-stopped \
-  ghcr.io/pineappledr/vigil-agent:latest \
-  --server http://YOUR_SERVER_IP:9080 \
-  --interval 60
+  ghcr.io/pineappledr/vigil-agent:latest
 ```
+
+> **Note:** If upgrading from v2.3.x to v2.4.0+, add `-e TOKEN=YOUR_TOKEN` on first run to auto-register. See [Upgrading from v2.3.x](#upgrading-from-v23x).
 
 ### Upgrade Script (Automated)
 
@@ -388,12 +412,17 @@ sudo systemctl start vigil-agent
 
 ### Agent Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--server` | `http://localhost:9080` | Vigil server URL |
-| `--interval` | `60` | Reporting interval in seconds (0 = single run) |
-| `--hostname` | (auto-detected) | Override hostname |
-| `--version` | - | Show version |
+| Flag | Env Var | Default | Description |
+|------|---------|---------|-------------|
+| `--server` | `SERVER` | `http://localhost:9080` | Vigil server URL |
+| `--interval` | - | `60` | Reporting interval in seconds (0 = single run) |
+| `--hostname` | `HOSTNAME` | (auto-detected) | Override hostname |
+| `--data-dir` | - | `/var/lib/vigil-agent` | Directory for agent keys and auth state |
+| `--register` | - | - | Run one-time registration, then exit |
+| `--token` | `TOKEN` | - | Registration token (auto-enables `--register` if set) |
+| `--version` | - | - | Show version |
+
+> Environment variables override flags. When `TOKEN` is set, the agent auto-registers on first boot and skips registration on subsequent starts — ideal for Docker deployments.
 
 ---
 
@@ -407,6 +436,47 @@ You can set custom names for your drives to make them easier to identify:
 4. Click **Save**
 
 Aliases are stored in the database and persist across reboots.
+
+---
+
+## 🔒 Agent Authentication
+
+Starting with **v2.4.0**, Vigil uses **Ed25519 key-based mutual authentication** between the server and agents. This ensures that only authorized agents can submit reports.
+
+### How It Works
+
+1. **Server generates an Ed25519 key pair** on first startup (stored in the data directory alongside the database).
+2. **Admin creates a registration token** from the web UI (**Agents → Add Agent**). Tokens are single-use and expire after 24 hours.
+3. **Agent registers** using `--register --token <TOKEN>`. During registration, the agent generates its own Ed25519 key pair and a unique machine fingerprint, then exchanges public keys with the server.
+4. **Agent authenticates** on each run by signing a challenge with its private key. The server verifies the signature and issues a 1-hour session token.
+5. **Session auto-refreshes** — the agent proactively re-authenticates when the session has less than 5 minutes remaining.
+
+### Registering an Agent
+
+```bash
+# From the web UI: Agents → Add Agent → copy the token
+# On the target server:
+sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token <TOKEN>
+
+# After successful registration, run normally:
+sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --interval 60
+```
+
+### Upgrading from v2.3.x
+
+> **⚠️ Breaking Change:** Agents running v2.3.x or earlier will be rejected by a v2.4.0+ server. You must:
+> 1. Update the server to v2.4.0
+> 2. Download the new agent binary on each server
+> 3. Generate a registration token from the web UI
+> 4. Register each agent with `--register --token <TOKEN>`
+> 5. Restart the agent service
+
+### Security Details
+
+- **Key storage:** Server keys in `vigil.key`/`vigil.pub`, agent key in `agent.key` (0600 permissions)
+- **Machine fingerprint:** Derived from `/etc/machine-id`, MAC address, or random (persisted to file)
+- **Fingerprint mismatch:** If an agent presents a known public key but a different fingerprint, the report is **rejected** and an alert is logged
+- **Session TTL:** 1 hour with automatic refresh
 
 ---
 
@@ -457,7 +527,10 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 | `GET` | `/api/auth/status` | Check authentication status |
 | `POST` | `/api/auth/login` | Login |
 | `POST` | `/api/auth/logout` | Logout |
-| `POST` | `/api/report` | Receive agent reports |
+| `POST` | `/api/report` | Receive agent reports (requires agent session) |
+| `GET` | `/api/v1/server/pubkey` | Get server's Ed25519 public key |
+| `POST` | `/api/v1/agents/register` | Register agent with token |
+| `POST` | `/api/v1/agents/auth` | Authenticate agent (Ed25519 signature) |
 
 ### Protected Endpoints (Require Authentication)
 
@@ -472,6 +545,17 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 | `DELETE` | `/api/aliases/{id}` | Delete an alias |
 | `GET` | `/api/users/me` | Get current user |
 | `POST` | `/api/users/password` | Change password |
+| `POST` | `/api/users/username` | Change username |
+
+### Agent Management Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/agents` | List all registered agents |
+| `DELETE` | `/api/v1/agents/{id}` | Delete an agent |
+| `POST` | `/api/v1/tokens` | Create a registration token |
+| `GET` | `/api/v1/tokens` | List registration tokens |
+| `DELETE` | `/api/v1/tokens/{id}` | Delete a registration token |
 
 ### ZFS Endpoints (Require Authentication)
 
@@ -511,14 +595,31 @@ GOOS=linux GOARCH=arm64 go build -o vigil-agent-linux-arm64 ./cmd/agent
 
 ## 🛠️ Development Builds
 
-Dev branch builds are automatically compiled and available as artifacts in GitHub Actions. This is useful for testing new features before they're released.
+Dev branch builds are automatically compiled and published as GitHub prereleases. Each branch gets its own release tag (`dev-{branch-name}`), so you can install dev binaries the same way as stable releases.
 
-### Download Dev Agent Binary
+### Install Dev Agent Binary
 
-1. Go to [GitHub Actions](https://github.com/pineappledr/vigil/actions)
-2. Click on the latest workflow run for your branch (e.g., `develop`)
-3. Scroll down to **Artifacts**
-4. Download `vigil-agent-dev-{branch}-{commit}`
+Use the install script with the `-v` flag pointing to your branch's dev release tag:
+
+```bash
+# Install from a dev branch (e.g., release-v2.4.0)
+curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/install-agent.sh | bash -s -- \
+  -s "http://YOUR_SERVER_IP:9080" \
+  -t "YOUR_TOKEN" \
+  -n "test-server" \
+  -v "dev-release-v2.4.0"
+```
+
+Or download manually:
+
+```bash
+# Download dev binary directly
+curl -L https://github.com/pineappledr/vigil/releases/download/dev-release-v2.4.0/vigil-agent-linux-amd64 \
+  -o vigil-agent
+chmod +x vigil-agent
+```
+
+> Dev releases are updated on every push to the branch. Find available dev releases on the [Releases page](https://github.com/pineappledr/vigil/releases).
 
 ### Use Dev Docker Images
 
@@ -528,7 +629,7 @@ docker pull ghcr.io/pineappledr/vigil:dev-develop
 docker pull ghcr.io/pineappledr/vigil-agent:dev-develop
 
 # Or for feature branches (slashes replaced with dashes)
-docker pull ghcr.io/pineappledr/vigil-agent:dev-feature-new-feature
+docker pull ghcr.io/pineappledr/vigil-agent:dev-release-v2.4.0
 ```
 
 ---
@@ -558,6 +659,20 @@ On TrueNAS, ZFS uses disk GUIDs by default. The agent attempts to resolve these 
 1. Update to the latest agent version
 2. The frontend will shorten long GUIDs for display
 3. Serial numbers are used for SMART data correlation
+
+### Agent rejected with 401 Unauthorized
+
+This means the agent is not registered or its session has expired:
+1. Check if the agent has been registered: look for `auth.json` in the agent's data directory
+2. Re-register the agent: `sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token <NEW_TOKEN>`
+3. If upgrading from v2.3.x, all agents must be re-registered (see [Upgrading from v2.3.x](#upgrading-from-v23x))
+
+### Agent rejected with 403 Forbidden (fingerprint mismatch)
+
+The agent's machine fingerprint has changed (e.g., hardware change, VM migration):
+1. Delete the old agent from the web UI (**Agents** page)
+2. On the agent machine, remove the old state: `sudo rm -rf /var/lib/vigil-agent/`
+3. Re-register with a new token
 
 ### Authentication issues
 

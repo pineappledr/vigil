@@ -39,26 +39,28 @@ services:
 
   vigil-agent:
     container_name: vigil-agent
-    image: ghcr.io/pineappledr/vigil-agent:latest  # Alpine variant (default)
+    image: ghcr.io/pineappledr/vigil-agent:latest
     restart: unless-stopped
     network_mode: host
     depends_on:
       vigil-server:
         condition: service_healthy
     privileged: true
-    command: ["--server", "http://localhost:9080", "--interval", "60"]
+    environment:
+      SERVER: http://localhost:9080
+      TOKEN: ${VIGIL_TOKEN}
     volumes:
       # ─── Required for SMART monitoring ───
       - /dev:/dev:ro
-      
-      # ─── Required for ZFS detection ───
-      - /sys:/sys:ro
-      - /proc:/proc:ro
-      
-      # ─── ZFS kernel device (required for zpool/zfs commands) ───
-      # Remove this line if ZFS is not installed on host
-      - /dev/zfs:/dev/zfs
-      
+
+      # ─── Optional: Uncomment for ZFS monitoring ───
+      # - /sys:/sys:ro
+      # - /proc:/proc:ro
+      # - /dev/zfs:/dev/zfs
+
+      # ─── Agent auth keys and session state ───
+      - vigil_agent_data:/var/lib/vigil-agent
+
     deploy:
       resources:
         limits:
@@ -71,3 +73,5 @@ services:
 volumes:
   vigil_data:
     name: vigil_data
+  vigil_agent_data:
+    name: vigil_agent_data

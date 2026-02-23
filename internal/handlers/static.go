@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"vigil/internal/middleware"
+	"vigil/internal/auth"
 	"vigil/internal/models"
 )
 
@@ -39,7 +39,7 @@ func StaticFiles(config models.Config) http.HandlerFunc {
 		}
 
 		// Check auth for protected pages
-		if config.AuthEnabled && !middleware.IsAuthenticated(r) {
+		if config.AuthEnabled && !auth.IsAuthenticated(r) {
 			http.Redirect(w, r, "/login.html", http.StatusFound)
 			return
 		}

@@ -6,11 +6,20 @@ import (
 	"net/http"
 	"strings"
 
+	"vigil/internal/agents"
 	"vigil/internal/db"
 )
 
-// Report handles incoming agent reports
+// Report handles incoming agent reports.
+// Requires a valid agent session token: Authorization: Bearer <token>
 func Report(w http.ResponseWriter, r *http.Request) {
+	session := GetAgentSessionFromRequest(r)
+	if session == nil {
+		w.Header().Set("X-Vigil-Auth-Required", "true")
+		JSONError(w, "Agent authentication required — obtain a session token via POST /api/v1/agents/auth", http.StatusUnauthorized)
+		return
+	}
+
 	var payload map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		JSONError(w, "Invalid JSON", http.StatusBadRequest)
@@ -34,6 +43,8 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		JSONError(w, "Database Error", http.StatusInternalServerError)
 		return
 	}
+
+	agents.UpdateAgentLastSeen(db.DB, session.AgentID)
 
 	driveCount := 0
 	if drives, ok := payload["drives"].([]interface{}); ok {

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"vigil/internal/db"
+	"vigil/internal/settings"
 )
 
 // Processor handles temperature data processing and alert generation
@@ -96,7 +96,7 @@ func (p *Processor) processWorker() {
 
 // processReadingSync processes a single temperature reading
 func (p *Processor) processReadingSync(hostname, serial string, temperature int) {
-	alerts, err := db.ProcessTemperatureReading(p.DB, hostname, serial, temperature)
+	alerts, err := ProcessTemperatureReading(p.DB, hostname, serial, temperature)
 	if err != nil {
 		log.Printf("[Temperature] Processing error for %s/%s: %v", hostname, serial, err)
 		return
@@ -137,10 +137,10 @@ func (p *Processor) periodicTasks() {
 
 // runCleanup removes old temperature data based on retention settings
 func (p *Processor) runCleanup() {
-	retentionDays := db.GetIntSettingWithDefault(p.DB, "temperature", "retention_days", 90)
+	retentionDays := settings.GetIntSettingWithDefault(p.DB, "temperature", "retention_days", 90)
 
 	// Cleanup temperature history
-	deleted, err := db.CleanupOldTemperatureData(p.DB, retentionDays)
+	deleted, err := CleanupOldTemperatureData(p.DB, retentionDays)
 	if err != nil {
 		log.Printf("[Temperature] Cleanup error: %v", err)
 	} else if deleted > 0 {
@@ -148,7 +148,7 @@ func (p *Processor) runCleanup() {
 	}
 
 	// Cleanup old spikes
-	deleted, err = db.CleanupOldSpikes(p.DB, retentionDays)
+	deleted, err = CleanupOldSpikes(p.DB, retentionDays)
 	if err != nil {
 		log.Printf("[Temperature] Spike cleanup error: %v", err)
 	} else if deleted > 0 {
@@ -156,8 +156,8 @@ func (p *Processor) runCleanup() {
 	}
 
 	// Cleanup old alerts
-	alertRetention := db.GetIntSettingWithDefault(p.DB, "system", "data_retention_days", 365)
-	deleted, err = db.CleanupOldAlerts(p.DB, alertRetention)
+	alertRetention := settings.GetIntSettingWithDefault(p.DB, "system", "data_retention_days", 365)
+	deleted, err = CleanupOldAlerts(p.DB, alertRetention)
 	if err != nil {
 		log.Printf("[Temperature] Alert cleanup error: %v", err)
 	} else if deleted > 0 {
@@ -167,7 +167,7 @@ func (p *Processor) runCleanup() {
 
 // runSpikeDetection runs spike detection for all drives
 func (p *Processor) runSpikeDetection() {
-	spikes, err := db.DetectAllDrivesSpikes(p.DB)
+	spikes, err := DetectAllDrivesSpikes(p.DB)
 	if err != nil {
 		log.Printf("[Temperature] Spike detection error: %v", err)
 		return
@@ -178,7 +178,7 @@ func (p *Processor) runSpikeDetection() {
 
 		// Create alerts for detected spikes
 		for i := range spikes {
-			_, err := db.CreateSpikeAlert(p.DB, &spikes[i])
+			_, err := CreateSpikeAlert(p.DB, &spikes[i])
 			if err != nil {
 				log.Printf("[Temperature] Failed to create spike alert: %v", err)
 			}

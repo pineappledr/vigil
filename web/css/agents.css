@@ -1,0 +1,418 @@
+/* ============================================
+   ADD AGENT MODAL
+   ============================================ */
+
+.modal-add-agent {
+    max-width: 480px;
+}
+
+/* Tab bar */
+.agent-tab-bar {
+    display: flex;
+    background: var(--bg-elevated);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 16px;
+}
+
+.agent-tab {
+    flex: 1;
+    padding: 8px 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.agent-tab.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.agent-tab:hover:not(.active) {
+    color: var(--text-secondary);
+}
+
+/* Platform sub-selector */
+.agent-platform-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.agent-platform-btn {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.agent-platform-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.agent-platform-btn:hover:not(.active) {
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
+}
+
+.agent-tab-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.agent-tab-hint code {
+    font-family: var(--font-mono);
+    background: var(--bg-elevated);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.agent-option-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.agent-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.agent-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+}
+
+.agent-option-row .form-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Input with copy button */
+.form-input-with-copy {
+    display: flex;
+    gap: 0;
+    position: relative;
+}
+
+.form-input-with-copy .form-input {
+    padding-right: 42px;
+    text-overflow: ellipsis;
+}
+
+.form-input-mono {
+    font-family: var(--font-mono) !important;
+    font-size: 0.8rem !important;
+}
+
+.btn-copy {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-copy:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+/* Footer layout */
+.agent-modal-footer {
+    justify-content: space-between !important;
+}
+
+.agent-copy-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-with-icon {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ============================================
+   AGENTS LIST VIEW
+   ============================================ */
+
+.agents-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.agents-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.btn-add-agent {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--accent-gradient);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-add-agent:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-add-agent svg {
+    width: 16px;
+    height: 16px;
+}
+
+.agents-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.agent-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: border-color var(--transition-fast);
+}
+
+.agent-card:hover {
+    border-color: var(--border-hover);
+}
+
+.agent-card-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.agent-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(59, 130, 246, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-primary);
+}
+
+.agent-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.agent-info h4 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.agent-info-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.agent-info-meta .dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.agent-card-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.agent-status {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.agent-status.online {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.agent-status.offline {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
+
+.agent-status.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+}
+
+.btn-agent-delete {
+    padding: 6px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all var(--transition-fast);
+}
+
+.btn-agent-delete:hover {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-agent-delete svg {
+    width: 16px;
+    height: 16px;
+}
+
+.agents-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.agents-empty svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.agents-empty p {
+    font-size: 0.9375rem;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+}
+
+.agents-empty .hint {
+    font-size: 0.8rem;
+}
+
+/* ============================================
+   TOKENS TABLE (in agents view)
+   ============================================ */
+
+.tokens-section {
+    margin-top: 32px;
+}
+
+.tokens-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+}
+
+.tokens-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.token-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.token-value {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+
+.token-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.token-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.token-badge.available {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.token-badge.used {
+    background: rgba(107, 114, 128, 0.2);
+    color: var(--text-muted);
+}
+
+.token-badge.expired {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}

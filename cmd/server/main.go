@@ -6,14 +6,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"vigil/internal/agents"
+	"vigil/internal/auth"
 	"vigil/internal/config"
+	"vigil/internal/crypto"
 	"vigil/internal/db"
 	"vigil/internal/handlers"
 	"vigil/internal/middleware"
 	"vigil/internal/models"
+	"vigil/internal/smart"
 )
 
 // version is set at build time via -ldflags
@@ -28,14 +33,14 @@ func main() {
 
 	cfg := config.Load()
 
-	if err := db.Init(cfg.DBPath, cfg); err != nil {
+	if err := db.Init(cfg.DBPath); err != nil {
 		log.Fatalf("❌ Database error: %v", err)
 	}
 	defer db.DB.Close()
 	log.Printf("✓ Database: %s", cfg.DBPath)
 
 	// Run SMART attributes migration
-	if err := db.MigrateSmartAttributes(db.DB); err != nil {
+	if err := smart.MigrateSmartAttributes(db.DB); err != nil {
 		log.Printf("⚠️  SMART migration warning: %v", err)
 	}
 
@@ -44,11 +49,34 @@ func main() {
 		log.Printf("⚠️  Schema migration warning: %v", err)
 	}
 
+	// Run agent authentication migration
+	if err := agents.Migrate(db.DB); err != nil {
+		log.Printf("⚠️  Agent auth migration warning: %v", err)
+	}
+
+	// Load or generate server Ed25519 key pair
+	dataDir := filepath.Dir(cfg.DBPath)
+	if dataDir == "." {
+		if cwd, err := os.Getwd(); err == nil {
+			dataDir = cwd
+		}
+	}
+	keys, err := crypto.LoadOrGenerate(dataDir)
+	if err != nil {
+		log.Fatalf("❌ Failed to initialise server keys: %v", err)
+	}
+	handlers.ServerKeys = keys
+	log.Printf("✓ Server keys: %s", filepath.Join(dataDir, "vigil.key"))
+
+	// Auth initialisation
 	if cfg.AuthEnabled {
+		auth.CreateDefaultAdmin(cfg)
 		log.Printf("✓ Authentication: enabled")
 	} else {
 		log.Printf("⚠️  Authentication: disabled (set AUTH_ENABLED=true to enable)")
 	}
+	auth.CleanupExpiredSessions()
+	agents.CleanupExpiredAgentSessions(db.DB)
 
 	mux := setupRoutes(cfg)
 	handler := middleware.Logging(middleware.CORS(mux))
@@ -75,68 +103,63 @@ func main() {
 
 func setupRoutes(cfg models.Config) *http.ServeMux {
 	mux := http.NewServeMux()
-	auth := func(h http.HandlerFunc) http.HandlerFunc {
-		return middleware.Auth(cfg, h)
+	protect := func(h http.HandlerFunc) http.HandlerFunc {
+		return auth.Middleware(cfg, h)
 	}
 
 	// Public endpoints
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
-	mux.HandleFunc("GET /api/auth/status", handlers.AuthStatus(cfg))
-
-	// Agent endpoint (no auth)
-	mux.HandleFunc("POST /api/report", handlers.Report)
+	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
 
 	// Auth endpoints
-	mux.HandleFunc("POST /api/auth/login", handlers.Login(cfg))
-	mux.HandleFunc("POST /api/auth/logout", handlers.Logout)
+	mux.HandleFunc("POST /api/auth/login", auth.Login(cfg))
+	mux.HandleFunc("POST /api/auth/logout", auth.Logout)
+
+	// ─── Agent authentication (public — agents identify themselves) ───────
+	mux.HandleFunc("GET /api/v1/server/pubkey", handlers.GetServerPublicKey)
+	mux.HandleFunc("POST /api/v1/agents/register", handlers.RegisterAgent)
+	mux.HandleFunc("POST /api/v1/agents/auth", handlers.AuthAgent)
+
+	// Agent report endpoint — requires valid agent session token
+	mux.HandleFunc("POST /api/report", handlers.Report)
+
+	// ─── Agent management (admin-protected) ───────────────────────────────
+	mux.HandleFunc("GET /api/v1/agents", protect(handlers.ListAgents))
+	mux.HandleFunc("DELETE /api/v1/agents/{id}", protect(handlers.DeleteRegisteredAgent))
+	mux.HandleFunc("POST /api/v1/tokens", protect(handlers.CreateToken))
+	mux.HandleFunc("GET /api/v1/tokens", protect(handlers.ListTokens))
+	mux.HandleFunc("DELETE /api/v1/tokens/{id}", protect(handlers.DeleteToken))
 
 	// Protected endpoints
-	mux.HandleFunc("GET /api/history", auth(handlers.History))
-	mux.HandleFunc("GET /api/hosts", auth(handlers.Hosts))
-	mux.HandleFunc("DELETE /api/hosts/{hostname}", auth(handlers.DeleteHost))
-	mux.HandleFunc("GET /api/hosts/{hostname}/history", auth(handlers.HostHistory))
+	mux.HandleFunc("GET /api/history", protect(handlers.History))
+	mux.HandleFunc("GET /api/hosts", protect(handlers.Hosts))
+	mux.HandleFunc("DELETE /api/hosts/{hostname}", protect(handlers.DeleteHost))
+	mux.HandleFunc("GET /api/hosts/{hostname}/history", protect(handlers.HostHistory))
 
 	// Alias endpoints
-	mux.HandleFunc("GET /api/aliases", auth(handlers.GetAliases))
-	mux.HandleFunc("POST /api/aliases", auth(handlers.SetAlias))
-	mux.HandleFunc("DELETE /api/aliases/{id}", auth(handlers.DeleteAlias))
+	mux.HandleFunc("GET /api/aliases", protect(handlers.GetAliases))
+	mux.HandleFunc("POST /api/aliases", protect(handlers.SetAlias))
+	mux.HandleFunc("DELETE /api/aliases/{id}", protect(handlers.DeleteAlias))
 
 	// User endpoints
-	mux.HandleFunc("GET /api/users/me", auth(handlers.GetCurrentUser))
-	mux.HandleFunc("POST /api/users/password", auth(handlers.ChangePassword))
-	mux.HandleFunc("POST /api/users/username", auth(handlers.ChangeUsername))
+	mux.HandleFunc("GET /api/users/me", protect(auth.GetCurrentUser))
+	mux.HandleFunc("POST /api/users/password", protect(auth.ChangePassword))
+	mux.HandleFunc("POST /api/users/username", protect(auth.ChangeUsername))
 
-	// ─── SMART Attributes API (Phase 1.2) ────────────────────────────
-	// Get latest SMART attributes for a drive
-	mux.HandleFunc("GET /api/smart/attributes", auth(handlers.GetSmartAttributes))
+	// ─── SMART Attributes API ─────────────────────────────────────────────
+	mux.HandleFunc("GET /api/smart/attributes", protect(handlers.GetSmartAttributes))
+	mux.HandleFunc("GET /api/smart/attributes/history", protect(handlers.GetSmartAttributeHistory))
+	mux.HandleFunc("GET /api/smart/attributes/trend", protect(handlers.GetSmartAttributeTrend))
+	mux.HandleFunc("GET /api/smart/health/summary", protect(handlers.GetDriveHealthSummary))
+	mux.HandleFunc("GET /api/smart/health/all", protect(handlers.GetAllDrivesHealthSummary))
+	mux.HandleFunc("GET /api/smart/health/issues", protect(handlers.GetDrivesWithIssues))
+	mux.HandleFunc("GET /api/smart/critical-attributes", protect(handlers.GetCriticalAttributes))
+	mux.HandleFunc("GET /api/smart/temperature/history", protect(handlers.GetTemperatureHistory))
+	mux.HandleFunc("POST /api/smart/cleanup", protect(handlers.CleanupOldSmartData))
 
-	// Get historical data for a specific attribute
-	mux.HandleFunc("GET /api/smart/attributes/history", auth(handlers.GetSmartAttributeHistory))
-
-	// Get trend analysis for an attribute
-	mux.HandleFunc("GET /api/smart/attributes/trend", auth(handlers.GetSmartAttributeTrend))
-
-	// Get health summary for a drive
-	mux.HandleFunc("GET /api/smart/health/summary", auth(handlers.GetDriveHealthSummary))
-
-	// Get health summaries for all drives
-	mux.HandleFunc("GET /api/smart/health/all", auth(handlers.GetAllDrivesHealthSummary))
-
-	// Get drives with issues (warnings/critical)
-	mux.HandleFunc("GET /api/smart/health/issues", auth(handlers.GetDrivesWithIssues))
-
-	// Get critical attribute definitions
-	mux.HandleFunc("GET /api/smart/critical-attributes", auth(handlers.GetCriticalAttributes))
-
-	// Get temperature history
-	mux.HandleFunc("GET /api/smart/temperature/history", auth(handlers.GetTemperatureHistory))
-
-	// Admin: cleanup old SMART data
-	mux.HandleFunc("POST /api/smart/cleanup", auth(handlers.CleanupOldSmartData))
-
-	// ─── ZFS Endpoints (Phase 1.4) ───────────────────────────────────────
-	handlers.RegisterZFSRoutes(mux, auth)
+	// ─── ZFS Endpoints ────────────────────────────────────────────────────
+	handlers.RegisterZFSRoutes(mux, protect)
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))

@@ -6,8 +6,6 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
-
-	"vigil/internal/db"
 )
 
 // setupTestDB creates an in-memory database for testing
@@ -37,7 +35,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 	}
 
 	// Clear alert state cache
-	db.ClearAlertStateCache()
+	ClearAlertStateCache()
 
 	return database
 }
@@ -220,7 +218,7 @@ func TestProcessorProcessReading(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Check if alert was created (50°C > 45°C warning threshold)
-	alerts, err := db.GetActiveAlerts(database)
+	alerts, err := GetActiveAlerts(database)
 	if err != nil {
 		t.Fatalf("Failed to get alerts: %v", err)
 	}
@@ -252,7 +250,7 @@ func TestProcessorQueueFull(t *testing.T) {
 	processor.ProcessReading("server1", "SERIAL001", 60)
 
 	// Check if alert was created (processed synchronously)
-	alerts, _ := db.GetActiveAlerts(database)
+	alerts, _ := GetActiveAlerts(database)
 	if len(alerts) == 0 {
 		t.Error("Expected alert from synchronous processing when queue is full")
 	}
@@ -269,7 +267,7 @@ func TestProcessDriveTemperature(t *testing.T) {
 	}
 
 	// Check for alert
-	alerts, _ := db.GetActiveAlerts(database)
+	alerts, _ := GetActiveAlerts(database)
 	if len(alerts) == 0 {
 		t.Error("Expected critical alert for 60°C temperature")
 	}
@@ -291,7 +289,7 @@ func TestProcessDriveTemperatureInvalid(t *testing.T) {
 	}
 
 	// No alert should be created
-	alerts, _ := db.GetActiveAlerts(database)
+	alerts, _ := GetActiveAlerts(database)
 	if len(alerts) != 0 {
 		t.Error("Expected no alerts for invalid temperature")
 	}

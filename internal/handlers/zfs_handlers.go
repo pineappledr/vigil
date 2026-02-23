@@ -7,11 +7,12 @@ import (
 	"strconv"
 
 	"vigil/internal/db"
+	"vigil/internal/zfs"
 )
 
 // ZFSPoolWithCount extends ZFSPool with device count for list views
 type ZFSPoolWithCount struct {
-	db.ZFSPool
+	zfs.ZFSPool
 	DeviceCount int `json:"device_count"`
 }
 
@@ -23,13 +24,13 @@ type ZFSPoolWithCount struct {
 func ZFSPools(w http.ResponseWriter, r *http.Request) {
 	hostname := r.URL.Query().Get("hostname")
 
-	var pools []db.ZFSPool
+	var pools []zfs.ZFSPool
 	var err error
 
 	if hostname != "" {
-		pools, err = db.GetZFSPoolsByHostname(hostname)
+		pools, err = zfs.GetZFSPoolsByHostname(db.DB, hostname)
 	} else {
-		pools, err = db.GetAllZFSPools()
+		pools, err = zfs.GetAllZFSPools(db.DB)
 	}
 
 	if err != nil {
@@ -39,7 +40,7 @@ func ZFSPools(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if pools == nil {
-		pools = []db.ZFSPool{}
+		pools = []zfs.ZFSPool{}
 	}
 
 	// Add device count for each pool (deduplicated by position)
@@ -47,7 +48,7 @@ func ZFSPools(w http.ResponseWriter, r *http.Request) {
 	for i, pool := range pools {
 		response[i].ZFSPool = pool
 		// Use CountZFSDisks which deduplicates by vdev_parent:vdev_index
-		count, err := db.CountZFSDisks(pool.ID)
+		count, err := zfs.CountZFSDisks(db.DB, pool.ID)
 		if err != nil {
 			log.Printf("⚠️  Failed to count disks for pool %d: %v", pool.ID, err)
 			count = 0
@@ -69,7 +70,7 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, err := db.GetZFSPool(hostname, poolName)
+	pool, err := zfs.GetZFSPool(db.DB, hostname, poolName)
 	if err != nil {
 		log.Printf("❌ Failed to get ZFS pool: %v", err)
 		JSONError(w, "Failed to retrieve ZFS pool", http.StatusInternalServerError)
@@ -81,16 +82,16 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	devices, err := db.GetZFSPoolDevices(pool.ID)
+	devices, err := zfs.GetZFSPoolDevices(db.DB, pool.ID)
 	if err != nil {
 		log.Printf("⚠️  Failed to get pool devices: %v", err)
-		devices = []db.ZFSPoolDevice{}
+		devices = []zfs.ZFSPoolDevice{}
 	}
 
-	scrubHistory, err := db.GetZFSScrubHistory(pool.ID, 5)
+	scrubHistory, err := zfs.GetZFSScrubHistory(db.DB, pool.ID, 5)
 	if err != nil {
 		log.Printf("⚠️  Failed to get scrub history: %v", err)
-		scrubHistory = []db.ZFSScrubHistory{}
+		scrubHistory = []zfs.ZFSScrubHistory{}
 	}
 
 	response := map[string]interface{}{
@@ -107,13 +108,13 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 func ZFSPoolSummary(w http.ResponseWriter, r *http.Request) {
 	hostname := r.URL.Query().Get("hostname")
 
-	var summary *db.ZFSPoolSummary
+	var summary *zfs.ZFSPoolSummary
 	var err error
 
 	if hostname != "" {
-		summary, err = db.GetZFSPoolSummary(hostname)
+		summary, err = zfs.GetZFSPoolSummary(db.DB, hostname)
 	} else {
-		summary, err = db.GetGlobalZFSSummary()
+		summary, err = zfs.GetGlobalZFSSummary(db.DB)
 	}
 
 	if err != nil {
@@ -138,7 +139,7 @@ func ZFSPoolDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, err := db.GetZFSPool(hostname, poolName)
+	pool, err := zfs.GetZFSPool(db.DB, hostname, poolName)
 	if err != nil {
 		log.Printf("❌ Failed to get ZFS pool: %v", err)
 		JSONError(w, "Failed to retrieve ZFS pool", http.StatusInternalServerError)
@@ -150,7 +151,7 @@ func ZFSPoolDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	devices, err := db.GetZFSPoolDevices(pool.ID)
+	devices, err := zfs.GetZFSPoolDevices(db.DB, pool.ID)
 	if err != nil {
 		log.Printf("❌ Failed to get pool devices: %v", err)
 		JSONError(w, "Failed to retrieve pool devices", http.StatusInternalServerError)
@@ -158,7 +159,7 @@ func ZFSPoolDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if devices == nil {
-		devices = []db.ZFSPoolDevice{}
+		devices = []zfs.ZFSPoolDevice{}
 	}
 
 	JSONResponse(w, devices)
@@ -175,7 +176,7 @@ func ZFSDeviceBySerial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	device, err := db.GetZFSDeviceBySerial(hostname, serial)
+	device, err := zfs.GetZFSDeviceBySerial(db.DB, hostname, serial)
 	if err != nil {
 		log.Printf("❌ Failed to get ZFS device: %v", err)
 		JSONError(w, "Failed to retrieve ZFS device", http.StatusInternalServerError)
@@ -187,7 +188,7 @@ func ZFSDeviceBySerial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, _ := db.GetZFSPoolByID(device.PoolID)
+	pool, _ := zfs.GetZFSPoolByID(db.DB, device.PoolID)
 
 	response := map[string]interface{}{
 		"device": device,
@@ -217,7 +218,7 @@ func ZFSScrubHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pool, err := db.GetZFSPool(hostname, poolName)
+	pool, err := zfs.GetZFSPool(db.DB, hostname, poolName)
 	if err != nil {
 		log.Printf("❌ Failed to get ZFS pool: %v", err)
 		JSONError(w, "Failed to retrieve ZFS pool", http.StatusInternalServerError)
@@ -229,7 +230,7 @@ func ZFSScrubHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	history, err := db.GetZFSScrubHistory(pool.ID, limit)
+	history, err := zfs.GetZFSScrubHistory(db.DB, pool.ID, limit)
 	if err != nil {
 		log.Printf("❌ Failed to get scrub history: %v", err)
 		JSONError(w, "Failed to retrieve scrub history", http.StatusInternalServerError)
@@ -237,7 +238,7 @@ func ZFSScrubHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if history == nil {
-		history = []db.ZFSScrubHistory{}
+		history = []zfs.ZFSScrubHistory{}
 	}
 
 	JSONResponse(w, history)
@@ -254,7 +255,7 @@ func ZFSLastScrub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, err := db.GetZFSPool(hostname, poolName)
+	pool, err := zfs.GetZFSPool(db.DB, hostname, poolName)
 	if err != nil {
 		log.Printf("❌ Failed to get ZFS pool: %v", err)
 		JSONError(w, "Failed to retrieve ZFS pool", http.StatusInternalServerError)
@@ -266,7 +267,7 @@ func ZFSLastScrub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lastScrub, err := db.GetLastScrub(pool.ID)
+	lastScrub, err := zfs.GetLastScrub(db.DB, pool.ID)
 	if err != nil {
 		log.Printf("❌ Failed to get last scrub: %v", err)
 		JSONError(w, "Failed to retrieve last scrub", http.StatusInternalServerError)
@@ -296,7 +297,7 @@ func DeleteZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, err := db.GetZFSPool(hostname, poolName)
+	pool, err := zfs.GetZFSPool(db.DB, hostname, poolName)
 	if err != nil {
 		log.Printf("❌ Failed to check ZFS pool: %v", err)
 		JSONError(w, "Database error", http.StatusInternalServerError)
@@ -308,7 +309,7 @@ func DeleteZFSPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.DeleteZFSPool(hostname, poolName); err != nil {
+	if err := zfs.DeleteZFSPool(db.DB, hostname, poolName); err != nil {
 		log.Printf("❌ Failed to delete ZFS pool: %v", err)
 		JSONError(w, "Failed to delete pool", http.StatusInternalServerError)
 		return
@@ -329,13 +330,13 @@ func DeleteZFSPool(w http.ResponseWriter, r *http.Request) {
 func ZFSHealthCheck(w http.ResponseWriter, r *http.Request) {
 	hostname := r.URL.Query().Get("hostname")
 
-	var pools []db.ZFSPool
+	var pools []zfs.ZFSPool
 	var err error
 
 	if hostname != "" {
-		pools, err = db.GetZFSPoolsByHostname(hostname)
+		pools, err = zfs.GetZFSPoolsByHostname(db.DB, hostname)
 	} else {
-		pools, err = db.GetAllZFSPools()
+		pools, err = zfs.GetAllZFSPools(db.DB)
 	}
 
 	if err != nil {
@@ -414,7 +415,7 @@ func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	device, err := db.GetZFSDeviceBySerial(hostname, serial)
+	device, err := zfs.GetZFSDeviceBySerial(db.DB, hostname, serial)
 	if err != nil {
 		log.Printf("❌ Failed to get ZFS device: %v", err)
 		JSONError(w, "Failed to retrieve ZFS device info", http.StatusInternalServerError)
@@ -430,7 +431,7 @@ func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pool, _ := db.GetZFSPoolByID(device.PoolID)
+	pool, _ := zfs.GetZFSPoolByID(db.DB, device.PoolID)
 
 	response := map[string]interface{}{
 		"in_zfs_pool":     true,
@@ -468,7 +469,7 @@ func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 		return
 	}
 
-	if err := db.ProcessZFSReport(hostname, zfsJSON); err != nil {
+	if err := zfs.ProcessZFSReport(db.DB, hostname, zfsJSON); err != nil {
 		log.Printf("⚠️  Failed to process ZFS report: %v", err)
 	}
 }

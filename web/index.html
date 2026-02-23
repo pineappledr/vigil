@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="css/zfs.css">
     <link rel="stylesheet" href="css/offline-indicator.css">
     <link rel="stylesheet" href="css/temperature.css">
+    <link rel="stylesheet" href="css/agents.css">
+    <link rel="stylesheet" href="css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -84,6 +86,19 @@
                         Temperature
                     </a>
                 </div>
+
+                <div class="nav-section">
+                    <span class="nav-label">Management</span>
+                    <a href="javascript:void(0)" class="nav-item" id="nav-agents" onclick="Navigation.showAgents()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                        Agents
+                    </a>
+                </div>
             </nav>
             
             <div class="sidebar-footer">
@@ -111,9 +126,17 @@
                 </div>
             </div>
         </aside>
+        <div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('open'); this.classList.remove('active');"></div>
 
         <main class="main-content">
             <header class="main-header">
+                <button class="hamburger-btn" id="hamburger-btn" onclick="document.querySelector('.sidebar').classList.toggle('open'); document.querySelector('.sidebar-overlay').classList.toggle('active');" aria-label="Toggle menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <line x1="3" y1="12" x2="21" y2="12"/>
+                        <line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                </button>
                 <div class="header-left">
                     <nav id="breadcrumbs" class="breadcrumbs hidden">
                         <a href="javascript:void(0)" id="breadcrumb-home">Dashboard</a>
@@ -182,6 +205,7 @@
     <script src="js/renderer.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/data.js"></script>
+    <script src="js/agents.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/temperature.js"></script>
     <script src="js/main.js"></script>
