@@ -8,6 +8,7 @@ import (
 
 	"vigil/internal/agents"
 	"vigil/internal/db"
+	"vigil/internal/wearout"
 )
 
 // Report handles incoming agent reports.
@@ -50,6 +51,9 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	if drives, ok := payload["drives"].([]interface{}); ok {
 		driveCount = len(drives)
 	}
+
+	// Process SMART-based wearout calculations
+	wearout.ProcessWearoutFromReport(db.DB, hostname, payload)
 
 	// Process ZFS data if present
 	poolCount := 0

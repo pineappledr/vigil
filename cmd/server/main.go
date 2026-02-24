@@ -19,6 +19,7 @@ import (
 	"vigil/internal/middleware"
 	"vigil/internal/models"
 	"vigil/internal/smart"
+	"vigil/internal/wearout"
 )
 
 // version is set at build time via -ldflags
@@ -55,6 +56,11 @@ func main() {
 	// Run agent authentication migration
 	if err := agents.Migrate(db.DB); err != nil {
 		log.Printf("⚠️  Agent auth migration warning: %v", err)
+	}
+
+	// Run wearout tables migration
+	if err := wearout.MigrateWearoutTables(db.DB); err != nil {
+		log.Printf("⚠️  Wearout migration warning: %v", err)
 	}
 
 	// Load or generate server Ed25519 key pair

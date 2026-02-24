@@ -38,3 +38,7 @@ vigil-server-*
 Thumbs.db
 *.swp
 *.swo
+
+
+# --- Extre ---
+WEAROUT_PLANNING.md
