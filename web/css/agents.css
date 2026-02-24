@@ -221,17 +221,43 @@
 
 .agent-card {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     padding: 16px 20px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
     border-radius: 12px;
     transition: border-color var(--transition-fast);
 }
 
 .agent-card:hover {
     border-color: var(--border-hover);
+}
+
+.agent-card.agent-online {
+    border-left-color: var(--success);
+}
+
+.agent-card.agent-not-reporting {
+    border-left-color: var(--warning);
+}
+
+.agent-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.agent-status-hint {
+    margin-top: 10px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.08);
+    border-radius: 6px;
+    border-left: 3px solid var(--warning);
 }
 
 .agent-card-left {
@@ -424,10 +450,13 @@
 
 @media (max-width: 768px) {
     .agent-card {
+        padding: 14px 16px;
+    }
+
+    .agent-card-top {
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
-        padding: 14px 16px;
     }
 
     .agent-card-left {

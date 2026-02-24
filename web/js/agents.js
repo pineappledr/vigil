@@ -66,45 +66,50 @@ const Agents = {
         const isOnline = agent.last_seen_at && (Date.now() - new Date(agent.last_seen_at).getTime()) < 5 * 60 * 1000;
         const statusClass = isOnline ? 'online' : 'not-reporting';
         const statusLabel = isOnline ? 'Online' : 'Not Reporting';
-        const statusTitle = isOnline
-            ? 'Agent is sending reports'
-            : agent.last_seen_at
-                ? 'No report received in 5+ minutes — check agent logs or re-register'
-                : 'Agent registered but has never sent a report — check agent service is running';
         const fp = agent.fingerprint ? agent.fingerprint.substring(0, 16) + '...' : '';
         const displayName = agent.name || agent.hostname;
         const showHostname = agent.name && agent.name !== agent.hostname;
 
+        let statusHint = '';
+        if (!isOnline) {
+            statusHint = agent.last_seen_at
+                ? 'Agent has not sent data in over 5 minutes. Check if the agent service is running or re-register it.'
+                : 'Agent was registered but has never sent a report. Verify the agent service is running on this system.';
+        }
+
         return `
-            <div class="agent-card">
-                <div class="agent-card-left">
-                    <div class="agent-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="7" rx="1"/>
-                            <rect x="2" y="14" width="20" height="7" rx="1"/>
-                            <circle cx="6" cy="6.5" r="1.5" fill="currentColor"/>
-                            <circle cx="6" cy="17.5" r="1.5" fill="currentColor"/>
-                        </svg>
-                    </div>
-                    <div class="agent-info">
-                        <h4>${this._escape(displayName)}</h4>
-                        <div class="agent-info-meta">
-                            ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
-                            <span>${fp}</span>
-                            <span class="dot"></span>
-                            <span>${lastSeen === 'Never registered' ? lastSeen : 'Last seen ' + lastSeen}</span>
+            <div class="agent-card ${isOnline ? 'agent-online' : 'agent-not-reporting'}">
+                <div class="agent-card-top">
+                    <div class="agent-card-left">
+                        <div class="agent-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="7" rx="1"/>
+                                <rect x="2" y="14" width="20" height="7" rx="1"/>
+                                <circle cx="6" cy="6.5" r="1.5" fill="currentColor"/>
+                                <circle cx="6" cy="17.5" r="1.5" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <div class="agent-info">
+                            <h4>${this._escape(displayName)}</h4>
+                            <div class="agent-info-meta">
+                                ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
+                                <span>${fp}</span>
+                                <span class="dot"></span>
+                                <span>${lastSeen === 'Never registered' ? lastSeen : 'Last seen ' + lastSeen}</span>
+                            </div>
                         </div>
                     </div>
+                    <div class="agent-card-right">
+                        <span class="agent-status ${statusClass}">${statusLabel}</span>
+                        <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-                <div class="agent-card-right">
-                    <span class="agent-status ${statusClass}" title="${statusTitle}">${statusLabel}</span>
-                    <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        </svg>
-                    </button>
-                </div>
+                ${statusHint ? `<div class="agent-status-hint">${statusHint}</div>` : ''}
             </div>
         `;
     },
