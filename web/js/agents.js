@@ -62,8 +62,10 @@ const Agents = {
     },
 
     _agentCard(agent) {
-        const lastSeen = agent.last_seen_at ? this._timeAgo(agent.last_seen_at) : 'Never registered';
-        const isOnline = agent.last_seen_at && (Date.now() - new Date(agent.last_seen_at).getTime()) < 5 * 60 * 1000;
+        // Use the most recent activity timestamp (report or auth)
+        const lastActivity = this._mostRecent(agent.last_seen_at, agent.last_auth_at);
+        const lastSeen = lastActivity ? this._timeAgo(lastActivity) : null;
+        const isOnline = lastActivity && (Date.now() - new Date(lastActivity).getTime()) < 5 * 60 * 1000;
         const statusClass = isOnline ? 'online' : 'not-reporting';
         const statusLabel = isOnline ? 'Online' : 'Not Reporting';
         const fp = agent.fingerprint ? agent.fingerprint.substring(0, 16) + '...' : '';
@@ -72,9 +74,9 @@ const Agents = {
 
         let statusHint = '';
         if (!isOnline) {
-            statusHint = agent.last_seen_at
+            statusHint = lastActivity
                 ? 'Agent has not sent data in over 5 minutes. Check if the agent service is running or re-register it.'
-                : 'Agent was registered but has never sent a report. Verify the agent service is running on this system.';
+                : 'Agent was registered but has never connected. Verify the agent service is running on this system.';
         }
 
         return `
@@ -95,7 +97,7 @@ const Agents = {
                                 ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
                                 <span>${fp}</span>
                                 <span class="dot"></span>
-                                <span>${lastSeen === 'Never registered' ? lastSeen : 'Last seen ' + lastSeen}</span>
+                                <span>${lastSeen ? 'Last seen ' + lastSeen : 'Never connected'}</span>
                             </div>
                         </div>
                     </div>
@@ -177,9 +179,24 @@ const Agents = {
         }
     },
 
+    _mostRecent(...dates) {
+        let best = null;
+        for (const d of dates) {
+            if (!d) continue;
+            const t = new Date(d);
+            // Guard against Go zero-time (year 1 or earlier)
+            if (t.getFullYear() < 2000) continue;
+            if (!best || t > best) best = t;
+        }
+        return best ? best.toISOString() : null;
+    },
+
     _timeAgo(dateStr) {
         if (!dateStr) return 'never';
-        const diff = Date.now() - new Date(dateStr).getTime();
+        const date = new Date(dateStr);
+        // Guard against Go zero-time
+        if (date.getFullYear() < 2000) return 'never';
+        const diff = Date.now() - date.getTime();
         const mins = Math.floor(diff / 60000);
         if (mins < 1) return 'just now';
         if (mins < 60) return `${mins}m ago`;
