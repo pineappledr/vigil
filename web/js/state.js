@@ -13,6 +13,7 @@ const State = {
 
     zfsPools: [],
     zfsDriveMap: {},
+    wearoutMap: {},
     activeView: 'drives',
     serverSortOrder: 'asc',
 
@@ -174,5 +175,19 @@ const State = {
     hasZFSAlerts() {
         const s = this.getZFSStats();
         return s.attentionPools > 0 || s.totalErrors > 0;
+    },
+
+    buildWearoutMap(drives) {
+        this.wearoutMap = {};
+        if (!drives) return;
+        drives.forEach(d => {
+            if (d.hostname && d.serial_number) {
+                this.wearoutMap[`${d.hostname}:${d.serial_number}`] = d;
+            }
+        });
+    },
+
+    getWearoutForDrive(hostname, serial) {
+        return this.wearoutMap[`${hostname}:${serial}`] || null;
     }
 };

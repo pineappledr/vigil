@@ -5,9 +5,10 @@
 const Data = {
     async fetch() {
         try {
-            const [historyResponse, zfsResponse] = await Promise.all([
+            const [historyResponse, zfsResponse, wearoutResponse] = await Promise.all([
                 API.getHistory(),
-                API.getZFSPools().catch(() => null)
+                API.getZFSPools().catch(() => null),
+                API.get('/api/wearout/all').catch(() => null)
             ]);
 
             if (!historyResponse.ok) {
@@ -23,6 +24,13 @@ const Data = {
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
+            }
+
+            if (wearoutResponse && wearoutResponse.ok) {
+                const wData = await wearoutResponse.json();
+                State.buildWearoutMap(wData?.drives);
+            } else {
+                State.wearoutMap = {};
             }
 
             this.updateCurrentView();

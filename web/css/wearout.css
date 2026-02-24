@@ -1,0 +1,433 @@
+/* ============================================
+   WEAROUT MODULE
+   ============================================ */
+
+/* ── Mini Progress Bar (drive cards) ────────────────────────────────────── */
+
+.wearout-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px 8px;
+}
+
+.wearout-mini-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.wearout-mini-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.wearout-mini-fill.healthy { background: var(--success); }
+.wearout-mini-fill.warning { background: var(--warning); }
+.wearout-mini-fill.critical { background: var(--danger); }
+
+.wearout-mini-label {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    min-width: 38px;
+    text-align: right;
+}
+
+.wearout-mini-label.healthy { color: var(--success); }
+.wearout-mini-label.warning { color: var(--warning); }
+.wearout-mini-label.critical { color: var(--danger); }
+
+/* ── Gauge Panel (detail view) ──────────────────────────────────────────── */
+
+.wearout-gauge-panel {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+}
+
+.wearout-gauge-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.wearout-gauge-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wearout-gauge-icon svg {
+    width: 28px;
+    height: 28px;
+}
+
+.wearout-gauge-icon.healthy {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.wearout-gauge-icon.warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.wearout-gauge-icon.critical {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.wearout-gauge-title h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.wearout-gauge-title .subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.wearout-pct {
+    margin-left: auto;
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.wearout-pct.healthy { color: var(--success); }
+.wearout-pct.warning { color: var(--warning); }
+.wearout-pct.critical { color: var(--danger); }
+
+/* Main progress bar */
+.wearout-bar-container {
+    margin-top: 8px;
+}
+
+.wearout-bar-track {
+    height: 10px;
+    background: var(--bg-hover);
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+}
+
+.wearout-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.5s ease;
+}
+
+.wearout-bar-fill.healthy { background: linear-gradient(90deg, #10b981, #34d399); }
+.wearout-bar-fill.warning { background: linear-gradient(90deg, #10b981, #f59e0b); }
+.wearout-bar-fill.critical { background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444); }
+
+.wearout-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+    position: relative;
+}
+
+.wearout-label-warning {
+    color: var(--warning);
+    position: absolute;
+    left: 60%;
+    transform: translateX(-50%);
+}
+
+.wearout-label-critical {
+    color: var(--danger);
+    position: absolute;
+    left: 80%;
+    transform: translateX(-50%);
+}
+
+/* ── Contributing Factors ───────────────────────────────────────────────── */
+
+.wearout-factors-panel {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wearout-factors-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.wearout-factors-header svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+}
+
+.wearout-factors-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.wearout-factor-item {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.wearout-factor-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.wearout-factor-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.wearout-factor-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: none;
+}
+
+.wearout-factor-item:hover .wearout-factor-desc {
+    display: inline;
+}
+
+.wearout-factor-item:hover .wearout-factor-name {
+    display: none;
+}
+
+.wearout-factor-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.wearout-factor-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-hover);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.wearout-factor-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.wearout-factor-fill.healthy { background: var(--success); }
+.wearout-factor-fill.warning { background: var(--warning); }
+.wearout-factor-fill.critical { background: var(--danger); }
+
+.wearout-factor-pct {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    min-width: 48px;
+    text-align: right;
+}
+
+.wearout-factor-pct.healthy { color: var(--success); }
+.wearout-factor-pct.warning { color: var(--warning); }
+.wearout-factor-pct.critical { color: var(--danger); }
+
+.wearout-factor-weight {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: block;
+}
+
+/* ── Trend Prediction ───────────────────────────────────────────────────── */
+
+.wearout-trend-panel {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wearout-trend-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.wearout-trend-header svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+}
+
+.wearout-confidence {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+
+.wearout-confidence.healthy {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.wearout-confidence.warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.wearout-confidence.critical {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.wearout-trend-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.wearout-trend-stat {
+    background: var(--bg-secondary);
+    padding: 14px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.wearout-trend-stat .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.wearout-trend-stat .stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.wearout-trend-stat .stat-value.healthy { color: var(--success); }
+.wearout-trend-stat .stat-value.warning { color: var(--warning); }
+.wearout-trend-stat .stat-value.critical { color: var(--danger); }
+
+.wearout-remaining {
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.wearout-remaining.healthy { color: var(--success); }
+.wearout-remaining.warning { color: var(--warning); }
+.wearout-remaining.critical { color: var(--danger); }
+
+.wearout-trend-body {
+    text-align: center;
+    padding: 20px;
+}
+
+.wearout-trend-na {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* ── Chart Panel ────────────────────────────────────────────────────────── */
+
+.wearout-chart-panel {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.wearout-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.wearout-chart-header .chart-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.wearout-chart-header .chart-title svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+}
+
+.wearout-period-select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.wearout-period-select:hover,
+.wearout-period-select:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+}
+
+.wearout-chart-container {
+    height: 220px;
+    position: relative;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    .wearout-gauge-header {
+        flex-wrap: wrap;
+    }
+
+    .wearout-pct {
+        margin-left: 0;
+        width: 100%;
+        text-align: center;
+    }
+
+    .wearout-trend-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .wearout-chart-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+}
