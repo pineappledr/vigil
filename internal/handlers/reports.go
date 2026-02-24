@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"vigil/internal/agents"
 	"vigil/internal/db"
@@ -39,7 +40,9 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err = db.DB.Exec("INSERT INTO reports (hostname, data) VALUES (?, ?)", hostname, string(jsonData)); err != nil {
+	// Use Go's time.Now() so timestamp respects the TZ environment variable
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if _, err = db.DB.Exec("INSERT INTO reports (hostname, timestamp, data) VALUES (?, ?, ?)", hostname, now, string(jsonData)); err != nil {
 		log.Printf("❌ DB Write Error: %v", err)
 		JSONError(w, "Database Error", http.StatusInternalServerError)
 		return

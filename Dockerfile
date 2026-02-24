@@ -43,8 +43,9 @@ COPY --from=builder /app/web ./web
 RUN chown -R vigil:vigil /app
 USER vigil
 
-# Set default database path to /data
+# Set default database path and timezone
 ENV DB_PATH=/data/vigil.db
+ENV TZ=UTC
 
 EXPOSE 9080
 

@@ -18,6 +18,7 @@ services:
       - PORT=9080
       - DB_PATH=/data/vigil.db
       - AUTH_ENABLED=true
+      - TZ=${TZ:-UTC}
       # Uncomment and set your admin password (otherwise auto-generated)
       # - ADMIN_PASS=your-secure-password
     healthcheck:
