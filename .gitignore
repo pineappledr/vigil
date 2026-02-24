@@ -1,6 +1,7 @@
 # --- Binaries ---
 # Project specific names
 agent
+server
 vigil-agent
 vigil-server
 vigil-agent-*

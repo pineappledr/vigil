@@ -335,9 +335,11 @@ func applyAgentFields(a *Agent, name sql.NullString, registeredAt, lastAuthAt, l
 		a.RegisteredAt, _ = time.Parse(timeFormat, registeredAt.String)
 	}
 	if lastAuthAt.Valid {
-		a.LastAuthAt, _ = time.Parse(timeFormat, lastAuthAt.String)
+		t, _ := time.Parse(timeFormat, lastAuthAt.String)
+		a.LastAuthAt = &t
 	}
 	if lastSeenAt.Valid {
-		a.LastSeenAt, _ = time.Parse(timeFormat, lastSeenAt.String)
+		t, _ := time.Parse(timeFormat, lastSeenAt.String)
+		a.LastSeenAt = &t
 	}
 }

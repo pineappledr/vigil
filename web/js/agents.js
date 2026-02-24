@@ -62,12 +62,18 @@ const Agents = {
     },
 
     _agentCard(agent) {
-        const lastSeen = agent.last_seen_at ? this._timeAgo(agent.last_seen_at) : 'never';
+        const lastSeen = agent.last_seen_at ? this._timeAgo(agent.last_seen_at) : 'Never registered';
         const isOnline = agent.last_seen_at && (Date.now() - new Date(agent.last_seen_at).getTime()) < 5 * 60 * 1000;
         const statusClass = isOnline ? 'online' : 'not-reporting';
         const statusLabel = isOnline ? 'Online' : 'Not Reporting';
-        const statusTitle = isOnline ? 'Agent is sending reports' : 'No report received in 5+ minutes — check agent logs or re-register';
+        const statusTitle = isOnline
+            ? 'Agent is sending reports'
+            : agent.last_seen_at
+                ? 'No report received in 5+ minutes — check agent logs or re-register'
+                : 'Agent registered but has never sent a report — check agent service is running';
         const fp = agent.fingerprint ? agent.fingerprint.substring(0, 16) + '...' : '';
+        const displayName = agent.name || agent.hostname;
+        const showHostname = agent.name && agent.name !== agent.hostname;
 
         return `
             <div class="agent-card">
@@ -81,13 +87,12 @@ const Agents = {
                         </svg>
                     </div>
                     <div class="agent-info">
-                        <h4>${this._escape(agent.name || agent.hostname)}</h4>
+                        <h4>${this._escape(displayName)}</h4>
                         <div class="agent-info-meta">
-                            <span>${this._escape(agent.hostname)}</span>
-                            <span class="dot"></span>
+                            ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
                             <span>${fp}</span>
                             <span class="dot"></span>
-                            <span>Last seen ${lastSeen}</span>
+                            <span>${lastSeen === 'Never registered' ? lastSeen : 'Last seen ' + lastSeen}</span>
                         </div>
                     </div>
                 </div>

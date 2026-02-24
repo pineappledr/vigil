@@ -255,7 +255,42 @@ docker run -d \
 
 ### Agent: Docker (TrueNAS)
 
-For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools:
+For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools.
+
+**docker-compose.yml:**
+
+```yaml
+services:
+  vigil-agent:
+    image: ghcr.io/pineappledr/vigil-agent:debian
+    container_name: vigil-agent
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    privileged: true
+    environment:
+      SERVER: http://YOUR_SERVER_IP:9080
+      TOKEN: YOUR_REGISTRATION_TOKEN
+      HOSTNAME: my-truenas       # Optional: custom display name
+    volumes:
+      - /dev:/dev:ro
+      - /dev/zfs:/dev/zfs
+      - /sbin/zpool:/sbin/zpool:ro
+      - /sbin/zfs:/sbin/zfs:ro
+      - /lib:/lib:ro
+      - /lib64:/lib64:ro
+      - /usr/lib:/usr/lib:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+```
+
+Or with `docker run`:
 
 ```bash
 docker run -d \
@@ -267,14 +302,12 @@ docker run -d \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -v /dev:/dev:ro \
-  -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
   -v /sbin/zpool:/sbin/zpool:ro \
   -v /sbin/zfs:/sbin/zfs:ro \
   -v /lib:/lib:ro \
   -v /lib64:/lib64:ro \
   -v /usr/lib:/usr/lib:ro \
-  -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:debian
 ```
 

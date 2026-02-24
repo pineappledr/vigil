@@ -505,11 +505,21 @@ const Modals = {
       - /dev/zfs:/dev/zfs`;
         }
 
-        volumes += `
-      - vigil_agent_data:/var/lib/vigil-agent`;
-
         let extras = '';
         if (isTrueNAS) extras = '\n    pid: host';
+
+        let deploy = '';
+        if (isTrueNAS) {
+            deploy = `
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M`;
+        }
 
         return `# Vigil Agent - docker-compose.yml (${isTrueNAS ? 'TrueNAS' : 'Standard Linux'})
 services:
@@ -524,10 +534,7 @@ services:
       TOKEN: ${token}
       HOSTNAME: ${name}
     volumes:
-${volumes}
-
-volumes:
-  vigil_agent_data:`;
+${volumes}${deploy}`;
     },
 
     _generateBinaryInstall(serverURL, token, name, zfs, version) {

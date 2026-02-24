@@ -4,15 +4,15 @@ import "time"
 
 // Agent represents a registered monitoring agent.
 type Agent struct {
-	ID           int64     `json:"id"`
-	Hostname     string    `json:"hostname"`
-	Name         string    `json:"name"`
-	Fingerprint  string    `json:"fingerprint"`
-	PublicKey    string    `json:"public_key"`
-	RegisteredAt time.Time `json:"registered_at"`
-	LastAuthAt   time.Time `json:"last_auth_at,omitempty"`
-	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
-	Enabled      bool      `json:"enabled"`
+	ID           int64      `json:"id"`
+	Hostname     string     `json:"hostname"`
+	Name         string     `json:"name"`
+	Fingerprint  string     `json:"fingerprint"`
+	PublicKey    string     `json:"public_key"`
+	RegisteredAt time.Time  `json:"registered_at"`
+	LastAuthAt   *time.Time `json:"last_auth_at,omitempty"`
+	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
+	Enabled      bool       `json:"enabled"`
 }
 
 // RegistrationToken is a one-time-use token for enrolling a new agent.
