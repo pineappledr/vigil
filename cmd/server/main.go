@@ -218,6 +218,9 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// ─── ZFS Endpoints ────────────────────────────────────────────────────
 	handlers.RegisterZFSRoutes(mux, protect)
 
+	// ─── Wearout Endpoints ───────────────────────────────────────────────
+	handlers.RegisterWearoutRoutes(mux, protect)
+
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))
 
