@@ -100,7 +100,10 @@ const Agents = {
                         </div>
                     </div>
                     <div class="agent-card-right">
-                        <span class="agent-status ${statusClass}">${statusLabel}</span>
+                        <span class="agent-status-wrap">
+                            <span class="agent-status ${statusClass}">${statusLabel}</span>
+                            ${statusHint ? `<span class="agent-status-tooltip">${statusHint}</span>` : ''}
+                        </span>
                         <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3 6 5 6 21 6"/>
@@ -109,7 +112,6 @@ const Agents = {
                         </button>
                     </div>
                 </div>
-                ${statusHint ? `<div class="agent-status-hint">${statusHint}</div>` : ''}
             </div>
         `;
     },

@@ -249,15 +249,32 @@
     width: 100%;
 }
 
-.agent-status-hint {
-    margin-top: 10px;
+.agent-status-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.agent-status-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    width: 260px;
     padding: 8px 12px;
     font-size: 0.75rem;
     line-height: 1.4;
-    color: var(--warning);
-    background: rgba(245, 158, 11, 0.08);
-    border-radius: 6px;
-    border-left: 3px solid var(--warning);
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    pointer-events: none;
+}
+
+.agent-status-wrap:hover .agent-status-tooltip {
+    display: block;
 }
 
 .agent-card-left {

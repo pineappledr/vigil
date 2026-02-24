@@ -95,7 +95,12 @@ function setupEventListeners() {
     // Refresh button
     const refreshBtn = document.getElementById('btn-refresh');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => Data.fetch());
+        refreshBtn.addEventListener('click', () => {
+            Data.fetch();
+            if (State.activeView === 'agents' && typeof Agents !== 'undefined') {
+                Agents.render();
+            }
+        });
     }
 
     // Back button
