@@ -292,7 +292,7 @@ func TestStrategyRegistry(t *testing.T) {
 	}{
 		{"SSD", "SSD", true},
 		{"HDD", "HDD", true},
-		{"NVMe", "", false},
+		{"NVMe", "NVMe", true},
 		{"unknown", "", false},
 	}
 
@@ -306,6 +306,135 @@ func TestStrategyRegistry(t *testing.T) {
 			t.Errorf("strategies[%q].DriveType() = %q, want %q", tt.driveType, s.DriveType(), tt.wantType)
 		}
 	}
+}
+
+// ── NVMe Strategy Tests ─────────────────────────────────────────────────────
+
+func nvmeInput(attrs map[int]AttributeData) CalculationInput {
+	return CalculationInput{
+		Hostname:     "test-host",
+		SerialNumber: "NVME-001",
+		DriveType:    "NVMe",
+		Capacity:     1_000_000_000_000, // 1 TB
+		Attributes:   attrs,
+	}
+}
+
+func TestNVMeStrategy_DriveType(t *testing.T) {
+	n := &NVMeStrategy{}
+	if n.DriveType() != "NVMe" {
+		t.Errorf("DriveType() = %q, want %q", n.DriveType(), "NVMe")
+	}
+}
+
+func TestNVMeStrategy_AllAttributes_NewDrive(t *testing.T) {
+	n := &NVMeStrategy{}
+	input := nvmeInput(map[int]AttributeData{
+		AttrNVMePercentageUsed:   {RawValue: 0},           // 0% used
+		AttrNVMeAvailableSpare:   {Value: 100, RawValue: 100}, // 100% spare = 0% wearout
+		AttrNVMeDataUnitsWritten: {RawValue: 0},           // 0 written
+		AttrNVMeMediaErrors:      {RawValue: 0},           // 0 errors
+	})
+
+	result := n.Calculate(input)
+
+	assertApprox(t, "New NVMe percentage", result.Percentage, 0, 0.01)
+	if len(result.Factors) != 4 {
+		t.Fatalf("expected 4 factors, got %d", len(result.Factors))
+	}
+	if result.DriveType != "NVMe" {
+		t.Errorf("DriveType = %q, want %q", result.DriveType, "NVMe")
+	}
+}
+
+func TestNVMeStrategy_WornDrive(t *testing.T) {
+	n := &NVMeStrategy{}
+	tbw := 600.0 // 600 TBW enterprise
+	// 300 TBW written = 50% of TBW. NVMe data units = bytes / (512*1000)
+	dataUnits := int64(300e12 / (512 * 1000))
+	input := nvmeInput(map[int]AttributeData{
+		AttrNVMePercentageUsed:   {RawValue: 50},              // 50% used
+		AttrNVMeAvailableSpare:   {Value: 80, RawValue: 80},   // 80% spare = 20% wearout
+		AttrNVMeDataUnitsWritten: {RawValue: dataUnits},       // ~50% of 600 TBW
+		AttrNVMeMediaErrors:      {RawValue: 2},               // 2/10 = 20%
+	})
+	input.RatedTBW = &tbw
+
+	result := n.Calculate(input)
+
+	// Expected: 50*0.40 + 20*0.25 + 50*0.20 + 20*0.15 = 20 + 5 + 10 + 3 = 38%
+	assertApprox(t, "Worn NVMe percentage", result.Percentage, 38.0, 1.0)
+}
+
+func TestNVMeStrategy_CriticalDrive(t *testing.T) {
+	n := &NVMeStrategy{}
+	input := nvmeInput(map[int]AttributeData{
+		AttrNVMePercentageUsed: {RawValue: 100},            // 100% used
+		AttrNVMeAvailableSpare: {Value: 0, RawValue: 0},    // 0% spare = 100% wearout
+		AttrNVMeMediaErrors:    {RawValue: 50},              // 50/10 → clamped to 100%
+	})
+
+	result := n.Calculate(input)
+
+	assertApprox(t, "Critical NVMe percentage", result.Percentage, 100.0, 0.5)
+}
+
+func TestNVMeStrategy_OnlyPercentageUsed(t *testing.T) {
+	n := &NVMeStrategy{}
+	// Only the primary NVMe indicator
+	input := nvmeInput(map[int]AttributeData{
+		AttrNVMePercentageUsed: {RawValue: 30},
+	})
+
+	result := n.Calculate(input)
+
+	if len(result.Factors) != 1 {
+		t.Fatalf("expected 1 factor, got %d", len(result.Factors))
+	}
+	// Single factor normalized to weight 1.0 → overall = 30%
+	assertApprox(t, "Single factor NVMe", result.Percentage, 30.0, 0.01)
+}
+
+func TestNVMeStrategy_NoAttributes(t *testing.T) {
+	n := &NVMeStrategy{}
+	input := nvmeInput(map[int]AttributeData{})
+
+	result := n.Calculate(input)
+
+	if result.Percentage != 0 {
+		t.Errorf("expected 0%% for no attributes, got %.2f%%", result.Percentage)
+	}
+	if len(result.Factors) != 0 {
+		t.Errorf("expected 0 factors, got %d", len(result.Factors))
+	}
+}
+
+func TestNVMeStrategy_PercentageUsedOver100(t *testing.T) {
+	n := &NVMeStrategy{}
+	// NVMe spec allows percentage_used > 100
+	input := nvmeInput(map[int]AttributeData{
+		AttrNVMePercentageUsed: {RawValue: 200},
+	})
+
+	result := n.Calculate(input)
+
+	// Clamped to 100%
+	assertInRange(t, "Clamped over-100", result.Percentage, 0, 100)
+}
+
+func TestNVMeStrategy_CustomTBW(t *testing.T) {
+	n := &NVMeStrategy{}
+	tbw := 1200.0 // 1200 TBW datacenter drive
+	// Write 600 TBW = 50%
+	dataUnits := int64(600e12 / (512 * 1000))
+	input := nvmeInput(map[int]AttributeData{
+		AttrNVMeDataUnitsWritten: {RawValue: dataUnits},
+	})
+	input.RatedTBW = &tbw
+
+	result := n.Calculate(input)
+
+	assertApprox(t, "Custom TBW NVMe", result.Percentage, 50.0, 0.5)
 }
 
 // ── calculateWeighted Tests ─────────────────────────────────────────────────
@@ -369,6 +498,27 @@ func TestCalculateWeighted_EmptyAttributes(t *testing.T) {
 
 	if result.Percentage != 0 {
 		t.Errorf("expected 0%% for empty attrs, got %.2f%%", result.Percentage)
+	}
+}
+
+func TestCalculateWeighted_NilAttributes(t *testing.T) {
+	input := CalculationInput{
+		Hostname:     "h",
+		SerialNumber: "s",
+		DriveType:    "TEST",
+		Attributes:   nil,
+	}
+	defs := []FactorDef{
+		{AttrID: 1, Name: "A", Weight: 1.0, Calc: func(a AttributeData) float64 { return 50 }},
+	}
+
+	result := calculateWeighted(input, defs)
+
+	if result.Percentage != 0 {
+		t.Errorf("expected 0%% for nil attrs, got %.2f%%", result.Percentage)
+	}
+	if result.DriveType != "TEST" {
+		t.Errorf("DriveType = %q, want %q", result.DriveType, "TEST")
 	}
 }
 

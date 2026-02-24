@@ -408,6 +408,57 @@
     position: relative;
 }
 
+/* ── Drive Specifications Panel ─────────────────────────────────────────── */
+
+.wearout-specs-panel {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wearout-specs-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.wearout-specs-header svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+}
+
+.wearout-specs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.wearout-spec-item {
+    background: var(--bg-secondary);
+    padding: 12px;
+    border-radius: 8px;
+}
+
+.wearout-spec-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.wearout-spec-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    word-break: break-word;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -429,5 +480,9 @@
         flex-direction: column;
         gap: 12px;
         align-items: flex-start;
+    }
+
+    .wearout-specs-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }

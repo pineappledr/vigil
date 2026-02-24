@@ -10,15 +10,16 @@ import (
 
 // strategies is the registry of available wearout strategies.
 var strategies = map[string]WearoutStrategy{
-	"SSD": &SSDStrategy{},
-	"HDD": &HDDStrategy{},
+	"SSD":  &SSDStrategy{},
+	"HDD":  &HDDStrategy{},
+	"NVMe": &NVMeStrategy{},
 }
 
 // CalculateAndStore runs the wearout calculation for a drive and persists the result.
 func CalculateAndStore(db *sql.DB, driveData *agentsmart.DriveSmartData) (*WearoutResult, error) {
 	strategy, ok := strategies[driveData.DriveType]
 	if !ok {
-		return nil, nil // unsupported drive type (e.g. NVMe) — skip silently
+		return nil, nil // unsupported drive type — skip silently
 	}
 
 	input := buildInput(db, driveData)
@@ -117,6 +118,14 @@ func calculateWeighted(input CalculationInput, defs []FactorDef) WearoutResult {
 		pct float64
 	}
 	totalWeight := 0.0
+
+	if input.Attributes == nil {
+		return WearoutResult{
+			Hostname:     input.Hostname,
+			SerialNumber: input.SerialNumber,
+			DriveType:    input.DriveType,
+		}
+	}
 
 	for _, d := range defs {
 		attr, ok := input.Attributes[d.AttrID]

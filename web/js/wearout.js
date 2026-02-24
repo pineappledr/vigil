@@ -74,9 +74,10 @@ const Wearout = {
 
     // ─── Wearout Tab Content (detail view) ────────────────────────────────────
 
-    renderTabContent(snapshot, trendData) {
+    renderTabContent(snapshot, trendData, driveInfo) {
         if (!snapshot) {
             return `
+                ${this.renderDriveSpecs(driveInfo)}
                 <div class="smart-empty">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/>
@@ -89,12 +90,15 @@ const Wearout = {
             `;
         }
 
-        const pct = snapshot.percentage;
+        const pct = snapshot.percentage ?? 0;
         const cls = this.getStatusClass(pct);
         const label = this.getStatusLabel(pct);
         const factors = this.parseFactors(snapshot.factors_json);
 
         let html = '';
+
+        // Drive specifications
+        html += this.renderDriveSpecs(driveInfo);
 
         // Main wearout gauge
         html += `
@@ -107,7 +111,7 @@ const Wearout = {
                     </div>
                     <div class="wearout-gauge-title">
                         <h3>Drive Wearout</h3>
-                        <span class="subtitle">${snapshot.drive_type} — ${label}</span>
+                        <span class="subtitle">${snapshot.drive_type || 'Unknown'} — ${label}</span>
                     </div>
                     <div class="wearout-pct ${cls}">${pct.toFixed(1)}%</div>
                 </div>
@@ -257,6 +261,60 @@ const Wearout = {
         `;
     },
 
+    // ─── Drive Specifications Panel ──────────────────────────────────────────
+
+    renderDriveSpecs(drive) {
+        if (!drive) return '';
+
+        const model = drive.model_name || 'Unknown';
+        const firmware = drive.firmware_version || 'N/A';
+        const serial = drive.serial_number || 'N/A';
+        const capacity = typeof Utils !== 'undefined'
+            ? Utils.formatSize(drive.user_capacity?.bytes)
+            : (drive.user_capacity?.bytes ? `${(drive.user_capacity.bytes / 1e9).toFixed(0)} GB` : 'N/A');
+        const driveType = typeof Utils !== 'undefined'
+            ? Utils.getDriveType(drive)
+            : (drive.device?.type || 'Unknown');
+        const rpm = drive.rotation_rate ? `${drive.rotation_rate} RPM` : null;
+        const poh = drive.power_on_time?.hours;
+        const pohStr = poh != null
+            ? (typeof Utils !== 'undefined' ? Utils.formatAge(poh) : `${poh}h`)
+            : 'N/A';
+
+        return `
+            <div class="wearout-specs-panel">
+                <div class="wearout-specs-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <circle cx="8" cy="12" r="2"/>
+                        <line x1="14" y1="9" x2="18" y2="9"/>
+                        <line x1="14" y1="12" x2="18" y2="12"/>
+                    </svg>
+                    <span>Drive Specifications</span>
+                </div>
+                <div class="wearout-specs-grid">
+                    ${this.specItem('Model', model)}
+                    ${this.specItem('Serial', serial)}
+                    ${this.specItem('Firmware', firmware)}
+                    ${this.specItem('Capacity', capacity)}
+                    ${this.specItem('Type', driveType)}
+                    ${rpm ? this.specItem('Speed', rpm) : ''}
+                    ${this.specItem('Power-On', pohStr)}
+                    ${drive.temperature?.current != null ? this.specItem('Temp', `${drive.temperature.current}°C`) : ''}
+                </div>
+            </div>
+        `;
+    },
+
+    specItem(label, value) {
+        return `
+            <div class="wearout-spec-item">
+                <span class="wearout-spec-label">${label}</span>
+                <span class="wearout-spec-value">${value}</span>
+            </div>
+        `;
+    },
+
     // ─── Trend Chart ──────────────────────────────────────────────────────────
 
     renderTrendChart(historyData) {
@@ -341,6 +399,9 @@ const Wearout = {
         const container = document.getElementById('tab-wearout');
         if (!container) return;
 
+        // Get drive info from SmartAttributes if available
+        const driveInfo = (typeof SmartAttributes !== 'undefined') ? SmartAttributes.currentDrive : null;
+
         container.innerHTML = `
             <div class="smart-loading">
                 <div class="smart-loading-spinner"></div>
@@ -353,11 +414,13 @@ const Wearout = {
             this.fetchTrend(hostname, serial)
         ]);
 
-        container.innerHTML = this.renderTabContent(snapshot, trendData);
+        container.innerHTML = this.renderTabContent(snapshot, trendData, driveInfo);
 
-        // Load chart data
-        const historyData = await this.fetchHistory(hostname, serial, 90);
-        this.renderTrendChart(historyData);
+        // Load chart data only if we have wearout data
+        if (snapshot) {
+            const historyData = await this.fetchHistory(hostname, serial, 90);
+            this.renderTrendChart(historyData);
+        }
     },
 
     async onPeriodChange(days) {

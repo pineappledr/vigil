@@ -14,7 +14,7 @@ type CalculationInput struct {
 	Hostname     string
 	SerialNumber string
 	ModelName    string
-	DriveType    string // "SSD", "HDD"
+	DriveType    string // "SSD", "HDD", "NVMe"
 	Capacity     int64  // bytes
 	RotationRate int
 
