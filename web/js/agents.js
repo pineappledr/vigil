@@ -64,8 +64,9 @@ const Agents = {
     _agentCard(agent) {
         const lastSeen = agent.last_seen_at ? this._timeAgo(agent.last_seen_at) : 'never';
         const isOnline = agent.last_seen_at && (Date.now() - new Date(agent.last_seen_at).getTime()) < 5 * 60 * 1000;
-        const statusClass = isOnline ? 'online' : 'offline';
-        const statusLabel = isOnline ? 'Online' : 'Offline';
+        const statusClass = isOnline ? 'online' : 'not-reporting';
+        const statusLabel = isOnline ? 'Online' : 'Not Reporting';
+        const statusTitle = isOnline ? 'Agent is sending reports' : 'No report received in 5+ minutes — check agent logs or re-register';
         const fp = agent.fingerprint ? agent.fingerprint.substring(0, 16) + '...' : '';
 
         return `
@@ -91,7 +92,7 @@ const Agents = {
                     </div>
                 </div>
                 <div class="agent-card-right">
-                    <span class="agent-status ${statusClass}">${statusLabel}</span>
+                    <span class="agent-status ${statusClass}" title="${statusTitle}">${statusLabel}</span>
                     <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="3 6 5 6 21 6"/>

@@ -107,10 +107,10 @@ const Data = {
             return `
                 <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}"
                      onclick="navShowServer(${sortedIdx})"
-                     title="${isOffline ? 'Offline' : 'Online'}">
+                     title="${isOffline ? 'Not reporting — no data received in 5+ minutes' : 'Online — last update ' + timeSince}">
                     <span class="status-indicator ${statusClass}"></span>
                     <span class="server-name">${Utils.escapeHtml(server.hostname)}</span>
-                    ${isOffline ? '<span class="offline-badge">OFFLINE</span>' : ''}
+                    ${isOffline ? '<span class="offline-badge">NOT REPORTING</span>' : ''}
                 </div>
             `;
         }).join('');

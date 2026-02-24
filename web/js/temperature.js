@@ -210,7 +210,7 @@ const Temperature = {
                         model: drive.model_name || 'Unknown',
                         temperature: temp,
                         status: status,
-                        last_updated: server.last_seen
+                        last_updated: server.last_seen || server.timestamp
                     };
                     drivesByServer[server.hostname].push(driveData);
 

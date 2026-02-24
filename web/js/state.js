@@ -90,13 +90,15 @@ const State = {
     },
 
     isServerOffline(server) {
-        if (!server?.last_seen) return false;
-        return (Date.now() - new Date(server.last_seen)) / 60000 > this.OFFLINE_THRESHOLD_MINUTES;
+        const ts = server?.last_seen || server?.timestamp;
+        if (!ts) return false;
+        return (Date.now() - new Date(ts)) / 60000 > this.OFFLINE_THRESHOLD_MINUTES;
     },
 
     getTimeSinceUpdate(server) {
-        if (!server?.last_seen) return 'Unknown';
-        const mins = Math.floor((Date.now() - new Date(server.last_seen)) / 60000);
+        const ts = server?.last_seen || server?.timestamp;
+        if (!ts) return 'Unknown';
+        const mins = Math.floor((Date.now() - new Date(ts)) / 60000);
         if (mins < 1) return 'Just now';
         if (mins < 60) return `${mins}m ago`;
         const hrs = Math.floor(mins / 60);
