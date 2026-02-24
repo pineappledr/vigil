@@ -31,6 +31,9 @@ func main() {
 	// Set version for handlers
 	handlers.Version = version
 
+	// Initialize version checker for update notifications
+	handlers.VersionChecker = handlers.NewVersionHandler(version, "pineappledr", "vigil")
+
 	cfg := config.Load()
 
 	if err := db.Init(cfg.DBPath); err != nil {
@@ -87,6 +90,40 @@ func main() {
 		}
 	}()
 
+	// Periodic update checking (every 12 hours)
+	go func() {
+		// Check immediately on startup
+		if handlers.VersionChecker != nil {
+			log.Printf("🔄 Checking for updates...")
+			// The checker has internal caching, so frequent checks from clients won't hit GitHub API
+			handlers.VersionChecker.SetCacheTTL(12 * time.Hour)
+			info, err := handlers.VersionChecker.Check()
+			if err != nil {
+				log.Printf("⚠️  Update check failed: %v", err)
+			} else if info.UpdateAvailable {
+				log.Printf("📦 Update available: v%s → v%s", info.CurrentVersion, info.LatestVersion)
+			} else {
+				log.Printf("✓ Running latest version: v%s", info.CurrentVersion)
+			}
+		}
+
+		// Then check every 12 hours
+		ticker := time.NewTicker(12 * time.Hour)
+		for range ticker.C {
+			if handlers.VersionChecker != nil {
+				log.Printf("🔄 Checking for updates...")
+				info, err := handlers.VersionChecker.Check()
+				if err != nil {
+					log.Printf("⚠️  Update check failed: %v", err)
+				} else if info.UpdateAvailable {
+					log.Printf("📦 Update available: v%s → v%s", info.CurrentVersion, info.LatestVersion)
+				} else {
+					log.Printf("✓ Running latest version: v%s", info.CurrentVersion)
+				}
+			}
+		}
+	}()
+
 	mux := setupRoutes(cfg)
 	handler := middleware.Logging(middleware.CORS(mux))
 
@@ -123,6 +160,7 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// Public endpoints
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
+	mux.HandleFunc("GET /api/version/check", handlers.VersionChecker.CheckVersion)
 	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
 
 	// Auth endpoints (rate limited)

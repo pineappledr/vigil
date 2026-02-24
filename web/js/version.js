@@ -10,7 +10,7 @@ const Version = {
     checkInterval: null,
 
     // Configuration
-    CHECK_INTERVAL_MS: 60 * 60 * 1000, // 1 hour
+    CHECK_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes - just to refresh UI from server cache
     STORAGE_KEY: 'vigil_dismissed_version',
 
     /**
@@ -20,10 +20,11 @@ const Version = {
         // Load dismissed version from localStorage
         this.dismissedVersion = localStorage.getItem(this.STORAGE_KEY);
 
-        // Check immediately on load
+        // Check immediately on load (fetches from server cache)
         this.checkForUpdates();
 
-        // Set up periodic checks
+        // Periodically refresh UI from server cache (server does the real checking every 12 hours)
+        // This just updates the UI if the server has found an update
         this.checkInterval = setInterval(() => {
             this.checkForUpdates();
         }, this.CHECK_INTERVAL_MS);
@@ -31,6 +32,8 @@ const Version = {
 
     /**
      * Check for updates from the API
+     * The server checks GitHub every 12 hours and caches the result
+     * This just fetches the cached status from the server
      */
     async checkForUpdates() {
         try {

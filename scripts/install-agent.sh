@@ -88,7 +88,17 @@ install_binary() {
 # ─── Register agent ─────────────────────────────────────────────────────────
 register_agent() {
     echo "→ Registering agent with $SERVER..."
-    sudo "$INSTALL_DIR/vigil-agent" --register --server "$SERVER" --token "$TOKEN" --hostname "$NAME"
+    # Use timeout to limit the registration to 5 seconds after drive detection
+    # The agent should only register and exit, not run continuously
+    timeout 5s sudo "$INSTALL_DIR/vigil-agent" --register --server "$SERVER" --token "$TOKEN" --hostname "$NAME" 2>&1 | while IFS= read -r line; do
+        echo "$line"
+        # Exit after successful report
+        if echo "$line" | grep -q "Report sent"; then
+            sleep 0.5  # Give it a moment to finish
+            pkill -f "vigil-agent --register" 2>/dev/null || true
+            break
+        fi
+    done
     echo "✓ Agent registered"
 }
 
