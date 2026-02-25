@@ -63,7 +63,42 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate registration token (not used, not expired)
+	// Check if agent with same fingerprint already exists (idempotent reconnect).
+	// This handles the case where a container restarts and loses its auth.json
+	// but the agent was already registered on a prior start.
+	existing, _ := agents.GetAgentByFingerprint(db.DB, req.Fingerprint)
+	if existing != nil {
+		if existing.PublicKey != req.PublicKey {
+			JSONError(w, "An agent with this fingerprint is already registered with a different key", http.StatusConflict)
+			return
+		}
+		// Same agent reconnecting — issue a new session without consuming a token
+		session, sessErr := agents.CreateAgentSession(db.DB, existing.ID)
+		if sessErr != nil {
+			log.Printf("❌ Failed to create session for reconnecting agent %d: %v", existing.ID, sessErr)
+			JSONError(w, "Failed to create session", http.StatusInternalServerError)
+			return
+		}
+		agents.UpdateAgentLastAuth(db.DB, existing.ID)
+
+		serverPubKey := ""
+		if ServerKeys != nil {
+			serverPubKey = ServerKeys.PublicKeyBase64()
+		}
+
+		log.Printf("🔄 Agent reconnected: %s (id=%d, fingerprint=%.16s...)", existing.Hostname, existing.ID, existing.Fingerprint)
+
+		JSONResponse(w, map[string]interface{}{
+			"agent_id":          existing.ID,
+			"hostname":          existing.Hostname,
+			"session_token":     session.Token,
+			"session_expires":   session.ExpiresAt.UTC().Format(time.RFC3339),
+			"server_public_key": serverPubKey,
+		})
+		return
+	}
+
+	// New agent — validate registration token (not used, not expired)
 	tok, err := agents.GetRegistrationToken(db.DB, req.Token)
 	if err != nil {
 		JSONError(w, "Database error", http.StatusInternalServerError)
@@ -75,13 +110,6 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if tok.UsedAt != nil {
 		JSONError(w, "Registration token already used", http.StatusUnauthorized)
-		return
-	}
-
-	// Reject if a different agent with the same fingerprint already exists
-	existing, _ := agents.GetAgentByFingerprint(db.DB, req.Fingerprint)
-	if existing != nil {
-		JSONError(w, "An agent with this fingerprint is already registered", http.StatusConflict)
 		return
 	}
 
