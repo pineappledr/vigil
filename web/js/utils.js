@@ -21,10 +21,24 @@ const Utils = {
         return `${hours}h`;
     },
 
+    // Parse a timestamp string, treating bare datetimes (no Z or offset) as UTC.
+    // This is needed because the server stores all times in UTC without a suffix.
+    parseUTC(timestamp) {
+        if (!timestamp) return null;
+        // If it already has timezone info (Z, +, or T...±), parse as-is
+        if (/[Z+]/.test(timestamp) || /T\d{2}:\d{2}:\d{2}-/.test(timestamp)) {
+            return new Date(timestamp);
+        }
+        // Bare datetime like "2026-02-25 23:41:24" — treat as UTC
+        return new Date(timestamp + 'Z');
+    },
+
     formatTime(timestamp) {
-        return new Date(timestamp).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+        const date = this.parseUTC(timestamp);
+        if (!date || isNaN(date)) return 'N/A';
+        return date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
         });
     },
 

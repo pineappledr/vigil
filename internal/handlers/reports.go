@@ -40,8 +40,8 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use Go's time.Now() so timestamp respects the TZ environment variable
-	now := time.Now().Format("2006-01-02 15:04:05")
+	// Store timestamps in UTC for consistency with SQLite datetime('now')
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	if _, err = db.DB.Exec("INSERT INTO reports (hostname, timestamp, data) VALUES (?, ?, ?)", hostname, now, string(jsonData)); err != nil {
 		log.Printf("❌ DB Write Error: %v", err)
 		JSONError(w, "Database Error", http.StatusInternalServerError)

@@ -93,13 +93,17 @@ const State = {
     isServerOffline(server) {
         const ts = server?.last_seen || server?.timestamp;
         if (!ts) return false;
-        return (Date.now() - new Date(ts)) / 60000 > this.OFFLINE_THRESHOLD_MINUTES;
+        const date = Utils.parseUTC(ts);
+        if (!date || isNaN(date)) return false;
+        return (Date.now() - date) / 60000 > this.OFFLINE_THRESHOLD_MINUTES;
     },
 
     getTimeSinceUpdate(server) {
         const ts = server?.last_seen || server?.timestamp;
         if (!ts) return 'Unknown';
-        const mins = Math.floor((Date.now() - new Date(ts)) / 60000);
+        const date = Utils.parseUTC(ts);
+        if (!date || isNaN(date)) return 'Unknown';
+        const mins = Math.floor((Date.now() - date) / 60000);
         if (mins < 1) return 'Just now';
         if (mins < 60) return `${mins}m ago`;
         const hrs = Math.floor(mins / 60);

@@ -65,7 +65,8 @@ const Agents = {
         // Use the most recent activity timestamp (report or auth)
         const lastActivity = this._mostRecent(agent.last_seen_at, agent.last_auth_at);
         const lastSeen = lastActivity ? this._timeAgo(lastActivity) : null;
-        const isOnline = lastActivity && (Date.now() - new Date(lastActivity).getTime()) < 5 * 60 * 1000;
+        const lastDate = lastActivity ? Utils.parseUTC(lastActivity) : null;
+        const isOnline = lastDate && (Date.now() - lastDate.getTime()) < 5 * 60 * 1000;
         const statusClass = isOnline ? 'online' : 'not-reporting';
         const statusLabel = isOnline ? 'Online' : 'Not Reporting';
         const fp = agent.fingerprint ? agent.fingerprint.substring(0, 16) + '...' : '';
@@ -184,7 +185,8 @@ const Agents = {
         let best = null;
         for (const d of dates) {
             if (!d) continue;
-            const t = new Date(d);
+            const t = Utils.parseUTC(d);
+            if (!t || isNaN(t)) continue;
             // Guard against Go zero-time (year 1 or earlier)
             if (t.getFullYear() < 2000) continue;
             if (!best || t > best) best = t;
@@ -194,7 +196,8 @@ const Agents = {
 
     _timeAgo(dateStr) {
         if (!dateStr) return 'never';
-        const date = new Date(dateStr);
+        const date = Utils.parseUTC(dateStr);
+        if (!date || isNaN(date)) return 'never';
         // Guard against Go zero-time
         if (date.getFullYear() < 2000) return 'never';
         const diff = Date.now() - date.getTime();
