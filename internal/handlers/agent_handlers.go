@@ -63,15 +63,26 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if agent with same fingerprint already exists (idempotent reconnect).
-	// This handles the case where a container restarts and loses its auth.json
-	// but the agent was already registered on a prior start.
+	// Idempotent reconnect: check by fingerprint first, then by public key.
+	// The public-key fallback handles fingerprint evolution (e.g., mac: → mid:
+	// when a container is recreated and /etc/machine-id becomes available).
 	existing, _ := agents.GetAgentByFingerprint(db.DB, req.Fingerprint)
+	if existing != nil && existing.PublicKey != req.PublicKey {
+		JSONError(w, "An agent with this fingerprint is already registered with a different key", http.StatusConflict)
+		return
+	}
+	if existing == nil {
+		// Fingerprint changed but same key pair — find by public key
+		existing, _ = agents.GetAgentByPublicKey(db.DB, req.PublicKey)
+	}
 	if existing != nil {
-		if existing.PublicKey != req.PublicKey {
-			JSONError(w, "An agent with this fingerprint is already registered with a different key", http.StatusConflict)
-			return
+		// Update fingerprint if it changed
+		if existing.Fingerprint != req.Fingerprint {
+			log.Printf("🔄 Fingerprint updated for agent %d (%s): %.16s... → %.16s...",
+				existing.ID, existing.Hostname, existing.Fingerprint, req.Fingerprint)
+			agents.UpdateAgentFingerprint(db.DB, existing.ID, req.Fingerprint)
 		}
+
 		// Same agent reconnecting — issue a new session without consuming a token
 		session, sessErr := agents.CreateAgentSession(db.DB, existing.ID)
 		if sessErr != nil {
@@ -86,7 +97,7 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 			serverPubKey = ServerKeys.PublicKeyBase64()
 		}
 
-		log.Printf("🔄 Agent reconnected: %s (id=%d, fingerprint=%.16s...)", existing.Hostname, existing.ID, existing.Fingerprint)
+		log.Printf("🔄 Agent reconnected: %s (id=%d, fingerprint=%.16s...)", existing.Hostname, existing.ID, req.Fingerprint)
 
 		JSONResponse(w, map[string]interface{}{
 			"agent_id":          existing.ID,
@@ -199,21 +210,25 @@ func AuthAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fingerprint must match stored value
-	if agent.Fingerprint != req.Fingerprint {
-		log.Printf("🚨 FINGERPRINT MISMATCH: agent_id=%d hostname=%s stored=%.16s... received=%.16s...",
-			agent.ID, agent.Hostname, agent.Fingerprint, req.Fingerprint)
-		logAuditEvent("FINGERPRINT_MISMATCH", agent.ID, agent.Hostname, r.RemoteAddr)
-		JSONError(w, "Fingerprint mismatch — re-registration required", http.StatusForbidden)
-		return
-	}
-
 	// Verify Ed25519 signature over "{agent_id}:{fingerprint}:{timestamp}"
+	// Signature is verified BEFORE fingerprint check — the private key IS
+	// the true identity proof.  A valid signature with a changed fingerprint
+	// just means the identity source rotated (e.g., container recreated).
 	msg := []byte(fmt.Sprintf("%d:%s:%d", req.AgentID, req.Fingerprint, req.Timestamp))
 	sigBytes, err := base64.StdEncoding.DecodeString(req.Signature)
 	if err != nil || !crypto.VerifyAgentSignature(agent.PublicKey, msg, sigBytes) {
 		JSONError(w, "Invalid signature", http.StatusUnauthorized)
 		return
+	}
+
+	// Fingerprint evolution: if the signature is valid but the fingerprint
+	// source changed (e.g., mac: → mid:), update the stored value.
+	if agent.Fingerprint != req.Fingerprint {
+		log.Printf("🔄 Fingerprint updated for agent %d (%s): %.16s... → %.16s...",
+			agent.ID, agent.Hostname, agent.Fingerprint, req.Fingerprint)
+		if err := agents.UpdateAgentFingerprint(db.DB, agent.ID, req.Fingerprint); err != nil {
+			log.Printf("⚠️  Failed to update fingerprint for agent %d: %v", agent.ID, err)
+		}
 	}
 
 	// Issue new session

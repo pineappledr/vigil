@@ -48,6 +48,16 @@ func GetAgentByFingerprint(db *sql.DB, fingerprint string) (*Agent, error) {
 	return scanAgentRow(row)
 }
 
+// GetAgentByPublicKey retrieves an enabled agent by its Ed25519 public key.
+func GetAgentByPublicKey(db *sql.DB, publicKey string) (*Agent, error) {
+	row := db.QueryRow(`
+		SELECT id, hostname, name, fingerprint, public_key,
+		       registered_at, last_auth_at, last_seen_at, enabled
+		FROM agent_registry WHERE public_key = ? AND enabled = 1
+	`, publicKey)
+	return scanAgentRow(row)
+}
+
 // ListAgents returns all registered agents ordered by hostname.
 func ListAgents(db *sql.DB) ([]Agent, error) {
 	rows, err := db.Query(`
@@ -76,6 +86,17 @@ func UpdateAgentLastAuth(db *sql.DB, agentID int64) error {
 	_, err := db.Exec(
 		"UPDATE agent_registry SET last_auth_at = ? WHERE id = ?",
 		time.Now().UTC().Format(timeFormat), agentID,
+	)
+	return err
+}
+
+// UpdateAgentFingerprint replaces the stored fingerprint for an agent.
+// This is used when the Ed25519 signature is valid but the fingerprint source
+// changed (e.g., container recreated, machine-id now available).
+func UpdateAgentFingerprint(db *sql.DB, agentID int64, newFingerprint string) error {
+	_, err := db.Exec(
+		"UPDATE agent_registry SET fingerprint = ? WHERE id = ?",
+		newFingerprint, agentID,
 	)
 	return err
 }
