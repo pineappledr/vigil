@@ -71,20 +71,20 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 	return out, nil
 }
 
-// UpdateAgentLastAuth stamps last_auth_at to now.
+// UpdateAgentLastAuth stamps last_auth_at to now (UTC).
 func UpdateAgentLastAuth(db *sql.DB, agentID int64) error {
 	_, err := db.Exec(
 		"UPDATE agent_registry SET last_auth_at = ? WHERE id = ?",
-		time.Now().Format(timeFormat), agentID,
+		time.Now().UTC().Format(timeFormat), agentID,
 	)
 	return err
 }
 
-// UpdateAgentLastSeen stamps last_seen_at to now.
+// UpdateAgentLastSeen stamps last_seen_at to now (UTC).
 func UpdateAgentLastSeen(db *sql.DB, agentID int64) error {
 	_, err := db.Exec(
 		"UPDATE agent_registry SET last_seen_at = ? WHERE id = ?",
-		time.Now().Format(timeFormat), agentID,
+		time.Now().UTC().Format(timeFormat), agentID,
 	)
 	return err
 }
@@ -103,7 +103,7 @@ func CreateRegistrationToken(db *sql.DB, name string) (*RegistrationToken, error
 	rand.Read(raw)
 	token := hex.EncodeToString(raw)
 
-	now := time.Now()
+	now := time.Now().UTC()
 	expiresAt := now.Add(24 * time.Hour)
 
 	result, err := db.Exec(`
@@ -178,7 +178,7 @@ func ConsumeRegistrationToken(db *sql.DB, token string, agentID int64) error {
 		UPDATE agent_registration_tokens
 		SET used_at = ?, used_by_agent_id = ?
 		WHERE token = ?
-	`, time.Now().Format(timeFormat), agentID, token)
+	`, time.Now().UTC().Format(timeFormat), agentID, token)
 	return err
 }
 
@@ -238,7 +238,7 @@ func CreateAgentSession(db *sql.DB, agentID int64) (*AgentSession, error) {
 	rand.Read(raw)
 	token := hex.EncodeToString(raw)
 
-	now := time.Now()
+	now := time.Now().UTC()
 	expiresAt := now.Add(time.Hour)
 
 	_, err := db.Exec(`
