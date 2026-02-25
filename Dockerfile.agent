@@ -29,10 +29,13 @@ RUN apk add --no-cache \
     smartmontools \
     nvme-cli \
     ca-certificates \
+    tzdata \
     zfs
 
 # Copy the binary
 COPY --from=builder /app/vigil-agent .
+
+ENV TZ=UTC
 
 ENTRYPOINT ["./vigil-agent"]
 CMD ["--server", "http://localhost:9080", "--interval", "60"]

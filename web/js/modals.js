@@ -533,8 +533,13 @@ services:
       SERVER: ${serverURL}
       TOKEN: ${token}
       HOSTNAME: ${name}
+      TZ: \${TZ:-UTC}
     volumes:
-${volumes}${deploy}`;
+      - vigil_agent_data:/var/lib/vigil-agent
+${volumes}${deploy}
+
+volumes:
+  vigil_agent_data:`;
     },
 
     _generateBinaryInstall(serverURL, token, name, zfs, version) {

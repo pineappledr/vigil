@@ -11,6 +11,14 @@
     padding: 0 12px 8px;
 }
 
+.wearout-mini-title {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
 .wearout-mini-bar {
     flex: 1;
     height: 4px;

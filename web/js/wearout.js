@@ -63,7 +63,8 @@ const Wearout = {
         const cls = this.getStatusClass(pct);
         const rounded = Math.round(pct * 10) / 10;
         return `
-            <div class="wearout-mini" title="Drive Wearout: ${rounded}%">
+            <div class="wearout-mini" title="Drive Wearout: ${rounded}% — how much of the drive's estimated lifespan has been consumed">
+                <span class="wearout-mini-title">Wear Out</span>
                 <div class="wearout-mini-bar">
                     <div class="wearout-mini-fill ${cls}" style="width:${Math.min(pct, 100)}%"></div>
                 </div>
