@@ -95,6 +95,36 @@ func DeleteAgent(db *sql.DB, id int64) error {
 	return err
 }
 
+// DeleteHostData removes all hostname-keyed data: reports, drive aliases,
+// ZFS pools (cascades to devices/scrub history), wearout history, and
+// SMART attributes.  Call this after DeleteAgent to fully clean up.
+func DeleteHostData(db *sql.DB, hostname string) (deleted map[string]int64) {
+	deleted = make(map[string]int64)
+
+	tables := []struct {
+		label string
+		sql   string
+	}{
+		{"reports", "DELETE FROM reports WHERE hostname = ?"},
+		{"drive_aliases", "DELETE FROM drive_aliases WHERE hostname = ?"},
+		{"zfs_pools", "DELETE FROM zfs_pools WHERE hostname = ?"},
+		{"wearout_history", "DELETE FROM wearout_history WHERE hostname = ?"},
+		{"smart_attributes", "DELETE FROM smart_attributes WHERE hostname = ?"},
+	}
+
+	for _, t := range tables {
+		result, err := db.Exec(t.sql, hostname)
+		if err != nil {
+			continue // table may not exist yet
+		}
+		n, _ := result.RowsAffected()
+		if n > 0 {
+			deleted[t.label] = n
+		}
+	}
+	return deleted
+}
+
 // ─── Registration Tokens ─────────────────────────────────────────────────────
 
 // CreateRegistrationToken generates and stores a one-time token.

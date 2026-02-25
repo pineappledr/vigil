@@ -136,6 +136,7 @@ docker run -d \
   -p 9080:9080 \
   -v vigil_data:/data \
   -e ADMIN_PASS=your-secure-password \
+  -e TZ=${TZ:-UTC} \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil:latest
 ```
@@ -185,6 +186,7 @@ services:
       - AUTH_ENABLED=true
       - ADMIN_USER=admin
       - ADMIN_PASS=your-secure-password
+      - TZ=${TZ:-UTC}
     volumes:
       - vigil_data:/data
 
@@ -236,7 +238,7 @@ curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/instal
 
 ### Agent: Docker (Standard Linux)
 
-The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts.
+The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts. If the container is recreated, the agent automatically reconnects using its stored credentials — no new token is needed.
 
 ```bash
 docker run -d \
@@ -246,10 +248,13 @@ docker run -d \
   --privileged \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
+  -e TZ=${TZ:-UTC} \
   -v /dev:/dev:ro \
   -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:latest
 ```
+
+> **Important:** The `vigil_agent_data` volume is required to persist agent credentials across container restarts and recreations.
 
 > **ZFS Monitoring:** Add `-v /sys:/sys:ro -v /proc:/proc:ro -v /dev/zfs:/dev/zfs` if your host uses ZFS.
 
@@ -272,6 +277,7 @@ services:
       SERVER: http://YOUR_SERVER_IP:9080
       TOKEN: YOUR_REGISTRATION_TOKEN
       HOSTNAME: my-truenas       # Optional: custom display name
+      TZ: ${TZ:-UTC}
     volumes:
       - /dev:/dev:ro
       - /dev/zfs:/dev/zfs
@@ -280,6 +286,7 @@ services:
       - /lib:/lib:ro
       - /lib64:/lib64:ro
       - /usr/lib:/usr/lib:ro
+      - vigil_agent_data:/var/lib/vigil-agent
     deploy:
       resources:
         limits:
@@ -288,6 +295,10 @@ services:
         reservations:
           cpus: '0.10'
           memory: 128M
+
+volumes:
+  vigil_agent_data:
+    name: vigil_agent_data
 ```
 
 Or with `docker run`:
@@ -301,6 +312,7 @@ docker run -d \
   --privileged \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
+  -e TZ=${TZ:-UTC} \
   -v /dev:/dev:ro \
   -v /dev/zfs:/dev/zfs \
   -v /sbin/zpool:/sbin/zpool:ro \
@@ -308,6 +320,7 @@ docker run -d \
   -v /lib:/lib:ro \
   -v /lib64:/lib64:ro \
   -v /usr/lib:/usr/lib:ro \
+  -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:debian
 ```
 
@@ -364,6 +377,7 @@ docker run -d \
   --net=host \
   --privileged \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
+  -e TZ=${TZ:-UTC} \
   -v /dev:/dev \
   -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
@@ -442,6 +456,7 @@ sudo systemctl start vigil-agent
 | `AUTH_ENABLED` | `true` | Enable/disable authentication |
 | `ADMIN_USER` | `admin` | Default admin username |
 | `ADMIN_PASS` | (generated) | Admin password (random if not set) |
+| `TZ` | `UTC` | Timezone for timestamps (e.g., `America/New_York`) |
 
 ### Agent Flags
 
@@ -454,6 +469,7 @@ sudo systemctl start vigil-agent
 | `--register` | - | - | Run one-time registration, then exit |
 | `--token` | `TOKEN` | - | Registration token (auto-enables `--register` if set) |
 | `--version` | - | - | Show version |
+| - | `TZ` | `UTC` | Timezone (should match server for consistent timestamps) |
 
 > Environment variables override flags. When `TOKEN` is set, the agent auto-registers on first boot and skips registration on subsequent starts — ideal for Docker deployments.
 
@@ -479,8 +495,8 @@ Starting with **v2.4.0**, Vigil uses **Ed25519 key-based mutual authentication**
 ### How It Works
 
 1. **Server generates an Ed25519 key pair** on first startup (stored in the data directory alongside the database).
-2. **Admin creates a registration token** from the web UI (**Agents → Add Agent**). Tokens are single-use and expire after 24 hours.
-3. **Agent registers** using `--register --token <TOKEN>`. During registration, the agent generates its own Ed25519 key pair and a unique machine fingerprint, then exchanges public keys with the server.
+2. **Admin creates a registration token** from the web UI (**Agents → Add Agent**). Tokens are single-use. Expiration is optional — tokens can be set to never expire or expire after a configurable duration.
+3. **Agent registers** using `--register --token <TOKEN>`. During registration, the agent generates its own Ed25519 key pair and a unique machine fingerprint, then exchanges public keys with the server. If an agent with the same fingerprint and public key reconnects, it automatically re-authenticates without consuming a new token.
 4. **Agent authenticates** on each run by signing a challenge with its private key. The server verifies the signature and issues a 1-hour session token.
 5. **Session auto-refreshes** — the agent proactively re-authenticates when the session has less than 5 minutes remaining.
 
@@ -746,7 +762,7 @@ A 401 error means the agent cannot authenticate with the server. This is usually
 
 5. If upgrading from **v2.3.x**, all agents must be re-registered because v2.4.0+ switched to Ed25519 key-based authentication (see [Upgrading from v2.3.x](#upgrading-from-v23x))
 
-> **Note:** Registration tokens expire after 24 hours. If your token has expired, generate a new one from the web UI.
+> **Note:** Registration tokens are single-use. If a token was configured with an expiration, it may have expired — generate a new one from the web UI. If the agent was previously registered and is simply reconnecting (same fingerprint and key), it will automatically re-authenticate without needing a new token.
 
 ### Agent rejected with 403 Forbidden (fingerprint mismatch)
 

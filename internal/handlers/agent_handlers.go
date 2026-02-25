@@ -131,13 +131,14 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		log.Printf("⚠️  Could not mark registration token used: %v", err)
 	}
 
-	// Issue first session token
+	// Issue first session token and stamp last_auth_at
 	session, err := agents.CreateAgentSession(db.DB, agent.ID)
 	if err != nil {
 		log.Printf("❌ Failed to create session for agent %d: %v", agent.ID, err)
 		JSONError(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
+	agents.UpdateAgentLastAuth(db.DB, agent.ID)
 
 	serverPubKey := ""
 	if ServerKeys != nil {
@@ -264,7 +265,8 @@ func ListAgents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteRegisteredAgent removes an agent by ID.
+// DeleteRegisteredAgent removes an agent by ID and cascades to all
+// hostname-keyed data (reports, ZFS pools, aliases, SMART, wearout).
 // DELETE /api/v1/agents/{id}
 func DeleteRegisteredAgent(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
@@ -274,13 +276,28 @@ func DeleteRegisteredAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up agent to get hostname before deletion
+	agent, err := agents.GetAgentByID(db.DB, id)
+	if err != nil || agent == nil {
+		JSONError(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+	hostname := agent.Hostname
+
+	// Delete agent record (sessions cascade via FK)
 	if err := agents.DeleteAgent(db.DB, id); err != nil {
 		JSONError(w, "Failed to delete agent: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("🗑️  Deleted agent id=%d", id)
-	JSONResponse(w, map[string]string{"status": "deleted"})
+	// Cascade: remove all hostname-keyed data
+	deleted := agents.DeleteHostData(db.DB, hostname)
+
+	log.Printf("🗑️  Deleted agent id=%d (%s) — cascade: %v", id, hostname, deleted)
+	JSONResponse(w, map[string]interface{}{
+		"status":  "deleted",
+		"cascade": deleted,
+	})
 }
 
 // ─── Admin: registration token management ─────────────────────────────────────

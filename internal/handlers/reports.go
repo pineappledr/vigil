@@ -48,7 +48,9 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agents.UpdateAgentLastSeen(db.DB, session.AgentID)
+	if err := agents.UpdateAgentLastSeen(db.DB, session.AgentID); err != nil {
+		log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", session.AgentID, err)
+	}
 
 	driveCount := 0
 	if drives, ok := payload["drives"].([]interface{}); ok {
