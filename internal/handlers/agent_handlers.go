@@ -286,16 +286,24 @@ func DeleteRegisteredAgent(w http.ResponseWriter, r *http.Request) {
 // ─── Admin: registration token management ─────────────────────────────────────
 
 type createTokenRequest struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	ExpiresIn *int   `json:"expires_in"` // seconds; null or 0 = never expires
 }
 
-// CreateRegistrationToken generates a new 24-hour one-time enrollment token.
+// CreateToken generates a new one-time enrollment token.
 // POST /api/v1/tokens
+// Body: {"name":"...", "expires_in": 86400}  — expires_in in seconds, null/0 for never
 func CreateToken(w http.ResponseWriter, r *http.Request) {
 	var req createTokenRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	tok, err := agents.CreateRegistrationToken(db.DB, req.Name)
+	var expiresIn *time.Duration
+	if req.ExpiresIn != nil && *req.ExpiresIn > 0 {
+		d := time.Duration(*req.ExpiresIn) * time.Second
+		expiresIn = &d
+	}
+
+	tok, err := agents.CreateRegistrationToken(db.DB, req.Name, expiresIn)
 	if err != nil {
 		JSONError(w, "Failed to create token: "+err.Error(), http.StatusInternalServerError)
 		return

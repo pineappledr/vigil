@@ -97,19 +97,28 @@ func DeleteAgent(db *sql.DB, id int64) error {
 
 // ─── Registration Tokens ─────────────────────────────────────────────────────
 
-// CreateRegistrationToken generates and stores a new 24-hour one-time token.
-func CreateRegistrationToken(db *sql.DB, name string) (*RegistrationToken, error) {
+// CreateRegistrationToken generates and stores a one-time token.
+// If expiresIn is nil the token never expires; otherwise it expires after the
+// given duration.
+func CreateRegistrationToken(db *sql.DB, name string, expiresIn *time.Duration) (*RegistrationToken, error) {
 	raw := make([]byte, 32)
 	rand.Read(raw)
 	token := hex.EncodeToString(raw)
 
 	now := time.Now().UTC()
-	expiresAt := now.Add(24 * time.Hour)
+
+	var expiresVal interface{} // nil → SQL NULL
+	var expiresPtr *time.Time
+	if expiresIn != nil {
+		t := now.Add(*expiresIn)
+		expiresPtr = &t
+		expiresVal = t.Format(timeFormat)
+	}
 
 	result, err := db.Exec(`
 		INSERT INTO agent_registration_tokens (token, name, expires_at)
 		VALUES (?, ?, ?)
-	`, token, name, expiresAt.Format(timeFormat))
+	`, token, name, expiresVal)
 	if err != nil {
 		return nil, fmt.Errorf("create registration token: %w", err)
 	}
@@ -120,22 +129,23 @@ func CreateRegistrationToken(db *sql.DB, name string) (*RegistrationToken, error
 		Token:     token,
 		Name:      name,
 		CreatedAt: now,
-		ExpiresAt: expiresAt,
+		ExpiresAt: expiresPtr,
 	}, nil
 }
 
-// GetRegistrationToken retrieves an unexpired token. Returns nil if not found
-// or already expired.
+// GetRegistrationToken retrieves a valid token. Returns nil if not found or
+// expired. Tokens with NULL expires_at never expire.
 func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) {
 	var t RegistrationToken
 	var usedAt sql.NullString
 	var usedByAgentID sql.NullInt64
-	var createdAt, expiresAt string
+	var createdAt string
+	var expiresAt sql.NullString
 
 	err := db.QueryRow(`
 		SELECT id, token, name, created_at, expires_at, used_at, used_by_agent_id
 		FROM agent_registration_tokens
-		WHERE token = ? AND expires_at > datetime('now')
+		WHERE token = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
 	`, token).Scan(&t.ID, &t.Token, &t.Name, &createdAt, &expiresAt, &usedAt, &usedByAgentID)
 
 	if err == sql.ErrNoRows {
@@ -146,7 +156,10 @@ func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) 
 	}
 
 	t.CreatedAt, _ = time.Parse(timeFormat, createdAt)
-	t.ExpiresAt, _ = time.Parse(timeFormat, expiresAt)
+	if expiresAt.Valid {
+		ts, _ := time.Parse(timeFormat, expiresAt.String)
+		t.ExpiresAt = &ts
+	}
 
 	if usedAt.Valid {
 		ts, _ := time.Parse(timeFormat, usedAt.String)
@@ -198,14 +211,18 @@ func ListRegistrationTokens(db *sql.DB) ([]RegistrationToken, error) {
 		var t RegistrationToken
 		var usedAt sql.NullString
 		var usedByAgentID sql.NullInt64
-		var createdAt, expiresAt string
+		var createdAt string
+		var expiresAt sql.NullString
 
 		if err := rows.Scan(&t.ID, &t.Token, &t.Name, &createdAt, &expiresAt, &usedAt, &usedByAgentID); err != nil {
 			return nil, err
 		}
 
 		t.CreatedAt, _ = time.Parse(timeFormat, createdAt)
-		t.ExpiresAt, _ = time.Parse(timeFormat, expiresAt)
+		if expiresAt.Valid {
+			ts, _ := time.Parse(timeFormat, expiresAt.String)
+			t.ExpiresAt = &ts
+		}
 
 		if usedAt.Valid {
 			ts, _ := time.Parse(timeFormat, usedAt.String)

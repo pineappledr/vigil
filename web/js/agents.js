@@ -121,9 +121,10 @@ const Agents = {
     _tokenRow(token) {
         const truncated = token.token.substring(0, 16) + '...';
         const now = new Date();
-        const expires = new Date(token.expires_at);
-        const isExpired = expires < now;
         const isUsed = !!token.used_at;
+        const isExpired = token.expires_at
+            ? new Date(token.expires_at + 'Z') < now  // stored as UTC, append Z so JS parses as UTC
+            : false;  // null expires_at = never expires
 
         let badgeClass = 'available';
         let badgeLabel = 'Available';

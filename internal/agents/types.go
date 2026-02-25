@@ -16,13 +16,13 @@ type Agent struct {
 }
 
 // RegistrationToken is a one-time-use token for enrolling a new agent.
-// Tokens are valid for 24 hours and become unusable after first consumption.
+// ExpiresAt is nil for tokens that never expire.
 type RegistrationToken struct {
 	ID            int64      `json:"id"`
 	Token         string     `json:"token"`
 	Name          string     `json:"name"`
 	CreatedAt     time.Time  `json:"created_at"`
-	ExpiresAt     time.Time  `json:"expires_at"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 	UsedAt        *time.Time `json:"used_at,omitempty"`
 	UsedByAgentID *int64     `json:"used_by_agent_id,omitempty"`
 }
