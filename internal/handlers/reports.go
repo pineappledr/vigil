@@ -48,8 +48,14 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update agent status: by ID (fast path) and by hostname (authoritative sync).
+	// The hostname-based update covers edge cases where the session's agent_id
+	// doesn't match the current agent_registry row (e.g., after re-registration).
 	if err := agents.UpdateAgentLastSeen(db.DB, session.AgentID); err != nil {
 		log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", session.AgentID, err)
+	}
+	if err := agents.UpdateAgentLastSeenByHostname(db.DB, hostname); err != nil {
+		log.Printf("⚠️  Failed to update agent status by hostname %s: %v", hostname, err)
 	}
 
 	driveCount := 0

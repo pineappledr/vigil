@@ -110,6 +110,21 @@ func UpdateAgentLastSeen(db *sql.DB, agentID int64) error {
 	return err
 }
 
+// UpdateAgentLastSeenByHostname stamps last_seen_at (and last_auth_at if NULL)
+// for the agent matching the given hostname.  This is the authoritative sync
+// between the reports table and agent_registry — it covers cases where the
+// session agent_id doesn't match (e.g., after re-registration).
+func UpdateAgentLastSeenByHostname(db *sql.DB, hostname string) error {
+	now := time.Now().UTC().Format(timeFormat)
+	_, err := db.Exec(`
+		UPDATE agent_registry
+		SET last_seen_at = ?,
+		    last_auth_at = COALESCE(last_auth_at, ?)
+		WHERE hostname = ? AND enabled = 1
+	`, now, now, hostname)
+	return err
+}
+
 // DeleteAgent removes an agent and all its sessions (ON DELETE CASCADE).
 func DeleteAgent(db *sql.DB, id int64) error {
 	_, err := db.Exec("DELETE FROM agent_registry WHERE id = ?", id)

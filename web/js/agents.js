@@ -73,6 +73,16 @@ const Agents = {
         const displayName = agent.name || agent.hostname;
         const showHostname = agent.name && agent.name !== agent.hostname;
 
+        // Build the "last seen" subtext with registered_at fallback
+        let timeText;
+        if (lastSeen) {
+            timeText = 'Last seen ' + lastSeen;
+        } else if (agent.registered_at) {
+            timeText = 'Registered ' + this._timeAgo(agent.registered_at);
+        } else {
+            timeText = 'Never connected';
+        }
+
         let statusHint = '';
         if (!isOnline) {
             statusHint = lastActivity
@@ -98,7 +108,7 @@ const Agents = {
                                 ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
                                 <span>${fp}</span>
                                 <span class="dot"></span>
-                                <span>${lastSeen ? 'Last seen ' + lastSeen : 'Never connected'}</span>
+                                <span>${timeText}</span>
                             </div>
                         </div>
                     </div>
