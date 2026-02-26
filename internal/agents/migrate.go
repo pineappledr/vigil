@@ -66,6 +66,63 @@ func Migrate(db *sql.DB) error {
 		log.Printf("  ✓ %s", s.label)
 	}
 
+	// Migration: make expires_at nullable (was NOT NULL in initial schema).
+	// SQLite doesn't support ALTER COLUMN, so we recreate the table if needed.
+	if err := migrateTokensNullableExpiry(db); err != nil {
+		return fmt.Errorf("migration failed at [tokens nullable expiry]: %w", err)
+	}
+
 	log.Println("🔐 Migration completed: agent authentication tables ready")
 	return nil
+}
+
+// migrateTokensNullableExpiry recreates the tokens table with expires_at
+// nullable, preserving all existing data. It's a no-op if already migrated.
+func migrateTokensNullableExpiry(db *sql.DB) error {
+	// Check if expires_at is already nullable by inserting NULL and rolling back
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, testErr := tx.Exec(`INSERT INTO agent_registration_tokens (token, name, expires_at) VALUES ('__test_nullable__', '', NULL)`)
+	tx.Rollback()
+	if testErr == nil {
+		// Column already nullable — clean up test row just in case
+		db.Exec(`DELETE FROM agent_registration_tokens WHERE token = '__test_nullable__'`)
+		return nil
+	}
+
+	log.Println("  ↻ Migrating agent_registration_tokens: making expires_at nullable")
+
+	tx, err = db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmts := []string{
+		`CREATE TABLE agent_registration_tokens_new (
+			id               INTEGER PRIMARY KEY AUTOINCREMENT,
+			token            TEXT    NOT NULL UNIQUE,
+			name             TEXT,
+			created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at       DATETIME,
+			used_at          DATETIME,
+			used_by_agent_id INTEGER,
+			FOREIGN KEY (used_by_agent_id) REFERENCES agent_registry(id) ON DELETE SET NULL
+		)`,
+		`INSERT INTO agent_registration_tokens_new SELECT * FROM agent_registration_tokens`,
+		`DROP TABLE agent_registration_tokens`,
+		`ALTER TABLE agent_registration_tokens_new RENAME TO agent_registration_tokens`,
+		`CREATE INDEX IF NOT EXISTS idx_reg_tokens_token   ON agent_registration_tokens(token)`,
+		`CREATE INDEX IF NOT EXISTS idx_reg_tokens_expires ON agent_registration_tokens(expires_at)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return fmt.Errorf("nullable expiry migration: %w", err)
+		}
+	}
+
+	log.Println("  ✓ agent_registration_tokens: expires_at now nullable")
+	return tx.Commit()
 }

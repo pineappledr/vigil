@@ -11,6 +11,9 @@ import (
 // Version is set at build time
 var Version = "dev"
 
+// VersionChecker handles version update checking
+var VersionChecker *VersionHandler
+
 // Health returns server health status
 func Health(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, map[string]string{

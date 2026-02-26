@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="css/offline-indicator.css">
     <link rel="stylesheet" href="css/temperature.css">
     <link rel="stylesheet" href="css/agents.css">
+    <link rel="stylesheet" href="css/version.css">
+    <link rel="stylesheet" href="css/wearout.css">
     <link rel="stylesheet" href="css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -146,7 +148,6 @@
                     <h1 id="page-title">Infrastructure Overview</h1>
                 </div>
                 <div class="header-right">
-                    <div id="user-menu"></div>
                     <span class="last-update">Last update: <time id="last-update-time">--:--:--</time></span>
                     <button class="btn-refresh" id="btn-refresh" title="Refresh">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -154,6 +155,7 @@
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                         </svg>
                     </button>
+                    <div id="user-menu"></div>
                 </div>
             </header>
 
@@ -200,6 +202,7 @@
     <script src="js/api.js"></script>
     <script src="js/components.js"></script>
     <script src="js/modals.js"></script>
+    <script src="js/wearout.js"></script>
     <script src="js/smart-attributes.js"></script>
     <script src="js/zfs.js"></script>
     <script src="js/renderer.js"></script>
@@ -208,6 +211,7 @@
     <script src="js/agents.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/temperature.js"></script>
+    <script src="js/version.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

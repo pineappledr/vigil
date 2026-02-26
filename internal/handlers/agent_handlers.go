@@ -63,7 +63,53 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate registration token (not used, not expired)
+	// Idempotent reconnect: check by fingerprint first, then by public key.
+	// The public-key fallback handles fingerprint evolution (e.g., mac: → mid:
+	// when a container is recreated and /etc/machine-id becomes available).
+	existing, _ := agents.GetAgentByFingerprint(db.DB, req.Fingerprint)
+	if existing != nil && existing.PublicKey != req.PublicKey {
+		JSONError(w, "An agent with this fingerprint is already registered with a different key", http.StatusConflict)
+		return
+	}
+	if existing == nil {
+		// Fingerprint changed but same key pair — find by public key
+		existing, _ = agents.GetAgentByPublicKey(db.DB, req.PublicKey)
+	}
+	if existing != nil {
+		// Update fingerprint if it changed
+		if existing.Fingerprint != req.Fingerprint {
+			log.Printf("🔄 Fingerprint updated for agent %d (%s): %.16s... → %.16s...",
+				existing.ID, existing.Hostname, existing.Fingerprint, req.Fingerprint)
+			agents.UpdateAgentFingerprint(db.DB, existing.ID, req.Fingerprint)
+		}
+
+		// Same agent reconnecting — issue a new session without consuming a token
+		session, sessErr := agents.CreateAgentSession(db.DB, existing.ID)
+		if sessErr != nil {
+			log.Printf("❌ Failed to create session for reconnecting agent %d: %v", existing.ID, sessErr)
+			JSONError(w, "Failed to create session", http.StatusInternalServerError)
+			return
+		}
+		agents.UpdateAgentLastAuth(db.DB, existing.ID)
+
+		serverPubKey := ""
+		if ServerKeys != nil {
+			serverPubKey = ServerKeys.PublicKeyBase64()
+		}
+
+		log.Printf("🔄 Agent reconnected: %s (id=%d, fingerprint=%.16s...)", existing.Hostname, existing.ID, req.Fingerprint)
+
+		JSONResponse(w, map[string]interface{}{
+			"agent_id":          existing.ID,
+			"hostname":          existing.Hostname,
+			"session_token":     session.Token,
+			"session_expires":   session.ExpiresAt.UTC().Format(time.RFC3339),
+			"server_public_key": serverPubKey,
+		})
+		return
+	}
+
+	// New agent — validate registration token (not used, not expired)
 	tok, err := agents.GetRegistrationToken(db.DB, req.Token)
 	if err != nil {
 		JSONError(w, "Database error", http.StatusInternalServerError)
@@ -75,13 +121,6 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if tok.UsedAt != nil {
 		JSONError(w, "Registration token already used", http.StatusUnauthorized)
-		return
-	}
-
-	// Reject if a different agent with the same fingerprint already exists
-	existing, _ := agents.GetAgentByFingerprint(db.DB, req.Fingerprint)
-	if existing != nil {
-		JSONError(w, "An agent with this fingerprint is already registered", http.StatusConflict)
 		return
 	}
 
@@ -103,13 +142,14 @@ func RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		log.Printf("⚠️  Could not mark registration token used: %v", err)
 	}
 
-	// Issue first session token
+	// Issue first session token and stamp last_auth_at
 	session, err := agents.CreateAgentSession(db.DB, agent.ID)
 	if err != nil {
 		log.Printf("❌ Failed to create session for agent %d: %v", agent.ID, err)
 		JSONError(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
+	agents.UpdateAgentLastAuth(db.DB, agent.ID)
 
 	serverPubKey := ""
 	if ServerKeys != nil {
@@ -170,21 +210,25 @@ func AuthAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fingerprint must match stored value
-	if agent.Fingerprint != req.Fingerprint {
-		log.Printf("🚨 FINGERPRINT MISMATCH: agent_id=%d hostname=%s stored=%.16s... received=%.16s...",
-			agent.ID, agent.Hostname, agent.Fingerprint, req.Fingerprint)
-		logAuditEvent("FINGERPRINT_MISMATCH", agent.ID, agent.Hostname, r.RemoteAddr)
-		JSONError(w, "Fingerprint mismatch — re-registration required", http.StatusForbidden)
-		return
-	}
-
 	// Verify Ed25519 signature over "{agent_id}:{fingerprint}:{timestamp}"
+	// Signature is verified BEFORE fingerprint check — the private key IS
+	// the true identity proof.  A valid signature with a changed fingerprint
+	// just means the identity source rotated (e.g., container recreated).
 	msg := []byte(fmt.Sprintf("%d:%s:%d", req.AgentID, req.Fingerprint, req.Timestamp))
 	sigBytes, err := base64.StdEncoding.DecodeString(req.Signature)
 	if err != nil || !crypto.VerifyAgentSignature(agent.PublicKey, msg, sigBytes) {
 		JSONError(w, "Invalid signature", http.StatusUnauthorized)
 		return
+	}
+
+	// Fingerprint evolution: if the signature is valid but the fingerprint
+	// source changed (e.g., mac: → mid:), update the stored value.
+	if agent.Fingerprint != req.Fingerprint {
+		log.Printf("🔄 Fingerprint updated for agent %d (%s): %.16s... → %.16s...",
+			agent.ID, agent.Hostname, agent.Fingerprint, req.Fingerprint)
+		if err := agents.UpdateAgentFingerprint(db.DB, agent.ID, req.Fingerprint); err != nil {
+			log.Printf("⚠️  Failed to update fingerprint for agent %d: %v", agent.ID, err)
+		}
 	}
 
 	// Issue new session
@@ -236,7 +280,8 @@ func ListAgents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteRegisteredAgent removes an agent by ID.
+// DeleteRegisteredAgent removes an agent by ID and cascades to all
+// hostname-keyed data (reports, ZFS pools, aliases, SMART, wearout).
 // DELETE /api/v1/agents/{id}
 func DeleteRegisteredAgent(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
@@ -246,28 +291,51 @@ func DeleteRegisteredAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up agent to get hostname before deletion
+	agent, err := agents.GetAgentByID(db.DB, id)
+	if err != nil || agent == nil {
+		JSONError(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+	hostname := agent.Hostname
+
+	// Delete agent record (sessions cascade via FK)
 	if err := agents.DeleteAgent(db.DB, id); err != nil {
 		JSONError(w, "Failed to delete agent: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("🗑️  Deleted agent id=%d", id)
-	JSONResponse(w, map[string]string{"status": "deleted"})
+	// Cascade: remove all hostname-keyed data
+	deleted := agents.DeleteHostData(db.DB, hostname)
+
+	log.Printf("🗑️  Deleted agent id=%d (%s) — cascade: %v", id, hostname, deleted)
+	JSONResponse(w, map[string]interface{}{
+		"status":  "deleted",
+		"cascade": deleted,
+	})
 }
 
 // ─── Admin: registration token management ─────────────────────────────────────
 
 type createTokenRequest struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	ExpiresIn *int   `json:"expires_in"` // seconds; null or 0 = never expires
 }
 
-// CreateRegistrationToken generates a new 24-hour one-time enrollment token.
+// CreateToken generates a new one-time enrollment token.
 // POST /api/v1/tokens
+// Body: {"name":"...", "expires_in": 86400}  — expires_in in seconds, null/0 for never
 func CreateToken(w http.ResponseWriter, r *http.Request) {
 	var req createTokenRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	tok, err := agents.CreateRegistrationToken(db.DB, req.Name)
+	var expiresIn *time.Duration
+	if req.ExpiresIn != nil && *req.ExpiresIn > 0 {
+		d := time.Duration(*req.ExpiresIn) * time.Second
+		expiresIn = &d
+	}
+
+	tok, err := agents.CreateRegistrationToken(db.DB, req.Name, expiresIn)
 	if err != nil {
 		JSONError(w, "Failed to create token: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -36,6 +36,10 @@ const Components = {
         const zfsInfo = State.getZFSInfoForDrive(hostname, serial);
         const zfsBadge = zfsInfo ? this.zfsPoolBadge(zfsInfo, hostname) : '';
 
+        // Get wearout data for this drive
+        const wearoutData = State.getWearoutForDrive(hostname, serial);
+        const wearoutBar = (typeof Wearout !== 'undefined' && wearoutData) ? Wearout.miniProgressBar(wearoutData.percentage) : '';
+
         return `
             <div class="drive-card ${status}" onclick="Navigation.showDriveDetails(${serverIdx}, ${drive._idx})">
                 <div class="drive-card-header">
@@ -61,6 +65,7 @@ const Components = {
                     <div class="drive-card-model">${Utils.escapeHtml(driveName)}</div>
                     <div class="drive-card-serial">${Utils.escapeHtml(serial) || 'N/A'}</div>
                 </div>
+                ${wearoutBar}
                 ${zfsBadge}
                 <div class="drive-card-stats">
                     <div class="drive-card-stat">

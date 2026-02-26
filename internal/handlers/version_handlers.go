@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"vigil/internal/version"
 )
@@ -17,6 +18,16 @@ func NewVersionHandler(currentVersion, owner, repo string) *VersionHandler {
 	return &VersionHandler{
 		checker: version.NewChecker(currentVersion, owner, repo),
 	}
+}
+
+// SetCacheTTL configures how long to cache version check results
+func (h *VersionHandler) SetCacheTTL(ttl time.Duration) {
+	h.checker.SetCacheTTL(ttl)
+}
+
+// Check performs a version check programmatically (for background tasks)
+func (h *VersionHandler) Check() (*version.ReleaseInfo, error) {
+	return h.checker.Check()
 }
 
 // CheckVersion handles GET /api/version/check

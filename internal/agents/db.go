@@ -48,6 +48,16 @@ func GetAgentByFingerprint(db *sql.DB, fingerprint string) (*Agent, error) {
 	return scanAgentRow(row)
 }
 
+// GetAgentByPublicKey retrieves an enabled agent by its Ed25519 public key.
+func GetAgentByPublicKey(db *sql.DB, publicKey string) (*Agent, error) {
+	row := db.QueryRow(`
+		SELECT id, hostname, name, fingerprint, public_key,
+		       registered_at, last_auth_at, last_seen_at, enabled
+		FROM agent_registry WHERE public_key = ? AND enabled = 1
+	`, publicKey)
+	return scanAgentRow(row)
+}
+
 // ListAgents returns all registered agents ordered by hostname.
 func ListAgents(db *sql.DB) ([]Agent, error) {
 	rows, err := db.Query(`
@@ -71,21 +81,47 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 	return out, nil
 }
 
-// UpdateAgentLastAuth stamps last_auth_at to now.
+// UpdateAgentLastAuth stamps last_auth_at to now (UTC).
 func UpdateAgentLastAuth(db *sql.DB, agentID int64) error {
 	_, err := db.Exec(
 		"UPDATE agent_registry SET last_auth_at = ? WHERE id = ?",
-		time.Now().Format(timeFormat), agentID,
+		time.Now().UTC().Format(timeFormat), agentID,
 	)
 	return err
 }
 
-// UpdateAgentLastSeen stamps last_seen_at to now.
+// UpdateAgentFingerprint replaces the stored fingerprint for an agent.
+// This is used when the Ed25519 signature is valid but the fingerprint source
+// changed (e.g., container recreated, machine-id now available).
+func UpdateAgentFingerprint(db *sql.DB, agentID int64, newFingerprint string) error {
+	_, err := db.Exec(
+		"UPDATE agent_registry SET fingerprint = ? WHERE id = ?",
+		newFingerprint, agentID,
+	)
+	return err
+}
+
+// UpdateAgentLastSeen stamps last_seen_at to now (UTC).
 func UpdateAgentLastSeen(db *sql.DB, agentID int64) error {
 	_, err := db.Exec(
 		"UPDATE agent_registry SET last_seen_at = ? WHERE id = ?",
-		time.Now().Format(timeFormat), agentID,
+		time.Now().UTC().Format(timeFormat), agentID,
 	)
+	return err
+}
+
+// UpdateAgentLastSeenByHostname stamps last_seen_at (and last_auth_at if NULL)
+// for the agent matching the given hostname.  This is the authoritative sync
+// between the reports table and agent_registry — it covers cases where the
+// session agent_id doesn't match (e.g., after re-registration).
+func UpdateAgentLastSeenByHostname(db *sql.DB, hostname string) error {
+	now := time.Now().UTC().Format(timeFormat)
+	_, err := db.Exec(`
+		UPDATE agent_registry
+		SET last_seen_at = ?,
+		    last_auth_at = COALESCE(last_auth_at, ?)
+		WHERE hostname = ? AND enabled = 1
+	`, now, now, hostname)
 	return err
 }
 
@@ -95,21 +131,60 @@ func DeleteAgent(db *sql.DB, id int64) error {
 	return err
 }
 
+// DeleteHostData removes all hostname-keyed data: reports, drive aliases,
+// ZFS pools (cascades to devices/scrub history), wearout history, and
+// SMART attributes.  Call this after DeleteAgent to fully clean up.
+func DeleteHostData(db *sql.DB, hostname string) (deleted map[string]int64) {
+	deleted = make(map[string]int64)
+
+	tables := []struct {
+		label string
+		sql   string
+	}{
+		{"reports", "DELETE FROM reports WHERE hostname = ?"},
+		{"drive_aliases", "DELETE FROM drive_aliases WHERE hostname = ?"},
+		{"zfs_pools", "DELETE FROM zfs_pools WHERE hostname = ?"},
+		{"wearout_history", "DELETE FROM wearout_history WHERE hostname = ?"},
+		{"smart_attributes", "DELETE FROM smart_attributes WHERE hostname = ?"},
+	}
+
+	for _, t := range tables {
+		result, err := db.Exec(t.sql, hostname)
+		if err != nil {
+			continue // table may not exist yet
+		}
+		n, _ := result.RowsAffected()
+		if n > 0 {
+			deleted[t.label] = n
+		}
+	}
+	return deleted
+}
+
 // ─── Registration Tokens ─────────────────────────────────────────────────────
 
-// CreateRegistrationToken generates and stores a new 24-hour one-time token.
-func CreateRegistrationToken(db *sql.DB, name string) (*RegistrationToken, error) {
+// CreateRegistrationToken generates and stores a one-time token.
+// If expiresIn is nil the token never expires; otherwise it expires after the
+// given duration.
+func CreateRegistrationToken(db *sql.DB, name string, expiresIn *time.Duration) (*RegistrationToken, error) {
 	raw := make([]byte, 32)
 	rand.Read(raw)
 	token := hex.EncodeToString(raw)
 
-	now := time.Now()
-	expiresAt := now.Add(24 * time.Hour)
+	now := time.Now().UTC()
+
+	var expiresVal interface{} // nil → SQL NULL
+	var expiresPtr *time.Time
+	if expiresIn != nil {
+		t := now.Add(*expiresIn)
+		expiresPtr = &t
+		expiresVal = t.Format(timeFormat)
+	}
 
 	result, err := db.Exec(`
 		INSERT INTO agent_registration_tokens (token, name, expires_at)
 		VALUES (?, ?, ?)
-	`, token, name, expiresAt.Format(timeFormat))
+	`, token, name, expiresVal)
 	if err != nil {
 		return nil, fmt.Errorf("create registration token: %w", err)
 	}
@@ -120,22 +195,23 @@ func CreateRegistrationToken(db *sql.DB, name string) (*RegistrationToken, error
 		Token:     token,
 		Name:      name,
 		CreatedAt: now,
-		ExpiresAt: expiresAt,
+		ExpiresAt: expiresPtr,
 	}, nil
 }
 
-// GetRegistrationToken retrieves an unexpired token. Returns nil if not found
-// or already expired.
+// GetRegistrationToken retrieves a valid token. Returns nil if not found or
+// expired. Tokens with NULL expires_at never expire.
 func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) {
 	var t RegistrationToken
 	var usedAt sql.NullString
 	var usedByAgentID sql.NullInt64
-	var createdAt, expiresAt string
+	var createdAt string
+	var expiresAt sql.NullString
 
 	err := db.QueryRow(`
 		SELECT id, token, name, created_at, expires_at, used_at, used_by_agent_id
 		FROM agent_registration_tokens
-		WHERE token = ? AND expires_at > datetime('now')
+		WHERE token = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
 	`, token).Scan(&t.ID, &t.Token, &t.Name, &createdAt, &expiresAt, &usedAt, &usedByAgentID)
 
 	if err == sql.ErrNoRows {
@@ -146,7 +222,10 @@ func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) 
 	}
 
 	t.CreatedAt, _ = time.Parse(timeFormat, createdAt)
-	t.ExpiresAt, _ = time.Parse(timeFormat, expiresAt)
+	if expiresAt.Valid {
+		ts, _ := time.Parse(timeFormat, expiresAt.String)
+		t.ExpiresAt = &ts
+	}
 
 	if usedAt.Valid {
 		ts, _ := time.Parse(timeFormat, usedAt.String)
@@ -178,7 +257,7 @@ func ConsumeRegistrationToken(db *sql.DB, token string, agentID int64) error {
 		UPDATE agent_registration_tokens
 		SET used_at = ?, used_by_agent_id = ?
 		WHERE token = ?
-	`, time.Now().Format(timeFormat), agentID, token)
+	`, time.Now().UTC().Format(timeFormat), agentID, token)
 	return err
 }
 
@@ -198,14 +277,18 @@ func ListRegistrationTokens(db *sql.DB) ([]RegistrationToken, error) {
 		var t RegistrationToken
 		var usedAt sql.NullString
 		var usedByAgentID sql.NullInt64
-		var createdAt, expiresAt string
+		var createdAt string
+		var expiresAt sql.NullString
 
 		if err := rows.Scan(&t.ID, &t.Token, &t.Name, &createdAt, &expiresAt, &usedAt, &usedByAgentID); err != nil {
 			return nil, err
 		}
 
 		t.CreatedAt, _ = time.Parse(timeFormat, createdAt)
-		t.ExpiresAt, _ = time.Parse(timeFormat, expiresAt)
+		if expiresAt.Valid {
+			ts, _ := time.Parse(timeFormat, expiresAt.String)
+			t.ExpiresAt = &ts
+		}
 
 		if usedAt.Valid {
 			ts, _ := time.Parse(timeFormat, usedAt.String)
@@ -238,7 +321,7 @@ func CreateAgentSession(db *sql.DB, agentID int64) (*AgentSession, error) {
 	rand.Read(raw)
 	token := hex.EncodeToString(raw)
 
-	now := time.Now()
+	now := time.Now().UTC()
 	expiresAt := now.Add(time.Hour)
 
 	_, err := db.Exec(`
@@ -335,9 +418,11 @@ func applyAgentFields(a *Agent, name sql.NullString, registeredAt, lastAuthAt, l
 		a.RegisteredAt, _ = time.Parse(timeFormat, registeredAt.String)
 	}
 	if lastAuthAt.Valid {
-		a.LastAuthAt, _ = time.Parse(timeFormat, lastAuthAt.String)
+		t, _ := time.Parse(timeFormat, lastAuthAt.String)
+		a.LastAuthAt = &t
 	}
 	if lastSeenAt.Valid {
-		a.LastSeenAt, _ = time.Parse(timeFormat, lastSeenAt.String)
+		t, _ := time.Parse(timeFormat, lastSeenAt.String)
+		a.LastSeenAt = &t
 	}
 }

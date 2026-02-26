@@ -221,17 +221,60 @@
 
 .agent-card {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     padding: 16px 20px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
     border-radius: 12px;
     transition: border-color var(--transition-fast);
 }
 
 .agent-card:hover {
     border-color: var(--border-hover);
+}
+
+.agent-card.agent-online {
+    border-left-color: var(--success);
+}
+
+.agent-card.agent-not-reporting {
+    border-left-color: var(--warning);
+}
+
+.agent-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.agent-status-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.agent-status-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    width: 260px;
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    pointer-events: none;
+}
+
+.agent-status-wrap:hover .agent-status-tooltip {
+    display: block;
 }
 
 .agent-card-left {
@@ -295,9 +338,10 @@
     color: var(--success);
 }
 
-.agent-status.offline {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--danger);
+.agent-status.offline,
+.agent-status.not-reporting {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
 }
 
 .agent-status.pending {
@@ -415,4 +459,98 @@
 .token-badge.expired {
     background: rgba(239, 68, 68, 0.15);
     color: var(--danger);
+}
+
+/* ============================================
+   AGENTS - RESPONSIVE / MOBILE
+   ============================================ */
+
+@media (max-width: 768px) {
+    .agent-card {
+        padding: 14px 16px;
+    }
+
+    .agent-card-top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .agent-card-left {
+        width: 100%;
+    }
+
+    .agent-card-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .agent-info-meta {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .agent-info-meta .dot {
+        display: none;
+    }
+
+    .agent-info-meta span {
+        font-size: 0.7rem;
+    }
+
+    .token-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 14px;
+    }
+
+    .token-meta {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+@media (max-width: 480px) {
+    .agents-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .btn-add-agent {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .agent-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+    .agent-icon svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .agent-card-left {
+        gap: 12px;
+    }
+
+    .agent-info h4 {
+        font-size: 0.875rem;
+    }
+
+    .agents-empty {
+        padding: 40px 16px;
+    }
+
+    .tokens-section {
+        margin-top: 24px;
+    }
+
+    .token-value {
+        font-size: 0.75rem;
+    }
 }

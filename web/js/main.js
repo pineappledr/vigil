@@ -15,6 +15,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isAuth = await Auth.checkStatus();
     if (!isAuth) return;
 
+    // Initialize version checking and add notification icon
+    if (typeof Version !== 'undefined') {
+        // Add notification icon to header
+        const headerRight = document.querySelector('.header-right');
+        if (headerRight) {
+            const userMenu = headerRight.querySelector('#user-menu');
+            if (userMenu) {
+                // Insert notification icon before user menu
+                const indicatorHtml = Version.createHeaderIndicator();
+                userMenu.insertAdjacentHTML('beforebegin', indicatorHtml);
+            }
+        }
+
+        // Start version checking
+        Version.init();
+    }
+
     // Fetch initial data
     Data.fetchVersion();
     await Data.fetch();
@@ -78,7 +95,12 @@ function setupEventListeners() {
     // Refresh button
     const refreshBtn = document.getElementById('btn-refresh');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => Data.fetch());
+        refreshBtn.addEventListener('click', () => {
+            Data.fetch();
+            if (State.activeView === 'agents' && typeof Agents !== 'undefined') {
+                Agents.render();
+            }
+        });
     }
 
     // Back button

@@ -1,6 +1,7 @@
 # --- Binaries ---
 # Project specific names
 agent
+server
 vigil-agent
 vigil-server
 vigil-agent-*
@@ -37,3 +38,7 @@ vigil-server-*
 Thumbs.db
 *.swp
 *.swo
+
+
+# --- Extre ---
+WEAROUT_PLANNING.md

@@ -5,9 +5,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"vigil/internal/agents"
 	"vigil/internal/db"
+	"vigil/internal/wearout"
 )
 
 // Report handles incoming agent reports.
@@ -38,18 +40,31 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err = db.DB.Exec("INSERT INTO reports (hostname, data) VALUES (?, ?)", hostname, string(jsonData)); err != nil {
+	// Store timestamps in UTC for consistency with SQLite datetime('now')
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	if _, err = db.DB.Exec("INSERT INTO reports (hostname, timestamp, data) VALUES (?, ?, ?)", hostname, now, string(jsonData)); err != nil {
 		log.Printf("❌ DB Write Error: %v", err)
 		JSONError(w, "Database Error", http.StatusInternalServerError)
 		return
 	}
 
-	agents.UpdateAgentLastSeen(db.DB, session.AgentID)
+	// Update agent status: by ID (fast path) and by hostname (authoritative sync).
+	// The hostname-based update covers edge cases where the session's agent_id
+	// doesn't match the current agent_registry row (e.g., after re-registration).
+	if err := agents.UpdateAgentLastSeen(db.DB, session.AgentID); err != nil {
+		log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", session.AgentID, err)
+	}
+	if err := agents.UpdateAgentLastSeenByHostname(db.DB, hostname); err != nil {
+		log.Printf("⚠️  Failed to update agent status by hostname %s: %v", hostname, err)
+	}
 
 	driveCount := 0
 	if drives, ok := payload["drives"].([]interface{}); ok {
 		driveCount = len(drives)
 	}
+
+	// Process SMART-based wearout calculations
+	wearout.ProcessWearoutFromReport(db.DB, hostname, payload)
 
 	// Process ZFS data if present
 	poolCount := 0

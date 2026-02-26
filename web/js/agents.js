@@ -62,42 +62,68 @@ const Agents = {
     },
 
     _agentCard(agent) {
-        const lastSeen = agent.last_seen_at ? this._timeAgo(agent.last_seen_at) : 'never';
-        const isOnline = agent.last_seen_at && (Date.now() - new Date(agent.last_seen_at).getTime()) < 5 * 60 * 1000;
-        const statusClass = isOnline ? 'online' : 'offline';
-        const statusLabel = isOnline ? 'Online' : 'Offline';
+        // Use the most recent activity timestamp (report or auth)
+        const lastActivity = this._mostRecent(agent.last_seen_at, agent.last_auth_at);
+        const lastSeen = lastActivity ? this._timeAgo(lastActivity) : null;
+        const lastDate = lastActivity ? Utils.parseUTC(lastActivity) : null;
+        const isOnline = lastDate && (Date.now() - lastDate.getTime()) < 5 * 60 * 1000;
+        const statusClass = isOnline ? 'online' : 'not-reporting';
+        const statusLabel = isOnline ? 'Online' : 'Not Reporting';
         const fp = agent.fingerprint ? agent.fingerprint.substring(0, 16) + '...' : '';
+        const displayName = agent.name || agent.hostname;
+        const showHostname = agent.name && agent.name !== agent.hostname;
+
+        // Build the "last seen" subtext with registered_at fallback
+        let timeText;
+        if (lastSeen) {
+            timeText = 'Last seen ' + lastSeen;
+        } else if (agent.registered_at) {
+            timeText = 'Registered ' + this._timeAgo(agent.registered_at);
+        } else {
+            timeText = 'Never connected';
+        }
+
+        let statusHint = '';
+        if (!isOnline) {
+            statusHint = lastActivity
+                ? 'Agent has not sent data in over 5 minutes. Check if the agent service is running or re-register it.'
+                : 'Agent was registered but has never connected. Verify the agent service is running on this system.';
+        }
 
         return `
-            <div class="agent-card">
-                <div class="agent-card-left">
-                    <div class="agent-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="7" rx="1"/>
-                            <rect x="2" y="14" width="20" height="7" rx="1"/>
-                            <circle cx="6" cy="6.5" r="1.5" fill="currentColor"/>
-                            <circle cx="6" cy="17.5" r="1.5" fill="currentColor"/>
-                        </svg>
-                    </div>
-                    <div class="agent-info">
-                        <h4>${this._escape(agent.name || agent.hostname)}</h4>
-                        <div class="agent-info-meta">
-                            <span>${this._escape(agent.hostname)}</span>
-                            <span class="dot"></span>
-                            <span>${fp}</span>
-                            <span class="dot"></span>
-                            <span>Last seen ${lastSeen}</span>
+            <div class="agent-card ${isOnline ? 'agent-online' : 'agent-not-reporting'}">
+                <div class="agent-card-top">
+                    <div class="agent-card-left">
+                        <div class="agent-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="7" rx="1"/>
+                                <rect x="2" y="14" width="20" height="7" rx="1"/>
+                                <circle cx="6" cy="6.5" r="1.5" fill="currentColor"/>
+                                <circle cx="6" cy="17.5" r="1.5" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <div class="agent-info">
+                            <h4>${this._escape(displayName)}</h4>
+                            <div class="agent-info-meta">
+                                ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
+                                <span>${fp}</span>
+                                <span class="dot"></span>
+                                <span>${timeText}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="agent-card-right">
-                    <span class="agent-status ${statusClass}">${statusLabel}</span>
-                    <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        </svg>
-                    </button>
+                    <div class="agent-card-right">
+                        <span class="agent-status-wrap">
+                            <span class="agent-status ${statusClass}">${statusLabel}</span>
+                            ${statusHint ? `<span class="agent-status-tooltip">${statusHint}</span>` : ''}
+                        </span>
+                        <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -106,9 +132,10 @@ const Agents = {
     _tokenRow(token) {
         const truncated = token.token.substring(0, 16) + '...';
         const now = new Date();
-        const expires = new Date(token.expires_at);
-        const isExpired = expires < now;
         const isUsed = !!token.used_at;
+        const isExpired = token.expires_at
+            ? new Date(token.expires_at + 'Z') < now  // stored as UTC, append Z so JS parses as UTC
+            : false;  // null expires_at = never expires
 
         let badgeClass = 'available';
         let badgeLabel = 'Available';
@@ -164,9 +191,26 @@ const Agents = {
         }
     },
 
+    _mostRecent(...dates) {
+        let best = null;
+        for (const d of dates) {
+            if (!d) continue;
+            const t = Utils.parseUTC(d);
+            if (!t || isNaN(t)) continue;
+            // Guard against Go zero-time (year 1 or earlier)
+            if (t.getFullYear() < 2000) continue;
+            if (!best || t > best) best = t;
+        }
+        return best ? best.toISOString() : null;
+    },
+
     _timeAgo(dateStr) {
         if (!dateStr) return 'never';
-        const diff = Date.now() - new Date(dateStr).getTime();
+        const date = Utils.parseUTC(dateStr);
+        if (!date || isNaN(date)) return 'never';
+        // Guard against Go zero-time
+        if (date.getFullYear() < 2000) return 'never';
+        const diff = Date.now() - date.getTime();
         const mins = Math.floor(diff / 60000);
         if (mins < 1) return 'just now';
         if (mins < 60) return `${mins}m ago`;

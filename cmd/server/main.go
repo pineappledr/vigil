@@ -19,6 +19,7 @@ import (
 	"vigil/internal/middleware"
 	"vigil/internal/models"
 	"vigil/internal/smart"
+	"vigil/internal/wearout"
 )
 
 // version is set at build time via -ldflags
@@ -30,6 +31,9 @@ func main() {
 
 	// Set version for handlers
 	handlers.Version = version
+
+	// Initialize version checker for update notifications
+	handlers.VersionChecker = handlers.NewVersionHandler(version, "pineappledr", "vigil")
 
 	cfg := config.Load()
 
@@ -52,6 +56,11 @@ func main() {
 	// Run agent authentication migration
 	if err := agents.Migrate(db.DB); err != nil {
 		log.Printf("⚠️  Agent auth migration warning: %v", err)
+	}
+
+	// Run wearout tables migration
+	if err := wearout.MigrateWearoutTables(db.DB); err != nil {
+		log.Printf("⚠️  Wearout migration warning: %v", err)
 	}
 
 	// Load or generate server Ed25519 key pair
@@ -84,6 +93,40 @@ func main() {
 		for range ticker.C {
 			auth.CleanupExpiredSessions()
 			agents.CleanupExpiredAgentSessions(db.DB)
+		}
+	}()
+
+	// Periodic update checking (every 12 hours)
+	go func() {
+		// Check immediately on startup
+		if handlers.VersionChecker != nil {
+			log.Printf("🔄 Checking for updates...")
+			// The checker has internal caching, so frequent checks from clients won't hit GitHub API
+			handlers.VersionChecker.SetCacheTTL(12 * time.Hour)
+			info, err := handlers.VersionChecker.Check()
+			if err != nil {
+				log.Printf("⚠️  Update check failed: %v", err)
+			} else if info.UpdateAvailable {
+				log.Printf("📦 Update available: v%s → v%s", info.CurrentVersion, info.LatestVersion)
+			} else {
+				log.Printf("✓ Running latest version: v%s", info.CurrentVersion)
+			}
+		}
+
+		// Then check every 12 hours
+		ticker := time.NewTicker(12 * time.Hour)
+		for range ticker.C {
+			if handlers.VersionChecker != nil {
+				log.Printf("🔄 Checking for updates...")
+				info, err := handlers.VersionChecker.Check()
+				if err != nil {
+					log.Printf("⚠️  Update check failed: %v", err)
+				} else if info.UpdateAvailable {
+					log.Printf("📦 Update available: v%s → v%s", info.CurrentVersion, info.LatestVersion)
+				} else {
+					log.Printf("✓ Running latest version: v%s", info.CurrentVersion)
+				}
+			}
 		}
 	}()
 
@@ -123,6 +166,7 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// Public endpoints
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
+	mux.HandleFunc("GET /api/version/check", handlers.VersionChecker.CheckVersion)
 	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
 
 	// Auth endpoints (rate limited)
@@ -173,6 +217,9 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 
 	// ─── ZFS Endpoints ────────────────────────────────────────────────────
 	handlers.RegisterZFSRoutes(mux, protect)
+
+	// ─── Wearout Endpoints ───────────────────────────────────────────────
+	handlers.RegisterWearoutRoutes(mux, protect)
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))

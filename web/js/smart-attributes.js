@@ -157,6 +157,8 @@ const SmartAttributes = {
             html += this.renderAttributesTable(localAttrs?.attributes || [], isNvme);
             html += `</div>`;
 
+            html += `<div id="tab-wearout" class="smart-tab-content"></div>`;
+
             html += `<div id="tab-temperature" class="smart-tab-content">`;
             html += this.renderTemperatureChart(null); // Will be updated async
             html += `</div>`;
@@ -219,6 +221,8 @@ const SmartAttributes = {
             html += `<div id="tab-attributes" class="smart-tab-content">`;
             html += this.renderAttributesTable(finalAttrData?.attributes || [], isNvme);
             html += `</div>`;
+
+            html += `<div id="tab-wearout" class="smart-tab-content"></div>`;
 
             html += `<div id="tab-temperature" class="smart-tab-content">`;
             html += this.renderTemperatureChart(tempData);
@@ -418,6 +422,8 @@ const SmartAttributes = {
         html += this.renderAttributesTable(attrData?.attributes || [], isNvme);
         html += `</div>`;
 
+        html += `<div id="tab-wearout" class="smart-tab-content"></div>`;
+
         html += `<div id="tab-temperature" class="smart-tab-content">`;
         html += this.renderTemperatureChart(null);
         html += `</div>`;
@@ -452,6 +458,10 @@ const SmartAttributes = {
             `;
         }
         tabs += `
+                <button class="smart-tab" data-tab="wearout">
+                    ${this.icons.activity}
+                    <span>Wearout</span>
+                </button>
                 <button class="smart-tab" data-tab="temperature">
                     ${this.icons.temp}
                     <span>Temperature</span>
@@ -480,6 +490,10 @@ const SmartAttributes = {
         // Render temperature chart when switching to temperature tab
         if (tabId === 'temperature') {
             setTimeout(() => this.renderTempChart(null), 100);
+        }
+        // Load wearout data when switching to wearout tab
+        if (tabId === 'wearout' && typeof Wearout !== 'undefined') {
+            Wearout.loadTab(this.currentHostname, this.currentSerial);
         }
     },
 

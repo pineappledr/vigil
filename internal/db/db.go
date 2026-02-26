@@ -31,6 +31,7 @@ func Init(path string) error {
 	}
 
 	enableWAL()
+	enableForeignKeys()
 	if err = createSchema(); err != nil {
 		return err
 	}
@@ -51,6 +52,12 @@ func ensureDirectory(path string) error {
 func enableWAL() {
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		log.Printf("⚠️  Could not enable WAL mode: %v", err)
+	}
+}
+
+func enableForeignKeys() {
+	if _, err := DB.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		log.Printf("⚠️  Could not enable foreign keys: %v", err)
 	}
 }
 

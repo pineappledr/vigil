@@ -136,6 +136,7 @@ docker run -d \
   -p 9080:9080 \
   -v vigil_data:/data \
   -e ADMIN_PASS=your-secure-password \
+  -e TZ=${TZ:-UTC} \
   --restart unless-stopped \
   ghcr.io/pineappledr/vigil:latest
 ```
@@ -185,6 +186,7 @@ services:
       - AUTH_ENABLED=true
       - ADMIN_USER=admin
       - ADMIN_PASS=your-secure-password
+      - TZ=${TZ:-UTC}
     volumes:
       - vigil_data:/data
 
@@ -236,7 +238,7 @@ curl -sL https://raw.githubusercontent.com/pineappledr/vigil/main/scripts/instal
 
 ### Agent: Docker (Standard Linux)
 
-The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts.
+The agent auto-registers on first boot when `TOKEN` is set, then ignores it on subsequent restarts. If the container is recreated, the agent automatically reconnects using its stored credentials — no new token is needed.
 
 ```bash
 docker run -d \
@@ -246,16 +248,60 @@ docker run -d \
   --privileged \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
+  -e TZ=${TZ:-UTC} \
   -v /dev:/dev:ro \
   -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:latest
 ```
 
+> **Important:** The `vigil_agent_data` volume is required to persist agent credentials across container restarts and recreations.
+
 > **ZFS Monitoring:** Add `-v /sys:/sys:ro -v /proc:/proc:ro -v /dev/zfs:/dev/zfs` if your host uses ZFS.
 
 ### Agent: Docker (TrueNAS)
 
-For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools:
+For TrueNAS SCALE/CORE, use the Debian-based agent with host ZFS tools.
+
+**docker-compose.yml:**
+
+```yaml
+services:
+  vigil-agent:
+    image: ghcr.io/pineappledr/vigil-agent:debian
+    container_name: vigil-agent
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    privileged: true
+    environment:
+      SERVER: http://YOUR_SERVER_IP:9080
+      TOKEN: YOUR_REGISTRATION_TOKEN
+      HOSTNAME: my-truenas       # Optional: custom display name
+      TZ: ${TZ:-UTC}
+    volumes:
+      - /dev:/dev:ro
+      - /dev/zfs:/dev/zfs
+      - /sbin/zpool:/sbin/zpool:ro
+      - /sbin/zfs:/sbin/zfs:ro
+      - /lib:/lib:ro
+      - /lib64:/lib64:ro
+      - /usr/lib:/usr/lib:ro
+      - vigil_agent_data:/var/lib/vigil-agent
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+
+volumes:
+  vigil_agent_data:
+    name: vigil_agent_data
+```
+
+Or with `docker run`:
 
 ```bash
 docker run -d \
@@ -266,8 +312,8 @@ docker run -d \
   --privileged \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
+  -e TZ=${TZ:-UTC} \
   -v /dev:/dev:ro \
-  -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
   -v /sbin/zpool:/sbin/zpool:ro \
   -v /sbin/zfs:/sbin/zfs:ro \
@@ -331,6 +377,7 @@ docker run -d \
   --net=host \
   --privileged \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
+  -e TZ=${TZ:-UTC} \
   -v /dev:/dev \
   -v /sys:/sys:ro \
   -v /dev/zfs:/dev/zfs \
@@ -409,6 +456,7 @@ sudo systemctl start vigil-agent
 | `AUTH_ENABLED` | `true` | Enable/disable authentication |
 | `ADMIN_USER` | `admin` | Default admin username |
 | `ADMIN_PASS` | (generated) | Admin password (random if not set) |
+| `TZ` | `UTC` | Timezone for timestamps (e.g., `America/New_York`) |
 
 ### Agent Flags
 
@@ -421,6 +469,7 @@ sudo systemctl start vigil-agent
 | `--register` | - | - | Run one-time registration, then exit |
 | `--token` | `TOKEN` | - | Registration token (auto-enables `--register` if set) |
 | `--version` | - | - | Show version |
+| - | `TZ` | `UTC` | Timezone (should match server for consistent timestamps) |
 
 > Environment variables override flags. When `TOKEN` is set, the agent auto-registers on first boot and skips registration on subsequent starts — ideal for Docker deployments.
 
@@ -446,8 +495,8 @@ Starting with **v2.4.0**, Vigil uses **Ed25519 key-based mutual authentication**
 ### How It Works
 
 1. **Server generates an Ed25519 key pair** on first startup (stored in the data directory alongside the database).
-2. **Admin creates a registration token** from the web UI (**Agents → Add Agent**). Tokens are single-use and expire after 24 hours.
-3. **Agent registers** using `--register --token <TOKEN>`. During registration, the agent generates its own Ed25519 key pair and a unique machine fingerprint, then exchanges public keys with the server.
+2. **Admin creates a registration token** from the web UI (**Agents → Add Agent**). Tokens are single-use. Expiration is optional — tokens can be set to never expire or expire after a configurable duration.
+3. **Agent registers** using `--register --token <TOKEN>`. During registration, the agent generates its own Ed25519 key pair and a unique machine fingerprint, then exchanges public keys with the server. If an agent with the same fingerprint and public key reconnects, it automatically re-authenticates without consuming a new token.
 4. **Agent authenticates** on each run by signing a challenge with its private key. The server verifies the signature and issues a 1-hour session token.
 5. **Session auto-refreshes** — the agent proactively re-authenticates when the session has less than 5 minutes remaining.
 
@@ -675,17 +724,66 @@ On TrueNAS, ZFS uses disk GUIDs by default. The agent attempts to resolve these 
 
 ### Agent rejected with 401 Unauthorized
 
-This means the agent is not registered or its session has expired:
-1. Check if the agent has been registered: look for `auth.json` in the agent's data directory
-2. Re-register the agent: `sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token <NEW_TOKEN>`
-3. If upgrading from v2.3.x, all agents must be re-registered (see [Upgrading from v2.3.x](#upgrading-from-v23x))
+A 401 error means the agent cannot authenticate with the server. This is usually caused by an expired session token or a missing registration. When this happens, the agent stops sending reports and the server will show the system as **"Not Reporting"** — even though the server itself is running fine.
+
+**How agent authentication works:**
+
+1. You generate a **registration token** from the Vigil web UI (**Agents → Add System**)
+2. The agent uses this one-time token to register with the server (`--register --token <TOKEN>`)
+3. After registration, the agent stores its credentials in `/var/lib/vigil-agent/auth.json`
+4. The agent automatically authenticates using Ed25519 keys and receives a **session token** (valid for 1 hour)
+5. Session tokens are renewed automatically — no manual intervention needed after initial registration
+
+**Troubleshooting steps:**
+
+1. **Check if the agent is registered** — look for the credentials file:
+   ```bash
+   sudo ls -la /var/lib/vigil-agent/auth.json
+   ```
+   If this file doesn't exist, the agent was never registered or its state was cleared.
+
+2. **Check agent logs** for authentication errors:
+   ```bash
+   sudo journalctl -u vigil-agent --since "10 minutes ago"
+   ```
+   Look for messages like `401`, `Unauthorized`, or `authentication failed`.
+
+3. **Generate a new token and re-register** if the agent is not registered:
+   - Go to the Vigil web UI → **Agents** → **Add System** → copy the registration command
+   - On the agent machine, run:
+     ```bash
+     sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --register --token <NEW_TOKEN>
+     ```
+
+4. **Restart the agent** after re-registering:
+   ```bash
+   sudo systemctl restart vigil-agent
+   ```
+
+5. If upgrading from **v2.3.x**, all agents must be re-registered because v2.4.0+ switched to Ed25519 key-based authentication (see [Upgrading from v2.3.x](#upgrading-from-v23x))
+
+> **Note:** Registration tokens are single-use. If a token was configured with an expiration, it may have expired — generate a new one from the web UI. If the agent was previously registered and is simply reconnecting (same fingerprint and key), it will automatically re-authenticate without needing a new token.
 
 ### Agent rejected with 403 Forbidden (fingerprint mismatch)
 
-The agent's machine fingerprint has changed (e.g., hardware change, VM migration):
+The agent's machine fingerprint has changed (e.g., hardware change, VM migration). The fingerprint is generated from the machine's unique hardware identifiers and is used as a security measure to prevent unauthorized agents from impersonating registered systems.
+
 1. Delete the old agent from the web UI (**Agents** page)
-2. On the agent machine, remove the old state: `sudo rm -rf /var/lib/vigil-agent/`
-3. Re-register with a new token
+2. On the agent machine, remove the old state:
+   ```bash
+   sudo rm -rf /var/lib/vigil-agent/
+   ```
+3. Generate a new registration token from the web UI and re-register the agent
+
+### Drive added, removed, or replaced
+
+Vigil automatically detects drive changes. Each time the agent reports (every 60 seconds by default), it scans for all currently connected drives using `smartctl --scan`.
+
+- **Drive removed:** The drive disappears from the dashboard on the next report cycle. Historical data for that drive is preserved in the database.
+- **Drive added:** New drives appear automatically on the next report cycle.
+- **Drive replaced:** The old drive disappears and the new one appears — Vigil tracks drives by serial number, so the replacement is treated as a new drive.
+
+No manual action is needed. If you want to clean up old aliases for removed drives, you can do so from the drive detail view.
 
 ### Authentication issues
 
