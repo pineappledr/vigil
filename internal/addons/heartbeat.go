@@ -140,7 +140,7 @@ func (h *HeartbeatMonitor) check() {
 // enabledAddons returns all enabled add-ons.
 func (h *HeartbeatMonitor) enabledAddons() ([]Addon, error) {
 	rows, err := h.db.Query(`
-		SELECT id, name, version, COALESCE(description,''), manifest_json,
+		SELECT id, name, version, COALESCE(description,''), COALESCE(url,''), manifest_json,
 		       status, enabled, COALESCE(last_seen,''), created_at, updated_at
 		FROM addons WHERE enabled = 1`)
 	if err != nil {

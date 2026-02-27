@@ -185,6 +185,22 @@ const API = {
         return this.delete(`/api/addons/${id}`);
     },
 
+    async registerAddonFromUI(name, url) {
+        return this.post('/api/addons/register', { name, url });
+    },
+
+    async getAddonTokens() {
+        return this.get('/api/addons/tokens');
+    },
+
+    async createAddonToken(name) {
+        return this.post('/api/addons/tokens', { name });
+    },
+
+    async deleteAddonToken(id) {
+        return this.delete(`/api/addons/tokens/${id}`);
+    },
+
     async setAddonEnabled(id, enabled) {
         return this.put(`/api/addons/${id}/enabled`, { enabled });
     },

@@ -154,6 +154,107 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ─── Admin Add-on Registration (UI Flow) ─────────────────────────────────
+
+// CreateAddonFromUI creates a new add-on record with name + URL and generates a token.
+// POST /api/addons/register
+func CreateAddonFromUI(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		JSONError(w, "name is required", http.StatusBadRequest)
+		return
+	}
+
+	addonID, err := addons.RegisterWithURL(db.DB, req.Name, req.URL)
+	if err != nil {
+		log.Printf("❌ Register addon from UI: %v", err)
+		JSONError(w, "Failed to register add-on", http.StatusInternalServerError)
+		return
+	}
+
+	tok, err := addons.CreateRegistrationToken(db.DB, req.Name, nil)
+	if err != nil {
+		log.Printf("❌ Create addon token: %v", err)
+		JSONError(w, "Add-on created but failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	// Consume the token immediately — it's bound to this addon
+	if err := addons.ConsumeRegistrationToken(db.DB, tok.Token, addonID); err != nil {
+		log.Printf("⚠️  Could not bind token to addon: %v", err)
+	}
+
+	addon, _ := addons.Get(db.DB, addonID)
+	log.Printf("📦 Add-on registered from UI: %s (id=%d)", req.Name, addonID)
+
+	w.WriteHeader(http.StatusCreated)
+	JSONResponse(w, map[string]interface{}{
+		"addon": addon,
+		"token": tok.Token,
+	})
+}
+
+// ─── Add-on Token CRUD ───────────────────────────────────────────────────
+
+// CreateAddonToken generates a new registration token for an add-on.
+// POST /api/addons/tokens
+func CreateAddonToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	tok, err := addons.CreateRegistrationToken(db.DB, req.Name, nil)
+	if err != nil {
+		log.Printf("❌ Create addon token: %v", err)
+		JSONError(w, "Failed to create token", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("🔑 Add-on registration token created: %.16s... (name=%q)", tok.Token, tok.Name)
+	w.WriteHeader(http.StatusCreated)
+	JSONResponse(w, tok)
+}
+
+// ListAddonTokens returns all add-on registration tokens.
+// GET /api/addons/tokens
+func ListAddonTokens(w http.ResponseWriter, r *http.Request) {
+	tokens, err := addons.ListRegistrationTokens(db.DB)
+	if err != nil {
+		log.Printf("❌ List addon tokens: %v", err)
+		JSONError(w, "Failed to list tokens", http.StatusInternalServerError)
+		return
+	}
+	if tokens == nil {
+		tokens = []addons.RegistrationToken{}
+	}
+	JSONResponse(w, map[string]interface{}{"tokens": tokens})
+}
+
+// DeleteAddonToken removes a registration token.
+// DELETE /api/addons/tokens/{id}
+func DeleteAddonToken(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid token ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := addons.DeleteRegistrationToken(db.DB, id); err != nil {
+		log.Printf("❌ Delete addon token: %v", err)
+		JSONError(w, "Failed to delete token", http.StatusInternalServerError)
+		return
+	}
+	JSONResponse(w, map[string]string{"status": "deleted"})
+}
+
 // ─── SSE Telemetry Stream ────────────────────────────────────────────────
 
 // AddonTelemetrySSE streams telemetry events for a specific add-on.
@@ -224,6 +325,14 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
+
+	// Admin UI registration flow
+	mux.HandleFunc("POST /api/addons/register", protect(CreateAddonFromUI))
+
+	// Token management
+	mux.HandleFunc("POST /api/addons/tokens", protect(CreateAddonToken))
+	mux.HandleFunc("GET /api/addons/tokens", protect(ListAddonTokens))
+	mux.HandleFunc("DELETE /api/addons/tokens/{id}", protect(DeleteAddonToken))
 
 	// WebSocket telemetry ingestion — add-ons connect here to stream data
 	if WebSocketHub != nil {
