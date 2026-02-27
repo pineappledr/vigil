@@ -16,10 +16,12 @@ const Addons = {
 
         container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading add-ons...</div>';
 
+        let fetchError = null;
+
         try {
             const [addonsResp, tokensResp] = await Promise.all([
-                API.getAddons().catch(e => { console.warn('[Addons] getAddons failed:', e); return null; }),
-                API.getAddonTokens().catch(e => { console.warn('[Addons] getAddonTokens failed:', e); return null; })
+                this._fetchWithTimeout('/api/addons', 8000),
+                this._fetchWithTimeout('/api/addons/tokens', 8000)
             ]);
 
             if (addonsResp && addonsResp.ok) {
@@ -37,15 +39,35 @@ const Addons = {
             }
         } catch (e) {
             console.error('[Addons] Data fetch error:', e);
+            fetchError = e;
             this.addons = [];
             this.tokens = [];
+        } finally {
+            try {
+                if (fetchError) {
+                    container.innerHTML = this._errorState(fetchError.message || 'Failed to load add-ons');
+                } else {
+                    container.innerHTML = this._buildView();
+                }
+            } catch (e) {
+                console.error('[Addons] View build error:', e);
+                container.innerHTML = this._emptyState();
+            }
         }
+    },
 
+    async _fetchWithTimeout(url, ms) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), ms);
         try {
-            container.innerHTML = this._buildView();
+            return await fetch(url, { signal: controller.signal });
         } catch (e) {
-            console.error('[Addons] View build error:', e);
-            container.innerHTML = this._emptyState();
+            if (e.name === 'AbortError') {
+                throw new Error(`Request to ${url} timed out after ${ms}ms`);
+            }
+            throw e;
+        } finally {
+            clearTimeout(timer);
         }
     },
 
@@ -187,6 +209,21 @@ const Addons = {
                 ${this._icons.addonLarge}
                 <p>No add-ons registered</p>
                 <span class="hint">Click "Add Add-on" to register your first add-on</span>
+            </div>
+        `;
+    },
+
+    _errorState(message) {
+        return `
+            <div class="addons-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--danger, #ef4444)" stroke-width="1.5" width="48" height="48">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p>Failed to load add-ons</p>
+                <span class="hint">${this._escape(message)}</span>
+                <button class="btn btn-secondary" style="margin-top:16px" onclick="Addons.render()">Retry</button>
             </div>
         `;
     },
