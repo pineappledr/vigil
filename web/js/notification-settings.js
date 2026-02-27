@@ -1,8 +1,8 @@
 /**
- * Vigil Dashboard - Notification Settings Page (Task 4.8)
+ * Vigil Dashboard - Notification Settings Page
  *
- * Per-service configuration, event rules, quiet hours, digest config,
- * test-fire button, and notification history viewer.
+ * Uptime-Kuma-style dynamic provider wizard with per-provider form fields,
+ * test-before-save, secret masking, and full service configuration.
  */
 
 const NotificationSettings = {
@@ -12,6 +12,7 @@ const NotificationSettings = {
     eventRules: [],
     quietHours: null,
     digest: null,
+    providerDefs: null,
 
     async render() {
         const container = document.getElementById('dashboard-view');
@@ -20,9 +21,12 @@ const NotificationSettings = {
         container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading notifications...</div>';
 
         try {
-            const resp = await API.getNotificationServices();
-            if (resp.ok) {
-                this.services = await resp.json();
+            const [svcResp] = await Promise.all([
+                API.getNotificationServices(),
+                this._ensureProviderDefs()
+            ]);
+            if (svcResp.ok) {
+                this.services = await svcResp.json();
                 if (!Array.isArray(this.services)) this.services = [];
             }
         } catch (e) {
@@ -31,6 +35,16 @@ const NotificationSettings = {
         }
 
         container.innerHTML = this._buildView();
+    },
+
+    async _ensureProviderDefs() {
+        if (this.providerDefs) return;
+        try {
+            const resp = await API.getNotificationProviders();
+            if (resp.ok) this.providerDefs = await resp.json();
+        } catch (e) {
+            console.error('Failed to load provider definitions:', e);
+        }
     },
 
     _buildView() {
@@ -72,7 +86,7 @@ const NotificationSettings = {
                 <div class="notif-service-item ${s.id === this.activeServiceId ? 'active' : ''} ${s.enabled ? '' : 'disabled'}"
                      onclick="NotificationSettings.selectService(${s.id})">
                     <div class="notif-service-name">${this._escape(s.name)}</div>
-                    <div class="notif-service-type">${this._escape(s.service_type)}</div>
+                    <div class="notif-service-type">${this._providerLabel(s.service_type)}</div>
                     <span class="notif-service-badge ${s.enabled ? 'enabled' : 'disabled'}">
                         ${s.enabled ? 'Active' : 'Disabled'}
                     </span>
@@ -129,6 +143,9 @@ const NotificationSettings = {
                 <div class="notif-detail-header">
                     <h3>${this._escape(s.name)}</h3>
                     <div class="notif-detail-actions">
+                        <button class="btn btn-secondary" onclick="NotificationSettings.editProviderConfig(${s.id})">
+                            ${this._icons.edit} Edit Config
+                        </button>
                         <button class="btn btn-secondary" onclick="NotificationSettings.testFire(${s.id})">
                             ${this._icons.zap} Test
                         </button>
@@ -143,7 +160,7 @@ const NotificationSettings = {
                     <div class="notif-form-grid">
                         <div class="form-group">
                             <label>Service Type</label>
-                            <input type="text" class="form-input" value="${this._escape(s.service_type)}" disabled>
+                            <input type="text" class="form-input" value="${this._providerLabel(s.service_type)}" disabled>
                         </div>
                         <div class="form-group">
                             <label>Enabled</label>
@@ -358,23 +375,18 @@ const NotificationSettings = {
         } catch { this._showStatus('Failed to delete', true); }
     },
 
-    // ─── Add Service Modal ────────────────────────────────────────────────
+    // ─── Add Service Modal (Dynamic Provider Wizard) ─────────────────────
 
-    _urlExamples: {
-        discord:  'discord://token@webhookid',
-        slack:    'slack://token-a/token-b/token-c',
-        telegram: 'telegram://token@telegram?channels=channel-1',
-        email:    'smtp://user:password@host:587/?to=recipient@example.com',
-        pushover: 'pushover://shoutrrr:token@user',
-        gotify:   'gotify://hostname/token',
-        generic:  'generic+https://example.com/api/webhook'
-    },
+    async showAddService() {
+        await this._ensureProviderDefs();
 
-    showAddService() {
+        const types = this.providerDefs ? Object.keys(this.providerDefs) : [];
+        const firstType = types[0] || 'discord';
+
         Modals.create(`
-            <div class="modal">
+            <div class="modal modal-provider-wizard">
                 <div class="modal-header">
-                    <h3>Add Notification Service</h3>
+                    <h3>Setup Notification</h3>
                     <button class="modal-close" onclick="Modals.close(this)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -384,117 +396,163 @@ const NotificationSettings = {
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Name</label>
-                        <input type="text" id="new-notif-name" class="form-input" placeholder="e.g., Discord Alerts">
-                    </div>
-                    <div class="form-group">
-                        <label>Service Type</label>
-                        <select id="new-notif-type" class="form-input" onchange="NotificationSettings._onTypeChange()">
-                            <option value="discord">Discord</option>
-                            <option value="slack">Slack</option>
-                            <option value="telegram">Telegram</option>
-                            <option value="email">Email (SMTP)</option>
-                            <option value="pushover">Pushover</option>
-                            <option value="gotify">Gotify</option>
-                            <option value="generic">Generic Webhook</option>
+                        <label>Notification Type</label>
+                        <select id="prov-type" class="form-input"
+                                onchange="NotificationSettings._onProviderChange()">
+                            ${types.map(t => {
+                                const def = this.providerDefs[t];
+                                return `<option value="${t}">${this._escape(def.label)}</option>`;
+                            }).join('')}
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Shoutrrr URL</label>
-                        <input type="text" id="new-notif-url" class="form-input form-input-mono"
-                               placeholder="${this._urlExamples.discord}">
-                        <span class="form-hint" id="new-notif-hint">
-                            Example: <code id="new-notif-example">${this._urlExamples.discord}</code><br>
-                            See <a href="https://containrrr.dev/shoutrrr/services/overview/" target="_blank" rel="noopener">Shoutrrr docs</a> for URL format
-                        </span>
+                        <label>Friendly Name</label>
+                        <input type="text" id="prov-name" class="form-input" placeholder="e.g., My Discord Alert (1)">
                     </div>
-                    <div id="new-notif-status" class="notif-test-status"></div>
-                    <div id="new-notif-error" class="form-error"></div>
+                    <div id="prov-fields-container"></div>
+
+                    <hr class="modal-divider">
+                    <div class="form-group">
+                        <label class="addon-checkbox">
+                            <input type="checkbox" id="prov-default-enabled" checked>
+                            Default enabled
+                        </label>
+                        <span class="form-hint">This notification will be enabled by default for new monitors. You can still disable the notification separately for each monitor.</span>
+                    </div>
+
+                    <div id="prov-status" class="notif-test-status"></div>
+                    <div id="prov-error" class="form-error"></div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
-                    <button class="btn btn-outline" id="new-notif-test-btn" onclick="NotificationSettings.testURL()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
-                            <path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                        </svg>
-                        Send Test
+                    <button class="btn btn-outline" id="prov-test-btn"
+                            onclick="NotificationSettings._testProvider()">
+                        ${this._icons.zap} Test
                     </button>
-                    <button class="btn btn-primary" onclick="NotificationSettings.submitAddService()">Add Service</button>
+                    <button class="btn btn-primary" id="prov-save-btn"
+                            onclick="NotificationSettings._submitProvider()">Save</button>
                 </div>
             </div>
         `);
-        document.getElementById('new-notif-name')?.focus();
+
+        this._renderProviderFields(firstType);
+        document.getElementById('prov-name')?.focus();
     },
 
-    async testURL() {
-        const url = document.getElementById('new-notif-url')?.value.trim();
-        const statusEl = document.getElementById('new-notif-status');
-        const errorEl = document.getElementById('new-notif-error');
-        const btn = document.getElementById('new-notif-test-btn');
+    _onProviderChange() {
+        const type = document.getElementById('prov-type')?.value;
+        if (type) this._renderProviderFields(type);
 
-        if (errorEl) errorEl.textContent = '';
-        if (!url) {
-            if (errorEl) errorEl.textContent = 'Enter a Shoutrrr URL first';
-            return;
-        }
-
-        if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+        // Clear status/error
+        const statusEl = document.getElementById('prov-status');
+        const errorEl = document.getElementById('prov-error');
         if (statusEl) { statusEl.textContent = ''; statusEl.className = 'notif-test-status'; }
+        if (errorEl) errorEl.textContent = '';
+    },
 
-        try {
-            const resp = await API.testNotificationURL(url, 'Vigil test notification — if you see this, it works!');
-            const data = await resp.json().catch(() => ({}));
-            if (data.success) {
-                if (statusEl) {
-                    statusEl.textContent = 'Test sent successfully! Check your service.';
-                    statusEl.className = 'notif-test-status success';
-                }
+    _renderProviderFields(type, prefillFields) {
+        const container = document.getElementById('prov-fields-container');
+        if (!container || !this.providerDefs) return;
+
+        const def = this.providerDefs[type];
+        if (!def) { container.innerHTML = ''; return; }
+
+        container.innerHTML = def.fields.map(f => {
+            const id = `prov-field-${f.key}`;
+            const req = f.required ? ' <span class="form-required">*</span>' : '';
+            const prefillVal = prefillFields ? (prefillFields[f.key] || '') : '';
+
+            let input = '';
+            switch (f.type) {
+                case 'password':
+                    input = `
+                        <div class="form-input-password-wrap">
+                            <input type="password" id="${id}" class="form-input"
+                                   placeholder="${this._escape(f.placeholder || '')}"
+                                   value="${this._escape(prefillVal)}"
+                                   data-field-key="${f.key}" ${f.required ? 'required' : ''}>
+                            <button type="button" class="btn-eye-toggle"
+                                    onclick="NotificationSettings._togglePasswordVisibility('${id}')" title="Toggle visibility">
+                                ${this._icons.eye}
+                            </button>
+                        </div>`;
+                    break;
+                case 'select':
+                    input = `<select id="${id}" class="form-input" data-field-key="${f.key}">
+                        ${(f.options || []).map(o => {
+                            const selected = prefillVal
+                                ? o.value === prefillVal
+                                : o.value === (f.default || '');
+                            return `<option value="${this._escape(o.value)}" ${selected ? 'selected' : ''}>
+                                ${this._escape(o.label)}
+                            </option>`;
+                        }).join('')}
+                    </select>`;
+                    break;
+                case 'checkbox':
+                    input = `<label class="addon-checkbox">
+                        <input type="checkbox" id="${id}" data-field-key="${f.key}"
+                               ${prefillVal === 'true' ? 'checked' : ''}>
+                        ${this._escape(f.label)}
+                    </label>`;
+                    break;
+                case 'number':
+                    input = `<input type="number" id="${id}" class="form-input"
+                               placeholder="${this._escape(f.placeholder || '')}"
+                               value="${this._escape(prefillVal || f.default || '')}"
+                               data-field-key="${f.key}" ${f.required ? 'required' : ''}>`;
+                    break;
+                default:
+                    input = `<input type="text" id="${id}" class="form-input"
+                               placeholder="${this._escape(f.placeholder || '')}"
+                               value="${this._escape(prefillVal)}"
+                               data-field-key="${f.key}" ${f.required ? 'required' : ''}>`;
+            }
+
+            const labelHtml = f.type === 'checkbox' ? '' :
+                `<label>${this._escape(f.label)}${req}</label>`;
+            const helpHtml = f.help_text ?
+                `<span class="form-hint">${this._escape(f.help_text)}</span>` : '';
+
+            return `<div class="form-group">${labelHtml}${input}${helpHtml}</div>`;
+        }).join('');
+    },
+
+    _collectProviderFields() {
+        const type = document.getElementById('prov-type')?.value;
+        const def = this.providerDefs?.[type];
+        if (!def) return {};
+
+        const fields = {};
+        for (const f of def.fields) {
+            const el = document.getElementById(`prov-field-${f.key}`);
+            if (!el) continue;
+            if (f.type === 'checkbox') {
+                fields[f.key] = el.checked ? 'true' : 'false';
             } else {
-                if (statusEl) {
-                    statusEl.textContent = data.error || 'Test failed — check URL format';
-                    statusEl.className = 'notif-test-status error';
-                }
-            }
-        } catch {
-            if (statusEl) {
-                statusEl.textContent = 'Connection error';
-                statusEl.className = 'notif-test-status error';
+                fields[f.key] = el.value.trim();
             }
         }
-
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
-                <path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg> Send Test`;
-        }
+        return fields;
     },
 
-    _onTypeChange() {
-        const type = document.getElementById('new-notif-type')?.value;
-        const urlInput = document.getElementById('new-notif-url');
-        const example = document.getElementById('new-notif-example');
-        const url = this._urlExamples[type] || '';
-        if (urlInput) urlInput.placeholder = url;
-        if (example) example.textContent = url;
-    },
+    async _submitProvider() {
+        const name = document.getElementById('prov-name')?.value.trim();
+        const type = document.getElementById('prov-type')?.value;
+        const fields = this._collectProviderFields();
+        const errorEl = document.getElementById('prov-error');
+        const saveBtn = document.getElementById('prov-save-btn');
+        const defaultEnabled = document.getElementById('prov-default-enabled')?.checked ?? true;
 
-    async submitAddService() {
-        const name = document.getElementById('new-notif-name')?.value.trim();
-        const type = document.getElementById('new-notif-type')?.value;
-        const url = document.getElementById('new-notif-url')?.value.trim();
-        const errorEl = document.getElementById('new-notif-error');
-
-        if (!name) { if (errorEl) errorEl.textContent = 'Name is required'; return; }
-        if (!url) { if (errorEl) errorEl.textContent = 'Shoutrrr URL is required'; return; }
+        if (!name) { if (errorEl) errorEl.textContent = 'Friendly Name is required'; return; }
+        if (errorEl) errorEl.textContent = '';
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
 
         try {
-            const configJSON = JSON.stringify({ shoutrrr_url: url });
             const resp = await API.createNotificationService({
                 name,
                 service_type: type,
-                config_json: configJSON,
-                enabled: true,
+                config_fields: fields,
+                enabled: defaultEnabled,
                 notify_on_critical: true,
                 notify_on_warning: true,
                 notify_on_healthy: false
@@ -506,9 +564,151 @@ const NotificationSettings = {
             } else {
                 const data = await resp.json().catch(() => ({}));
                 if (errorEl) errorEl.textContent = data.error || 'Failed to create service';
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
             }
         } catch {
             if (errorEl) errorEl.textContent = 'Connection error';
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+        }
+    },
+
+    async _testProvider() {
+        const type = document.getElementById('prov-type')?.value;
+        const fields = this._collectProviderFields();
+        const statusEl = document.getElementById('prov-status');
+        const errorEl = document.getElementById('prov-error');
+        const btn = document.getElementById('prov-test-btn');
+
+        if (errorEl) errorEl.textContent = '';
+        if (btn) { btn.disabled = true; btn.innerHTML = 'Sending...'; }
+        if (statusEl) { statusEl.textContent = ''; statusEl.className = 'notif-test-status'; }
+
+        try {
+            const resp = await API.testNotificationFields(
+                type, fields,
+                'Vigil test notification \u2014 if you see this, it works!'
+            );
+            const data = await resp.json().catch(() => ({}));
+            if (statusEl) {
+                statusEl.textContent = data.success
+                    ? 'Test sent successfully! Check your service.'
+                    : (data.error || 'Test failed \u2014 check your settings');
+                statusEl.className = `notif-test-status ${data.success ? 'success' : 'error'}`;
+            }
+        } catch {
+            if (statusEl) {
+                statusEl.textContent = 'Connection error';
+                statusEl.className = 'notif-test-status error';
+            }
+        }
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `${this._icons.zap} Test`;
+        }
+    },
+
+    _togglePasswordVisibility(id) {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.type = input.type === 'password' ? 'text' : 'password';
+    },
+
+    // ─── Edit Provider Config Modal ──────────────────────────────────────
+
+    async editProviderConfig(id) {
+        await this._ensureProviderDefs();
+
+        const s = this.activeService;
+        if (!s) return;
+
+        // Extract stored fields from config_json
+        let storedFields = {};
+        try {
+            const cfg = JSON.parse(s.config_json);
+            if (cfg.fields) storedFields = cfg.fields;
+        } catch { /* legacy config */ }
+
+        const types = this.providerDefs ? Object.keys(this.providerDefs) : [];
+
+        Modals.create(`
+            <div class="modal modal-provider-wizard">
+                <div class="modal-header">
+                    <h3>Edit Configuration</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Notification Type</label>
+                        <select id="prov-type" class="form-input" disabled>
+                            ${types.map(t => {
+                                const def = this.providerDefs[t];
+                                return `<option value="${t}" ${t === s.service_type ? 'selected' : ''}>${this._escape(def.label)}</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Friendly Name</label>
+                        <input type="text" id="prov-name" class="form-input" value="${this._escape(s.name)}">
+                    </div>
+                    <div id="prov-fields-container"></div>
+
+                    <div id="prov-status" class="notif-test-status"></div>
+                    <div id="prov-error" class="form-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="prov-test-btn"
+                            onclick="NotificationSettings._testProvider()">
+                        ${this._icons.zap} Test
+                    </button>
+                    <button class="btn btn-primary" id="prov-save-btn"
+                            onclick="NotificationSettings._submitEditProvider(${id})">Save</button>
+                </div>
+            </div>
+        `);
+
+        this._renderProviderFields(s.service_type, storedFields);
+    },
+
+    async _submitEditProvider(id) {
+        const name = document.getElementById('prov-name')?.value.trim();
+        const type = document.getElementById('prov-type')?.value;
+        const fields = this._collectProviderFields();
+        const errorEl = document.getElementById('prov-error');
+        const saveBtn = document.getElementById('prov-save-btn');
+
+        if (!name) { if (errorEl) errorEl.textContent = 'Friendly Name is required'; return; }
+        if (errorEl) errorEl.textContent = '';
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+        const s = this.activeService;
+        try {
+            const resp = await API.updateNotificationService(id, {
+                name,
+                service_type: type,
+                config_fields: fields,
+                enabled: s?.enabled ?? true,
+                notify_on_critical: s?.notify_on_critical ?? true,
+                notify_on_warning: s?.notify_on_warning ?? true,
+                notify_on_healthy: s?.notify_on_healthy ?? false
+            });
+
+            if (resp.ok) {
+                document.querySelector('.modal-overlay')?.remove();
+                this.selectService(id);
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                if (errorEl) errorEl.textContent = data.error || 'Failed to update';
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+            }
+        } catch {
+            if (errorEl) errorEl.textContent = 'Connection error';
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
         }
     },
 
@@ -571,6 +771,11 @@ const NotificationSettings = {
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
+    _providerLabel(type) {
+        if (this.providerDefs?.[type]) return this._escape(this.providerDefs[type].label);
+        return this._escape(type);
+    },
+
     _showStatus(msg, isError) {
         const el = document.getElementById('notif-status');
         if (!el) return;
@@ -597,6 +802,8 @@ const NotificationSettings = {
         plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
         bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
         zap: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
-        trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`
+        trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+        edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+        eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
     }
 };

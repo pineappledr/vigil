@@ -645,3 +645,58 @@
 .notif-test-status.error {
     color: var(--text-danger, #f87171);
 }
+
+/* ============================================
+   PROVIDER WIZARD MODAL
+   ============================================ */
+
+.modal-provider-wizard {
+    max-width: 520px;
+}
+
+.modal-provider-wizard .modal-body {
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.modal-divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 16px 0;
+}
+
+/* Password field with eye toggle */
+.form-input-password-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.form-input-password-wrap .form-input {
+    padding-right: 42px;
+}
+
+.btn-eye-toggle {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.btn-eye-toggle:hover {
+    color: var(--accent-primary);
+}
+
+/* Required field asterisk */
+.form-required {
+    color: var(--danger);
+    font-weight: 600;
+}

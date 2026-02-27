@@ -207,6 +207,10 @@ const API = {
 
     // ─── Notification Endpoints ──────────────────────────────────────────────
 
+    async getNotificationProviders() {
+        return this.get('/api/notifications/providers');
+    },
+
     async getNotificationServices() {
         return this.get('/api/notifications/services');
     },
@@ -245,6 +249,14 @@ const API = {
 
     async testNotificationURL(url, message) {
         return this.post('/api/notifications/test-url', { url, message });
+    },
+
+    async testNotificationFields(serviceType, configFields, message) {
+        return this.post('/api/notifications/test-url', {
+            service_type: serviceType,
+            config_fields: configFields,
+            message
+        });
     },
 
     async getNotificationHistory(limit = 50) {
