@@ -9,26 +9,34 @@ const Addons = {
 
     async render() {
         const container = document.getElementById('addons-view');
-        if (!container) return;
+        if (!container) {
+            console.error('[Addons] Container #addons-view not found');
+            return;
+        }
 
         container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading add-ons...</div>';
 
         try {
             const [addonsResp, tokensResp] = await Promise.all([
-                API.getAddons(),
-                API.getAddonTokens()
+                API.getAddons().catch(e => { console.warn('[Addons] getAddons failed:', e); return null; }),
+                API.getAddonTokens().catch(e => { console.warn('[Addons] getAddonTokens failed:', e); return null; })
             ]);
 
-            if (addonsResp.ok) {
-                this.addons = await addonsResp.json();
-                if (!Array.isArray(this.addons)) this.addons = [];
+            if (addonsResp && addonsResp.ok) {
+                const parsed = await addonsResp.json();
+                this.addons = Array.isArray(parsed) ? parsed : [];
+            } else {
+                this.addons = [];
             }
-            if (tokensResp.ok) {
+
+            if (tokensResp && tokensResp.ok) {
                 const data = await tokensResp.json();
-                this.tokens = data.tokens || [];
+                this.tokens = Array.isArray(data?.tokens) ? data.tokens : [];
+            } else {
+                this.tokens = [];
             }
         } catch (e) {
-            console.error('Failed to load add-ons:', e);
+            console.error('[Addons] Data fetch error:', e);
             this.addons = [];
             this.tokens = [];
         }
@@ -36,7 +44,7 @@ const Addons = {
         try {
             container.innerHTML = this._buildView();
         } catch (e) {
-            console.error('Failed to build add-ons view:', e);
+            console.error('[Addons] View build error:', e);
             container.innerHTML = this._emptyState();
         }
     },
@@ -80,10 +88,10 @@ const Addons = {
 
         return `
             <div class="summary-grid">
-                ${Components.summaryCard({ icon: this._icons.addon, iconClass: 'accent', value: total, label: 'Total Add-ons' })}
-                ${Components.summaryCard({ icon: this._icons.check, iconClass: 'healthy', value: online, label: 'Online' })}
-                ${Components.summaryCard({ icon: this._icons.warning, iconClass: 'warning', value: degraded, label: 'Degraded' })}
-                ${Components.summaryCard({ icon: this._icons.offline, iconClass: 'danger', value: offline, label: 'Offline' })}
+                ${Components.summaryCard({ icon: this._icons.addon, iconClass: 'blue', value: total, label: 'Total Add-ons' })}
+                ${Components.summaryCard({ icon: this._icons.check, iconClass: 'green', value: online, label: 'Online' })}
+                ${Components.summaryCard({ icon: this._icons.warning, iconClass: 'yellow', value: degraded, label: 'Degraded' })}
+                ${Components.summaryCard({ icon: this._icons.offline, iconClass: 'red', value: offline, label: 'Offline' })}
             </div>
         `;
     },
