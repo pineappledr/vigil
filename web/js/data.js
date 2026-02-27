@@ -47,7 +47,7 @@ const Data = {
 
     updateCurrentView() {
         // Views that manage their own content — don't overwrite
-        if (State.activeView === 'agents' || State.activeView === 'settings') {
+        if (['agents', 'settings', 'addons', 'notifications'].includes(State.activeView)) {
             return;
         }
 
