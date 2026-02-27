@@ -157,5 +157,77 @@ const API = {
 
     async deleteRegistrationToken(id) {
         return this.delete(`/api/v1/tokens/${id}`);
+    },
+
+    // ─── Add-on Endpoints ────────────────────────────────────────────────────
+
+    async put(endpoint, data) {
+        return fetch(endpoint, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+    },
+
+    async getAddons() {
+        return this.get('/api/addons');
+    },
+
+    async getAddon(id) {
+        return this.get(`/api/addons/${id}`);
+    },
+
+    async registerAddon(manifest) {
+        return this.post('/api/addons', { manifest });
+    },
+
+    async deregisterAddon(id) {
+        return this.delete(`/api/addons/${id}`);
+    },
+
+    async setAddonEnabled(id, enabled) {
+        return this.put(`/api/addons/${id}/enabled`, { enabled });
+    },
+
+    // ─── Notification Endpoints ──────────────────────────────────────────────
+
+    async getNotificationServices() {
+        return this.get('/api/notifications/services');
+    },
+
+    async getNotificationService(id) {
+        return this.get(`/api/notifications/services/${id}`);
+    },
+
+    async createNotificationService(service) {
+        return this.post('/api/notifications/services', service);
+    },
+
+    async updateNotificationService(id, service) {
+        return this.put(`/api/notifications/services/${id}`, service);
+    },
+
+    async deleteNotificationService(id) {
+        return this.delete(`/api/notifications/services/${id}`);
+    },
+
+    async updateEventRules(serviceId, rules) {
+        return this.put(`/api/notifications/services/${serviceId}/rules`, { rules });
+    },
+
+    async updateQuietHours(serviceId, quietHours) {
+        return this.put(`/api/notifications/services/${serviceId}/quiet-hours`, quietHours);
+    },
+
+    async updateDigestConfig(serviceId, digest) {
+        return this.put(`/api/notifications/services/${serviceId}/digest`, digest);
+    },
+
+    async testFireNotification(serviceId, message) {
+        return this.post('/api/notifications/test', { service_id: serviceId, message });
+    },
+
+    async getNotificationHistory(limit = 50) {
+        return this.get(`/api/notifications/history?limit=${limit}`);
     }
 };

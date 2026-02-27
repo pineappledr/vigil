@@ -180,7 +180,7 @@ func TestProcessorStartStop(t *testing.T) {
 	database := setupTestDB(t)
 	defer database.Close()
 
-	processor := NewProcessor(database)
+	processor := NewProcessor(database, nil)
 
 	// Start processor
 	processor.Start()
@@ -207,7 +207,7 @@ func TestProcessorProcessReading(t *testing.T) {
 	database := setupTestDB(t)
 	defer database.Close()
 
-	processor := NewProcessor(database)
+	processor := NewProcessor(database, nil)
 	processor.Start()
 	defer processor.Stop()
 

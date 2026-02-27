@@ -6,8 +6,12 @@ import (
 	"net/http"
 
 	"vigil/internal/auth"
+	"vigil/internal/events"
 	"vigil/internal/models"
 )
+
+// EventBus is the shared event bus, set from main.go during startup.
+var EventBus *events.Bus
 
 // JSONResponse sends a JSON response
 func JSONResponse(w http.ResponseWriter, data interface{}) {

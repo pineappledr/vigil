@@ -1,0 +1,876 @@
+/* ============================================
+   ADD-ONS LIST VIEW
+   ============================================ */
+
+.addons-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.addons-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.addons-summary {
+    margin-bottom: 24px;
+}
+
+.addons-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.addon-card {
+    display: flex;
+    flex-direction: column;
+    padding: 16px 20px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.addon-card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
+}
+
+.addon-card.addon-online {
+    border-left-color: var(--success);
+}
+
+.addon-card.addon-degraded {
+    border-left-color: var(--warning);
+}
+
+.addon-card.addon-offline {
+    border-left-color: var(--danger);
+}
+
+.addon-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.addon-card-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.addon-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(100, 255, 218, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-secondary);
+}
+
+.addon-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.addon-info h4 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.addon-info-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.addon-info-meta .dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.addon-card-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.addon-status-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.addon-status-badge.addon-online {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.addon-status-badge.addon-degraded {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+}
+
+.addon-status-badge.addon-offline {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
+
+.addon-enabled-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.addon-enabled-badge.enabled {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.addon-enabled-badge.disabled {
+    background: rgba(107, 114, 128, 0.2);
+    color: var(--text-muted);
+}
+
+.btn-addon-toggle {
+    padding: 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color var(--transition-fast);
+}
+
+.btn-addon-toggle:hover {
+    color: var(--text-primary);
+}
+
+.addon-description {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.addons-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.addons-empty svg {
+    margin-bottom: 16px;
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.addons-empty p {
+    font-size: 0.9375rem;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+}
+
+.addons-empty .hint {
+    font-size: 0.8rem;
+}
+
+/* ============================================
+   MANIFEST RENDERER SHELL
+   ============================================ */
+
+.manifest-shell {
+    width: 100%;
+}
+
+.manifest-header {
+    margin-bottom: 24px;
+}
+
+.manifest-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    transition: all var(--transition-fast);
+    margin-bottom: 16px;
+}
+
+.manifest-back:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.manifest-back svg {
+    width: 16px;
+    height: 16px;
+}
+
+.manifest-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.manifest-title-row h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.manifest-version {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    background: var(--bg-elevated);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.manifest-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+.manifest-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-elevated);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 20px;
+}
+
+.manifest-tab {
+    padding: 8px 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.manifest-tab.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.manifest-tab:hover:not(.active) {
+    color: var(--text-secondary);
+}
+
+.manifest-component {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.component-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.component-unavailable {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 16px 0;
+}
+
+/* Toast notification */
+.manifest-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+.manifest-toast.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.manifest-toast.toast-critical { border-left: 3px solid var(--danger); }
+.manifest-toast.toast-warning { border-left: 3px solid var(--warning); }
+.manifest-toast.toast-info { border-left: 3px solid var(--accent-primary); }
+
+/* ============================================
+   ADDON FORM COMPONENT
+   ============================================ */
+
+.addon-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.addon-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.addon-form-group label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.addon-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.addon-form-error {
+    font-size: 0.8rem;
+    min-height: 1.2em;
+}
+
+.addon-form-error.success {
+    color: var(--success);
+}
+
+.addon-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.addon-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+}
+
+.form-calc-result {
+    font-size: 0.8rem;
+    color: var(--accent-secondary);
+    font-family: var(--font-mono);
+}
+
+.form-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 16px 0;
+}
+
+/* ============================================
+   PROGRESS COMPONENT
+   ============================================ */
+
+.progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.progress-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 16px 0;
+}
+
+.progress-job-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.progress-job-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.progress-job-id {
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+
+.progress-job-status {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.progress-job-status.running {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent-primary);
+}
+
+.progress-job-status.complete {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.progress-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--accent-gradient);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-bar-fill.complete {
+    background: var(--success);
+}
+
+.progress-percent {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    min-width: 48px;
+    text-align: right;
+}
+
+.progress-message {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.progress-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.progress-speed {
+    font-family: var(--font-mono);
+}
+
+.progress-phases {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.progress-phase {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-muted);
+}
+
+.progress-phase.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent-primary);
+}
+
+.progress-phase.complete {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+}
+
+.progress-phase-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.progress-phase.active .progress-phase-dot {
+    background: var(--accent-primary);
+}
+
+.progress-phase.complete .progress-phase-dot {
+    background: var(--success);
+}
+
+/* ============================================
+   CHART COMPONENT
+   ============================================ */
+
+.chart-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+/* ============================================
+   SMART TABLE COMPONENT
+   ============================================ */
+
+.smart-table-container {
+    overflow-x: auto;
+}
+
+.smart-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.smart-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.smart-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(136, 146, 176, 0.05);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+}
+
+.smart-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.smart-table-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 20px;
+    font-family: var(--font-sans);
+}
+
+.smart-col-name {
+    font-family: var(--font-sans);
+}
+
+.smart-row-critical {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.smart-row-warning {
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.smart-delta-up {
+    color: var(--warning);
+}
+
+.smart-delta-down {
+    color: var(--success);
+}
+
+.smart-delta-high {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* ============================================
+   LOG VIEWER COMPONENT
+   ============================================ */
+
+.log-viewer {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.log-viewer-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-viewer-filters {
+    display: flex;
+    gap: 4px;
+}
+
+.log-filter-btn {
+    padding: 4px 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.log-filter-btn.active {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.log-filter-btn:hover:not(.active) {
+    color: var(--text-secondary);
+}
+
+.log-viewer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.log-autoscroll {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.log-autoscroll input {
+    accent-color: var(--accent-primary);
+}
+
+.btn-icon {
+    padding: 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: color var(--transition-fast);
+}
+
+.btn-icon:hover {
+    color: var(--text-primary);
+}
+
+.log-viewer-body {
+    height: 300px;
+    overflow-y: auto;
+    background: #0d1117;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.6;
+    padding: 8px 0;
+}
+
+.log-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 40px 16px;
+    font-family: var(--font-sans);
+}
+
+.log-line {
+    display: flex;
+    gap: 8px;
+    padding: 1px 12px;
+}
+
+.log-line:hover {
+    background: rgba(136, 146, 176, 0.05);
+}
+
+.log-time {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.log-level {
+    flex-shrink: 0;
+    font-weight: 600;
+    min-width: 44px;
+}
+
+.log-level-error {
+    color: var(--danger);
+}
+
+.log-level-warn {
+    color: var(--warning);
+}
+
+.log-level-info {
+    color: var(--accent-primary);
+}
+
+.log-source {
+    color: var(--accent-secondary);
+    flex-shrink: 0;
+}
+
+.log-msg {
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.log-line.log-error .log-msg {
+    color: #ffa0a0;
+}
+
+.log-line.log-warn .log-msg {
+    color: #ffd080;
+}
+
+/* ============================================
+   ADD-ONS RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+    .addon-card {
+        padding: 14px 16px;
+    }
+
+    .addon-card-top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .addon-card-left {
+        width: 100%;
+    }
+
+    .addon-card-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .addon-info-meta {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .addon-info-meta .dot {
+        display: none;
+    }
+
+    .manifest-tabs {
+        overflow-x: auto;
+    }
+
+    .manifest-title-row {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .progress-meta {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .log-viewer-toolbar {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .smart-table {
+        font-size: 0.75rem;
+    }
+
+    .smart-table th,
+    .smart-table td {
+        padding: 6px 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .addons-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .addon-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+    .addon-icon svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .addon-info h4 {
+        font-size: 0.875rem;
+    }
+
+    .addons-empty {
+        padding: 40px 16px;
+    }
+
+    .manifest-component {
+        padding: 14px;
+    }
+
+    .log-viewer-body {
+        height: 200px;
+    }
+}

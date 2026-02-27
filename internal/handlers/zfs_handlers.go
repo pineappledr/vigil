@@ -456,7 +456,8 @@ func ZFSDriveInfo(w http.ResponseWriter, r *http.Request) {
 
 // ─── Report Handler ──────────────────────────────────────────────────────────
 
-// ProcessZFSFromReport extracts and processes ZFS data from an agent report
+// ProcessZFSFromReport extracts and processes ZFS data from an agent report.
+// When EventBus is set, pool degradation and device failure events are published.
 func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 	zfsData, ok := payload["zfs"]
 	if !ok || zfsData == nil {
@@ -469,8 +470,14 @@ func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 		return
 	}
 
-	if err := zfs.ProcessZFSReport(db.DB, hostname, zfsJSON); err != nil {
-		log.Printf("⚠️  Failed to process ZFS report: %v", err)
+	if EventBus != nil {
+		if err := zfs.ProcessZFSReportWithEvents(db.DB, EventBus, hostname, zfsJSON); err != nil {
+			log.Printf("⚠️  Failed to process ZFS report: %v", err)
+		}
+	} else {
+		if err := zfs.ProcessZFSReport(db.DB, hostname, zfsJSON); err != nil {
+			log.Printf("⚠️  Failed to process ZFS report: %v", err)
+		}
 	}
 }
 
