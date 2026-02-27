@@ -1,5 +1,5 @@
 /**
- * Vigil Dashboard - Add-ons Tab Shell
+ * Vigil Dashboard - Add-ons View
  */
 
 const Addons = {
@@ -7,69 +7,94 @@ const Addons = {
     tokens: [],
     activeAddonId: null,
 
+    // ─── Data Fetching & Render ──────────────────────────────────────────
+
     async render() {
         const container = document.getElementById('addons-view');
-        if (!container) {
-            console.error('[Addons] Container #addons-view not found');
-            return;
-        }
+        if (!container) return;
 
-        container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading add-ons...</div>';
+        container.innerHTML = this._loadingState();
 
         let fetchError = null;
 
         try {
             const [addonsResp, tokensResp] = await Promise.all([
-                this._fetchWithTimeout('/api/addons', 8000),
-                this._fetchWithTimeout('/api/addons/tokens', 8000)
+                this._fetch('/api/addons'),
+                this._fetch('/api/addons/tokens')
             ]);
 
-            if (addonsResp && addonsResp.ok) {
-                const parsed = await addonsResp.json();
-                this.addons = Array.isArray(parsed) ? parsed : [];
-            } else {
-                this.addons = [];
-            }
+            this.addons = this._parseArray(addonsResp);
 
-            if (tokensResp && tokensResp.ok) {
-                const data = await tokensResp.json();
-                this.tokens = Array.isArray(data?.tokens) ? data.tokens : [];
-            } else {
-                this.tokens = [];
-            }
+            const tokensData = tokensResp?.ok ? await tokensResp.json().catch(() => null) : null;
+            this.tokens = Array.isArray(tokensData?.tokens) ? tokensData.tokens : [];
         } catch (e) {
-            console.error('[Addons] Data fetch error:', e);
             fetchError = e;
             this.addons = [];
             this.tokens = [];
         } finally {
+            // Bail if user navigated away during fetch
+            if (State.activeView !== 'addons') return;
+
             try {
-                if (fetchError) {
-                    container.innerHTML = this._errorState(fetchError.message || 'Failed to load add-ons');
-                } else {
-                    container.innerHTML = this._buildView();
-                }
+                container.innerHTML = fetchError
+                    ? this._errorState(fetchError.message || 'Failed to load add-ons')
+                    : this._buildView();
             } catch (e) {
-                console.error('[Addons] View build error:', e);
                 container.innerHTML = this._emptyState();
             }
         }
     },
 
-    async _fetchWithTimeout(url, ms) {
+    async _fetch(url) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), ms);
+        const timer = setTimeout(() => controller.abort(), 8000);
         try {
             return await fetch(url, { signal: controller.signal });
         } catch (e) {
-            if (e.name === 'AbortError') {
-                throw new Error(`Request to ${url} timed out after ${ms}ms`);
-            }
+            if (e.name === 'AbortError') throw new Error(`Request timed out`);
             throw e;
         } finally {
             clearTimeout(timer);
         }
     },
+
+    _parseArray(resp) {
+        if (!resp?.ok) return [];
+        return resp.json().then(d => Array.isArray(d) ? d : []).catch(() => []);
+    },
+
+    // ─── View States ─────────────────────────────────────────────────────
+
+    _loadingState() {
+        return '<div class="loading-spinner"><div class="spinner"></div>Loading add-ons...</div>';
+    },
+
+    _emptyState() {
+        return `
+            <div class="addons-empty">
+                ${this._icons.addonLarge}
+                <p>No add-ons registered</p>
+                <span class="hint">Click "Add Add-on" to register your first add-on</span>
+            </div>
+        `;
+    },
+
+    _errorState(message) {
+        return `
+            <div class="addons-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--danger, #ef4444)" stroke-width="1.5" width="48" height="48">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p>Failed to load add-ons</p>
+                <span class="hint">${this._escape(message)}</span>
+                <button class="btn btn-secondary" style="margin-top:16px" onclick="Addons.render()">Retry</button>
+            </div>
+        `;
+    },
+
+    // ─── View Builder ────────────────────────────────────────────────────
 
     _buildView() {
         const cards = this.addons.length > 0
@@ -126,7 +151,6 @@ const Addons = {
         const enabledClass = addon.enabled ? 'enabled' : 'disabled';
         const urlMeta = addon.url ? `<span class="dot"></span><span>${this._escape(addon.url)}</span>` : '';
 
-        // Find the registration token linked to this addon
         const token = this.tokens.find(t => t.used_by_addon_id === addon.id);
         const tokenRow = token ? `
                 <div class="addon-token-row" onclick="event.stopPropagation()">
@@ -178,9 +202,7 @@ const Addons = {
         const truncated = token.token.substring(0, 16) + '...';
         const now = new Date();
         const isUsed = !!token.used_at;
-        const isExpired = token.expires_at
-            ? new Date(token.expires_at + 'Z') < now
-            : false;
+        const isExpired = token.expires_at ? new Date(token.expires_at + 'Z') < now : false;
 
         let badgeClass = 'available';
         let badgeLabel = 'Available';
@@ -203,36 +225,9 @@ const Addons = {
         `;
     },
 
-    _emptyState() {
-        return `
-            <div class="addons-empty">
-                ${this._icons.addonLarge}
-                <p>No add-ons registered</p>
-                <span class="hint">Click "Add Add-on" to register your first add-on</span>
-            </div>
-        `;
-    },
-
-    _errorState(message) {
-        return `
-            <div class="addons-empty">
-                <svg viewBox="0 0 24 24" fill="none" stroke="var(--danger, #ef4444)" stroke-width="1.5" width="48" height="48">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <p>Failed to load add-ons</p>
-                <span class="hint">${this._escape(message)}</span>
-                <button class="btn btn-secondary" style="margin-top:16px" onclick="Addons.render()">Retry</button>
-            </div>
-        `;
-    },
-
     // ─── Add Add-on Modal ────────────────────────────────────────────────
 
     showAddAddon() {
-        const serverURL = window.location.origin;
-
         Modals.create(`
             <div class="modal">
                 <div class="modal-header">
@@ -275,7 +270,6 @@ const Addons = {
 
         if (!name) { if (errorEl) errorEl.textContent = 'Name is required'; return; }
         if (errorEl) errorEl.textContent = '';
-
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Registering...'; }
 
         try {
@@ -283,7 +277,6 @@ const Addons = {
             const data = await resp.json().catch(() => ({}));
 
             if (resp.ok && data.token) {
-                // Hide the form inputs and show the token result
                 document.getElementById('addon-name')?.closest('.form-group')?.classList.add('hidden');
                 document.getElementById('addon-url')?.closest('.form-group')?.classList.add('hidden');
                 if (submitBtn) submitBtn.classList.add('hidden');
@@ -303,51 +296,14 @@ const Addons = {
                             <p><strong>${this._escape(name)}</strong> registered successfully!</p>
                             <span class="form-hint">Use these details to configure your add-on daemon:</span>
                         </div>
-
-                        <div class="form-group">
-                            <label>Server URL</label>
-                            <div class="form-input-with-copy">
-                                <input type="text" id="addon-res-server" class="form-input form-input-mono" value="${this._escape(serverURL)}" readonly>
-                                <button class="btn-copy" onclick="Addons._copyField('addon-res-server')" title="Copy">
-                                    ${this._icons.copy}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>Add-on ID</label>
-                            <div class="form-input-with-copy">
-                                <input type="text" id="addon-res-id" class="form-input form-input-mono" value="${data.addon.id}" readonly>
-                                <button class="btn-copy" onclick="Addons._copyField('addon-res-id')" title="Copy">
-                                    ${this._icons.copy}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label>Registration Token</label>
-                            <div class="form-input-with-copy">
-                                <input type="text" id="addon-res-token" class="form-input form-input-mono" value="${this._escape(data.token)}" readonly>
-                                <button class="btn-copy" onclick="Addons._copyField('addon-res-token')" title="Copy">
-                                    ${this._icons.copy}
-                                </button>
-                            </div>
-                            <span class="form-hint form-hint-warning">Save this token — it will not be shown again.</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label>WebSocket Endpoint</label>
-                            <div class="form-input-with-copy">
-                                <input type="text" id="addon-res-ws" class="form-input form-input-mono" value="${this._escape(wsURL)}" readonly>
-                                <button class="btn-copy" onclick="Addons._copyField('addon-res-ws')" title="Copy">
-                                    ${this._icons.copy}
-                                </button>
-                            </div>
-                        </div>
+                        ${this._readonlyField('Server URL', 'addon-res-server', serverURL)}
+                        ${this._readonlyField('Add-on ID', 'addon-res-id', String(data.addon.id))}
+                        ${this._readonlyField('Registration Token', 'addon-res-token', data.token)}
+                        ${this._readonlyField('WebSocket Endpoint', 'addon-res-ws', wsURL)}
+                        <span class="form-hint form-hint-warning">Save this token — it will not be shown again.</span>
                     `;
                 }
 
-                // Change footer to just "Done"
                 const footer = document.querySelector('.modal-footer');
                 if (footer) {
                     footer.innerHTML = '<button class="btn btn-primary" onclick="Modals.close(this); Addons.render();">Done</button>';
@@ -362,28 +318,84 @@ const Addons = {
         }
     },
 
-    _copyField(inputId) {
+    _readonlyField(label, id, value) {
+        return `
+            <div class="form-group">
+                <label>${label}</label>
+                <div class="form-input-with-copy">
+                    <input type="text" id="${id}" class="form-input form-input-mono" value="${this._escape(value)}" readonly>
+                    <button class="btn-copy" onclick="Addons._copyInput('${id}')" title="Copy">
+                        ${this._icons.copy}
+                    </button>
+                </div>
+            </div>
+        `;
+    },
+
+    // ─── Addon Actions ───────────────────────────────────────────────────
+
+    async openAddon(id) {
+        this.activeAddonId = id;
+        try {
+            const resp = await API.getAddon(id);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (typeof ManifestRenderer !== 'undefined') {
+                    ManifestRenderer.render(data.addon, data.manifest);
+                }
+            }
+        } catch {}
+    },
+
+    closeAddon() {
+        this.activeAddonId = null;
+        this.render();
+    },
+
+    async toggleEnabled(id, enabled) {
+        try {
+            const resp = await API.setAddonEnabled(id, enabled);
+            if (resp.ok) this.render();
+        } catch {}
+    },
+
+    async deleteToken(id) {
+        try {
+            await API.deleteAddonToken(id);
+            this.render();
+        } catch {}
+    },
+
+    // ─── Clipboard (single implementation) ───────────────────────────────
+
+    _copyInput(inputId) {
         const input = document.getElementById(inputId);
         if (!input) return;
-        const text = input.value;
-        const btn = input.parentElement?.querySelector('.btn-copy');
+        this._copyText(input.value, input.parentElement?.querySelector('.btn-copy'));
+    },
 
-        const doCopy = () => {
-            if (btn) {
-                const orig = btn.innerHTML;
-                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
-                setTimeout(() => { btn.innerHTML = orig; }, 2000);
-            }
+    copyToken(addonId) {
+        const el = document.getElementById(`addon-token-${addonId}`);
+        if (!el) return;
+        this._copyText(el.dataset.token, el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[1]);
+    },
+
+    _copyText(text, btn) {
+        const flash = () => {
+            if (!btn) return;
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(() => { btn.innerHTML = orig; }, 2000);
         };
 
         if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(doCopy).catch(() => {
+            navigator.clipboard.writeText(text).then(flash).catch(() => {
                 this._fallbackCopy(text);
-                doCopy();
+                flash();
             });
         } else {
             this._fallbackCopy(text);
-            doCopy();
+            flash();
         }
     },
 
@@ -398,98 +410,23 @@ const Addons = {
         document.body.removeChild(ta);
     },
 
-    // ─── Addon Actions ───────────────────────────────────────────────────
-
-    async openAddon(id) {
-        this.activeAddonId = id;
-
-        try {
-            const resp = await API.getAddon(id);
-            if (resp.ok) {
-                const data = await resp.json();
-                if (typeof ManifestRenderer !== 'undefined') {
-                    ManifestRenderer.render(data.addon, data.manifest);
-                }
-            }
-        } catch (e) {
-            console.error('Failed to open add-on:', e);
-        }
-    },
-
-    closeAddon() {
-        this.activeAddonId = null;
-        this.render();
-    },
-
-    async toggleEnabled(id, enabled) {
-        try {
-            const resp = await API.setAddonEnabled(id, enabled);
-            if (resp.ok) this.render();
-        } catch (e) {
-            console.error('Failed to toggle add-on:', e);
-        }
-    },
-
-    async deleteToken(id) {
-        try {
-            await API.deleteAddonToken(id);
-            this.render();
-        } catch (e) {
-            console.error('Failed to delete token:', e);
-        }
-    },
-
-    // ─── Token Actions ────────────────────────────────────────────────────
+    // ─── Token Visibility Toggle ─────────────────────────────────────────
 
     toggleTokenVisibility(addonId) {
         const el = document.getElementById(`addon-token-${addonId}`);
         if (!el) return;
         const isMasked = el.dataset.masked === 'true';
-        if (isMasked) {
-            el.textContent = el.dataset.token;
-            el.dataset.masked = 'false';
-            el.closest('.addon-token-field')?.querySelector('.btn-token-action').innerHTML = this._icons.eyeOff;
-        } else {
-            el.textContent = '*'.repeat(20);
-            el.dataset.masked = 'true';
-            el.closest('.addon-token-field')?.querySelector('.btn-token-action').innerHTML = this._icons.eye;
-        }
-    },
-
-    copyToken(addonId) {
-        const el = document.getElementById(`addon-token-${addonId}`);
-        if (!el) return;
-        const text = el.dataset.token;
-        const btn = el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[1];
-
-        const doCopy = () => {
-            if (btn) {
-                const orig = btn.innerHTML;
-                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
-                setTimeout(() => { btn.innerHTML = orig; }, 2000);
-            }
-        };
-
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(doCopy).catch(() => {
-                this._fallbackCopy(text);
-                doCopy();
-            });
-        } else {
-            this._fallbackCopy(text);
-            doCopy();
-        }
+        el.textContent = isMasked ? el.dataset.token : '*'.repeat(20);
+        el.dataset.masked = isMasked ? 'false' : 'true';
+        const eyeBtn = el.closest('.addon-token-field')?.querySelector('.btn-token-action');
+        if (eyeBtn) eyeBtn.innerHTML = isMasked ? this._icons.eyeOff : this._icons.eye;
     },
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     _statusClass(status) {
-        switch (status) {
-            case 'online': return 'addon-online';
-            case 'degraded': return 'addon-degraded';
-            case 'offline': return 'addon-offline';
-            default: return '';
-        }
+        const map = { online: 'addon-online', degraded: 'addon-degraded', offline: 'addon-offline' };
+        return map[status] || '';
     },
 
     _timeAgo(dateStr) {
@@ -497,14 +434,12 @@ const Addons = {
         const date = Utils.parseUTC(dateStr);
         if (!date || isNaN(date)) return 'never';
         if (date.getFullYear() < 2000) return 'never';
-        const diff = Date.now() - date.getTime();
-        const mins = Math.floor(diff / 60000);
+        const mins = Math.floor((Date.now() - date.getTime()) / 60000);
         if (mins < 1) return 'just now';
         if (mins < 60) return `${mins}m ago`;
         const hours = Math.floor(mins / 60);
         if (hours < 24) return `${hours}h ago`;
-        const days = Math.floor(hours / 24);
-        return `${days}d ago`;
+        return `${Math.floor(hours / 24)}d ago`;
     },
 
     _escape(str) {

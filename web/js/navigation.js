@@ -172,12 +172,6 @@ const Navigation = {
         const navAddons = document.getElementById('nav-addons');
         if (navAddons) navAddons.classList.add('active');
 
-        // Set immediate loading state so the view is never blank
-        const container = document.getElementById('addons-view');
-        if (container && !container.innerHTML.trim()) {
-            container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading add-ons...</div>';
-        }
-
         if (typeof Addons !== 'undefined' && Addons.render) {
             Addons.render();
         }
