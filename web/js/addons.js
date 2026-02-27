@@ -33,7 +33,12 @@ const Addons = {
             this.tokens = [];
         }
 
-        container.innerHTML = this._buildView();
+        try {
+            container.innerHTML = this._buildView();
+        } catch (e) {
+            console.error('Failed to build add-ons view:', e);
+            container.innerHTML = this._emptyState();
+        }
     },
 
     _buildView() {

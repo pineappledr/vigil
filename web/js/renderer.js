@@ -12,16 +12,21 @@ const Renderer = {
     `,
 
     /**
-     * Ensure dashboard structure exists (ZFS.render destroys it)
+     * Ensure dashboard structure exists (ZFS.render destroys it).
+     * Skip restoration when a non-dashboard view owns the container.
      */
     ensureDashboardStructure() {
+        if (['agents', 'addons', 'notifications', 'settings'].includes(State.activeView)) {
+            return false;
+        }
+
         const container = document.getElementById('dashboard-view');
         if (!container) return false;
-        
+
         // Check if structure exists
         const summaryCards = document.getElementById('summary-cards');
         const serverList = document.getElementById('server-list');
-        
+
         if (!summaryCards || !serverList) {
             console.log('[Renderer] Restoring dashboard structure');
             container.innerHTML = this.dashboardTemplate;

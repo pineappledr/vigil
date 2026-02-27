@@ -5,7 +5,7 @@
     <span style="vertical-align: middle;">Vigil</span>
   </h1>
 
-  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis and ZFS pool management.**
+  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis, ZFS pool management, extensible add-ons, and multi-channel notifications.**
   
   <p>
     <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
@@ -18,7 +18,9 @@
 
 > **⚠️ BREAKING CHANGE in v2.4.0:** This release introduces **Ed25519 key-based mutual authentication** between the server and agents. All existing agents **must be re-registered** using a one-time registration token. Agents running older versions will be rejected by the server. See [Agent Authentication](#-agent-authentication) for the new setup workflow.
 
-**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, and comprehensive ZFS pool monitoring, ensuring you never miss a critical hardware failure.
+> **🆕 v3.0:** Adds the **Add-on ecosystem** (WebSocket-connected daemons with manifest-driven UI), **multi-channel notifications** (Telegram, Discord, Slack, Email, Pushover, Gotify, webhooks) with a guided provider wizard, and **add-on registration tokens**. See [Notifications](#-notifications), [Add-ons](#-add-ons), and the companion [vigil-addons](https://github.com/pineappledr/vigil-addons) repository.
+
+**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, comprehensive ZFS pool monitoring, extensible add-ons, and multi-channel notifications — ensuring you never miss a critical hardware failure.
 
 Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
 
@@ -36,6 +38,8 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora,
 - **🏷️ Drive Aliases:** Set custom names for your drives (e.g., "Plex Media", "Backup Drive").
 - **🔧 HBA Support:** Automatic detection for SATA drives behind SAS HBA controllers (LSI SAS3224, etc.).
 - **🗄️ ZFS Pool Monitoring:** Full ZFS support with pool health, device hierarchy, scrub history, and SMART integration.
+- **🧩 Extensible Add-ons:** Third-party daemons register via API, stream telemetry over WebSocket, and render UI from a JSON manifest — no frontend code required.
+- **📣 Multi-Channel Notifications:** Guided provider wizard for Telegram, Discord, Slack, Email, Pushover, Gotify, and generic webhooks. Event routing, quiet hours, and digest batching included.
 
 ---
 
@@ -635,6 +639,33 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 
 ---
 
+## 📣 Notifications
+
+Vigil v3.0 introduces a multi-channel notification system powered by [Shoutrrr](https://containrrr.dev/shoutrrr/). A guided provider wizard lets you configure each channel through dedicated form fields — no need to construct raw URLs.
+
+### Supported Providers
+
+| Provider | Fields |
+|----------|--------|
+| **Telegram** | Bot Token, Chat ID, Message Thread ID, Send Silently, Parse Mode |
+| **Discord** | Webhook URL, Bot Display Name, Avatar URL |
+| **Slack** | Incoming Webhook URL, Bot Username, Icon Emoji, Channel |
+| **Email (SMTP)** | Host, Port, Security (None / STARTTLS / SSL), Username, Password, From, To, Subject |
+| **Pushover** | User Key, App Token, Device, Title, Priority, Sound |
+| **Gotify** | Server URL, App Token, Priority |
+| **Generic Webhook** | Webhook URL |
+
+### Features
+
+- **Provider Wizard** — Select a provider from the dropdown and fill in the dedicated fields. Vigil builds and validates the Shoutrrr URL automatically.
+- **Test Before Save** — Send a test notification directly from the setup modal to verify your credentials before committing.
+- **Event Rules** — Choose which event types (drive failure, ZFS errors, add-on notifications, etc.) each service should receive.
+- **Quiet Hours** — Suppress non-critical alerts during configurable time windows.
+- **Digest Batching** — Aggregate frequent events into periodic summaries instead of individual messages.
+- **Secret Masking** — Password and token fields are masked in API responses. Editing a service preserves secrets unless you explicitly change them.
+
+---
+
 ## 🧩 Add-ons
 
 Vigil supports **add-ons** — external programs that extend the server with custom functionality. Add-ons register themselves via the API, stream real-time telemetry over WebSocket, and render their UI from a declarative JSON manifest.
@@ -804,6 +835,27 @@ Forms support advanced behaviors defined in the manifest:
 | `PUT` | `/api/addons/{id}/enabled` | Enable/disable add-on |
 | `GET` | `/api/addons/{id}/telemetry` | SSE stream (browser) |
 | `GET` | `/api/addons/ws?addon_id=X` | WebSocket (add-on process) |
+| `POST` | `/api/addons/register` | Register add-on from UI wizard |
+| `POST` | `/api/addons/tokens` | Create add-on registration token |
+| `GET` | `/api/addons/tokens` | List add-on registration tokens |
+| `DELETE` | `/api/addons/tokens/{id}` | Delete add-on registration token |
+
+### Notification Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/notifications/providers` | Get provider field schemas (for wizard) |
+| `GET` | `/api/notifications/services` | List notification services |
+| `GET` | `/api/notifications/services/{id}` | Get service details (secrets masked) |
+| `POST` | `/api/notifications/services` | Create notification service |
+| `PUT` | `/api/notifications/services/{id}` | Update notification service |
+| `DELETE` | `/api/notifications/services/{id}` | Delete notification service |
+| `PUT` | `/api/notifications/services/{id}/rules` | Update event routing rules |
+| `PUT` | `/api/notifications/services/{id}/quiet-hours` | Configure quiet hours |
+| `PUT` | `/api/notifications/services/{id}/digest` | Configure digest batching |
+| `POST` | `/api/notifications/test` | Fire a test notification |
+| `POST` | `/api/notifications/test-url` | Test a Shoutrrr URL or provider fields |
+| `GET` | `/api/notifications/history` | Get notification dispatch history |
 
 ---
 
