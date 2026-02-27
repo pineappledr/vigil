@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="css/agents.css">
     <link rel="stylesheet" href="css/version.css">
     <link rel="stylesheet" href="css/wearout.css">
+    <link rel="stylesheet" href="css/addons.css">
+    <link rel="stylesheet" href="css/notifications.css">
     <link rel="stylesheet" href="css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -90,6 +92,18 @@
                 </div>
 
                 <div class="nav-section">
+                    <span class="nav-label">Extensions</span>
+                    <a href="javascript:void(0)" class="nav-item" id="nav-addons" onclick="Navigation.showAddons()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                        Add-ons
+                    </a>
+                </div>
+
+                <div class="nav-section">
                     <span class="nav-label">Management</span>
                     <a href="javascript:void(0)" class="nav-item" id="nav-agents" onclick="Navigation.showAgents()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -99,6 +113,13 @@
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                         </svg>
                         Agents
+                    </a>
+                    <a href="javascript:void(0)" class="nav-item" id="nav-notifications" onclick="Navigation.showNotifications()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                        Notifications
                     </a>
                 </div>
             </nav>
@@ -209,6 +230,14 @@
     <script src="js/auth.js"></script>
     <script src="js/data.js"></script>
     <script src="js/agents.js"></script>
+    <script src="js/components/form.js"></script>
+    <script src="js/components/progress.js"></script>
+    <script src="js/components/chart.js"></script>
+    <script src="js/components/smart-table.js"></script>
+    <script src="js/components/log-viewer.js"></script>
+    <script src="js/manifest-renderer.js"></script>
+    <script src="js/addons.js"></script>
+    <script src="js/notification-settings.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/temperature.js"></script>
     <script src="js/version.js"></script>

@@ -2,14 +2,13 @@
  * Vigil Dashboard - SMART Table Component (Task 4.6)
  *
  * Renders a table of SMART attributes with delta highlighting.
- * Designed to show drive health attributes reported by add-on telemetry.
+ * Receives telemetry updates via SSE to show live attribute changes.
  */
 
 const SmartTableComponent = {
-    _tables: {},  // keyed by compId → { rows, prevRows }
+    _tables: {},  // keyed by compId → { rows, prevRows, config }
 
     /**
-     * Render initial SMART table.
      * @param {string} compId - Manifest component ID
      * @param {Object} config - { columns?: string[], highlight_threshold?: number }
      * @returns {string} HTML
@@ -34,25 +33,60 @@ const SmartTableComponent = {
     },
 
     /**
-     * Update table with new attribute data.
-     * @param {string} compId - Component ID
-     * @param {Array} attributes - Array of SMART attribute objects
+     * Handle an incoming SSE telemetry event with SMART data.
+     * Accepts either:
+     *  - { attributes: [...] }             (single drive)
+     *  - { component_id, attributes: [...] } (targeted)
+     *  - raw array of attribute objects
+     *
+     * @param {Object|Array} payload
+     */
+    handleUpdate(payload) {
+        let attributes;
+        let targetComp = null;
+
+        if (Array.isArray(payload)) {
+            attributes = payload;
+        } else if (payload.attributes && Array.isArray(payload.attributes)) {
+            attributes = payload.attributes;
+            targetComp = payload.component_id || null;
+        } else {
+            return;
+        }
+
+        // Route to specific component or broadcast to all
+        for (const [compId, entry] of Object.entries(this._tables)) {
+            if (targetComp && targetComp !== compId) continue;
+            this._updateTable(compId, entry, attributes);
+        }
+    },
+
+    /**
+     * Direct update for a specific component ID.
+     * @param {string} compId
+     * @param {Array} attributes
      */
     update(compId, attributes) {
         const entry = this._tables[compId];
         if (!entry) return;
+        this._updateTable(compId, entry, attributes);
+    },
 
+    _updateTable(compId, entry, attributes) {
         const tbody = document.getElementById(`smart-tbody-${compId}`);
         if (!tbody) return;
 
         const threshold = entry.config.highlight_threshold || 0;
 
         tbody.innerHTML = attributes.map(attr => {
-            const prevRaw = entry.prevRows[attr.id || attr.name];
-            const currentRaw = attr.raw_value ?? attr.rawValue ?? 0;
+            const key = attr.id ?? attr.name;
+            const prevRaw = entry.prevRows[key];
+            const currentRaw = this._rawValue(attr);
             const delta = prevRaw !== undefined ? currentRaw - prevRaw : 0;
             const deltaClass = this._deltaClass(delta, threshold);
-            const deltaText = delta !== 0 ? ` (${delta > 0 ? '+' : ''}${delta})` : '';
+            const deltaText = delta !== 0
+                ? ` <span class="${deltaClass}">(${delta > 0 ? '+' : ''}${delta})</span>`
+                : '';
 
             return `<tr class="${this._rowClass(attr)}">
                 <td class="smart-col-id">${attr.id ?? ''}</td>
@@ -60,24 +94,27 @@ const SmartTableComponent = {
                 <td class="smart-col-value">${attr.value ?? ''}</td>
                 <td class="smart-col-worst">${attr.worst ?? ''}</td>
                 <td class="smart-col-thresh">${attr.threshold ?? attr.thresh ?? ''}</td>
-                <td class="smart-col-raw ${deltaClass}">
-                    ${currentRaw}${deltaText}
-                </td>
+                <td class="smart-col-raw">${currentRaw}${deltaText}</td>
             </tr>`;
         }).join('');
 
-        // Store current values for next delta calculation
+        // Snapshot for next delta
         entry.prevRows = {};
         for (const attr of attributes) {
-            const key = attr.id || attr.name;
-            entry.prevRows[key] = attr.raw_value ?? attr.rawValue ?? 0;
+            entry.prevRows[attr.id ?? attr.name] = this._rawValue(attr);
         }
         entry.rows = attributes;
     },
 
+    _rawValue(attr) {
+        return attr.raw_value ?? attr.rawValue ?? attr.raw ?? 0;
+    },
+
     _rowClass(attr) {
         if (attr.failing_now || attr.failingNow) return 'smart-row-critical';
-        if (attr.value !== undefined && attr.threshold !== undefined && attr.value <= attr.threshold && attr.threshold > 0) {
+        const val = attr.value;
+        const thresh = attr.threshold ?? attr.thresh;
+        if (val !== undefined && thresh !== undefined && val <= thresh && thresh > 0) {
             return 'smart-row-warning';
         }
         return '';
@@ -85,14 +122,14 @@ const SmartTableComponent = {
 
     _deltaClass(delta, threshold) {
         if (delta === 0) return '';
-        if (Math.abs(delta) >= threshold && threshold > 0) return 'smart-delta-high';
+        if (threshold > 0 && Math.abs(delta) >= threshold) return 'smart-delta-high';
         return delta > 0 ? 'smart-delta-up' : 'smart-delta-down';
     },
 
     _escape(str) {
         if (!str) return '';
         const div = document.createElement('div');
-        div.textContent = str;
+        div.textContent = String(str);
         return div.innerHTML;
     }
 };

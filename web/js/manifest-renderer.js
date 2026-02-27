@@ -174,6 +174,14 @@ const ManifestRenderer = {
             this._handleTelemetry('metric', e);
         });
 
+        // SMART attribute telemetry — routes to SmartTableComponent
+        this.eventSource.addEventListener('smart', (e) => {
+            this._handleTelemetry('smart', e);
+        });
+        this.eventSource.addEventListener('attributes', (e) => {
+            this._handleTelemetry('smart', e);
+        });
+
         this.eventSource.onerror = () => {
             console.warn('[ManifestRenderer] SSE connection error, will retry');
         };
@@ -211,6 +219,12 @@ const ManifestRenderer = {
             case 'metric':
                 if (typeof ChartComponent !== 'undefined') {
                     ChartComponent.handleUpdate(payload);
+                }
+                break;
+
+            case 'smart':
+                if (typeof SmartTableComponent !== 'undefined') {
+                    SmartTableComponent.handleUpdate(payload);
                 }
                 break;
 

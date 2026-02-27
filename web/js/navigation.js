@@ -150,6 +150,50 @@ const Navigation = {
         }
     },
 
+    showAddons() {
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = null;
+        State.activeView = 'addons';
+
+        document.getElementById('dashboard-view')?.classList.remove('hidden');
+        document.getElementById('details-view')?.classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
+
+        document.getElementById('page-title').textContent = 'Add-ons';
+        document.getElementById('breadcrumbs')?.classList.add('hidden');
+
+        this._clearNavSelection();
+        const navAddons = document.getElementById('nav-addons');
+        if (navAddons) navAddons.classList.add('active');
+
+        if (typeof Addons !== 'undefined' && Addons.render) {
+            Addons.render();
+        }
+    },
+
+    showNotifications() {
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = null;
+        State.activeView = 'notifications';
+
+        document.getElementById('dashboard-view')?.classList.remove('hidden');
+        document.getElementById('details-view')?.classList.add('hidden');
+        document.getElementById('settings-view')?.classList.add('hidden');
+
+        document.getElementById('page-title').textContent = 'Notifications';
+        document.getElementById('breadcrumbs')?.classList.add('hidden');
+
+        this._clearNavSelection();
+        const navNotif = document.getElementById('nav-notifications');
+        if (navNotif) navNotif.classList.add('active');
+
+        if (typeof NotificationSettings !== 'undefined' && NotificationSettings.render) {
+            NotificationSettings.render();
+        }
+    },
+
     showSettings() {
         document.getElementById('dropdown-menu')?.classList.remove('show');
         State.activeView = 'settings';
