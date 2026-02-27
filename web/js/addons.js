@@ -91,6 +91,23 @@ const Addons = {
         const enabledClass = addon.enabled ? 'enabled' : 'disabled';
         const urlMeta = addon.url ? `<span class="dot"></span><span>${this._escape(addon.url)}</span>` : '';
 
+        // Find the registration token linked to this addon
+        const token = this.tokens.find(t => t.used_by_addon_id === addon.id);
+        const tokenRow = token ? `
+                <div class="addon-token-row" onclick="event.stopPropagation()">
+                    <label>Token</label>
+                    <div class="addon-token-field">
+                        <span class="addon-token-value" id="addon-token-${addon.id}" data-token="${this._escape(token.token)}" data-masked="true">${'*'.repeat(20)}</span>
+                        <button class="btn-token-action" onclick="Addons.toggleTokenVisibility(${addon.id})" title="Show/hide token">
+                            ${this._icons.eye}
+                        </button>
+                        <button class="btn-token-action" onclick="Addons.copyToken(${addon.id})" title="Copy token">
+                            ${this._icons.copy}
+                        </button>
+                    </div>
+                </div>
+        ` : '';
+
         return `
             <div class="addon-card ${statusClass}" onclick="Addons.openAddon(${addon.id})" role="button" tabindex="0">
                 <div class="addon-card-top">
@@ -117,6 +134,7 @@ const Addons = {
                     </div>
                 </div>
                 ${addon.description ? `<p class="addon-description">${this._escape(addon.description)}</p>` : ''}
+                ${tokenRow}
             </div>
         `;
     },
@@ -371,6 +389,48 @@ const Addons = {
         }
     },
 
+    // ─── Token Actions ────────────────────────────────────────────────────
+
+    toggleTokenVisibility(addonId) {
+        const el = document.getElementById(`addon-token-${addonId}`);
+        if (!el) return;
+        const isMasked = el.dataset.masked === 'true';
+        if (isMasked) {
+            el.textContent = el.dataset.token;
+            el.dataset.masked = 'false';
+            el.closest('.addon-token-field')?.querySelector('.btn-token-action').innerHTML = this._icons.eyeOff;
+        } else {
+            el.textContent = '*'.repeat(20);
+            el.dataset.masked = 'true';
+            el.closest('.addon-token-field')?.querySelector('.btn-token-action').innerHTML = this._icons.eye;
+        }
+    },
+
+    copyToken(addonId) {
+        const el = document.getElementById(`addon-token-${addonId}`);
+        if (!el) return;
+        const text = el.dataset.token;
+        const btn = el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[1];
+
+        const doCopy = () => {
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
+                setTimeout(() => { btn.innerHTML = orig; }, 2000);
+            }
+        };
+
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(doCopy).catch(() => {
+                this._fallbackCopy(text);
+                doCopy();
+            });
+        } else {
+            this._fallbackCopy(text);
+            doCopy();
+        }
+    },
+
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     _statusClass(status) {
@@ -412,6 +472,8 @@ const Addons = {
         offline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
         toggleOn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="16" cy="12" r="3" fill="currentColor"/></svg>`,
         toggleOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="8" cy="12" r="3"/></svg>`,
-        copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
+        copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+        eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+        eyeOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
     }
 };

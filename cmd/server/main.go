@@ -221,6 +221,12 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// ─── Wearout Endpoints ───────────────────────────────────────────────
 	handlers.RegisterWearoutRoutes(mux, protect)
 
+	// ─── Add-on Endpoints ────────────────────────────────────────────────
+	handlers.RegisterAddonRoutes(mux, protect)
+
+	// ─── Notification Endpoints ──────────────────────────────────────────
+	handlers.RegisterNotificationRoutes(mux, protect)
+
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))
 
