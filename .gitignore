@@ -40,5 +40,8 @@ Thumbs.db
 *.swo
 
 
-# --- Extre ---
+# --- Test Coverage ---
+coverage.out
+
+# --- Extra ---
 ROADMAP.md

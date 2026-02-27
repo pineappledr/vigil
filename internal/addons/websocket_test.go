@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,8 +197,13 @@ func TestWebSocket_ProgressPhaseComplete(t *testing.T) {
 	id := registerTestAddon(t, db, "phase-addon")
 	_, wsURL := setupWSServer(t, db, bus, broker)
 
+	var mu sync.Mutex
 	var busEvents []events.Event
-	bus.Subscribe(func(e events.Event) { busEvents = append(busEvents, e) })
+	bus.Subscribe(func(e events.Event) {
+		mu.Lock()
+		busEvents = append(busEvents, e)
+		mu.Unlock()
+	})
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL+"?addon_id="+itoa(id), nil)
 	if err != nil {
@@ -217,6 +223,8 @@ func TestWebSocket_ProgressPhaseComplete(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
+	defer mu.Unlock()
 	found := false
 	for _, e := range busEvents {
 		if e.Type == events.PhaseComplete {
@@ -239,8 +247,13 @@ func TestWebSocket_NotificationPublishesToBus(t *testing.T) {
 	id := registerTestAddon(t, db, "notify-addon")
 	_, wsURL := setupWSServer(t, db, bus, broker)
 
+	var mu sync.Mutex
 	var busEvents []events.Event
-	bus.Subscribe(func(e events.Event) { busEvents = append(busEvents, e) })
+	bus.Subscribe(func(e events.Event) {
+		mu.Lock()
+		busEvents = append(busEvents, e)
+		mu.Unlock()
+	})
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL+"?addon_id="+itoa(id), nil)
 	if err != nil {
@@ -261,6 +274,8 @@ func TestWebSocket_NotificationPublishesToBus(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
+	defer mu.Unlock()
 	if len(busEvents) != 1 {
 		t.Fatalf("expected 1 bus event, got %d", len(busEvents))
 	}
