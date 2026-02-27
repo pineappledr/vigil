@@ -37,8 +37,12 @@ const NotificationSettings = {
         return `
             <div class="notif-header">
                 <h2>Notification Services</h2>
-                <button class="btn btn-primary" onclick="NotificationSettings.showAddService()">
-                    ${this._icons.plus} Add Service
+                <button class="btn-add-agent" onclick="NotificationSettings.showAddService()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add Service
                 </button>
             </div>
             <div class="notif-layout">
@@ -356,6 +360,16 @@ const NotificationSettings = {
 
     // ─── Add Service Modal ────────────────────────────────────────────────
 
+    _urlExamples: {
+        discord:  'discord://token@webhookid',
+        slack:    'slack://token-a/token-b/token-c',
+        telegram: 'telegram://token@telegram?channels=channel-1',
+        email:    'smtp://user:password@host:587/?to=recipient@example.com',
+        pushover: 'pushover://shoutrrr:token@user',
+        gotify:   'gotify://hostname/token',
+        generic:  'generic+https://example.com/api/webhook'
+    },
+
     showAddService() {
         Modals.create(`
             <div class="modal">
@@ -375,7 +389,7 @@ const NotificationSettings = {
                     </div>
                     <div class="form-group">
                         <label>Service Type</label>
-                        <select id="new-notif-type" class="form-input">
+                        <select id="new-notif-type" class="form-input" onchange="NotificationSettings._onTypeChange()">
                             <option value="discord">Discord</option>
                             <option value="slack">Slack</option>
                             <option value="telegram">Telegram</option>
@@ -388,18 +402,81 @@ const NotificationSettings = {
                     <div class="form-group">
                         <label>Shoutrrr URL</label>
                         <input type="text" id="new-notif-url" class="form-input form-input-mono"
-                               placeholder="discord://token@id or slack://token@channel">
-                        <span class="form-hint">See <a href="https://containrrr.dev/shoutrrr/services/overview/" target="_blank" rel="noopener">Shoutrrr docs</a> for URL format</span>
+                               placeholder="${this._urlExamples.discord}">
+                        <span class="form-hint" id="new-notif-hint">
+                            Example: <code id="new-notif-example">${this._urlExamples.discord}</code><br>
+                            See <a href="https://containrrr.dev/shoutrrr/services/overview/" target="_blank" rel="noopener">Shoutrrr docs</a> for URL format
+                        </span>
                     </div>
+                    <div id="new-notif-status" class="notif-test-status"></div>
                     <div id="new-notif-error" class="form-error"></div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-outline" id="new-notif-test-btn" onclick="NotificationSettings.testURL()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
+                            <path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                        Send Test
+                    </button>
                     <button class="btn btn-primary" onclick="NotificationSettings.submitAddService()">Add Service</button>
                 </div>
             </div>
         `);
         document.getElementById('new-notif-name')?.focus();
+    },
+
+    async testURL() {
+        const url = document.getElementById('new-notif-url')?.value.trim();
+        const statusEl = document.getElementById('new-notif-status');
+        const errorEl = document.getElementById('new-notif-error');
+        const btn = document.getElementById('new-notif-test-btn');
+
+        if (errorEl) errorEl.textContent = '';
+        if (!url) {
+            if (errorEl) errorEl.textContent = 'Enter a Shoutrrr URL first';
+            return;
+        }
+
+        if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+        if (statusEl) { statusEl.textContent = ''; statusEl.className = 'notif-test-status'; }
+
+        try {
+            const resp = await API.testNotificationURL(url, 'Vigil test notification — if you see this, it works!');
+            const data = await resp.json().catch(() => ({}));
+            if (data.success) {
+                if (statusEl) {
+                    statusEl.textContent = 'Test sent successfully! Check your service.';
+                    statusEl.className = 'notif-test-status success';
+                }
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = data.error || 'Test failed — check URL format';
+                    statusEl.className = 'notif-test-status error';
+                }
+            }
+        } catch {
+            if (statusEl) {
+                statusEl.textContent = 'Connection error';
+                statusEl.className = 'notif-test-status error';
+            }
+        }
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
+                <path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg> Send Test`;
+        }
+    },
+
+    _onTypeChange() {
+        const type = document.getElementById('new-notif-type')?.value;
+        const urlInput = document.getElementById('new-notif-url');
+        const example = document.getElementById('new-notif-example');
+        const url = this._urlExamples[type] || '';
+        if (urlInput) urlInput.placeholder = url;
+        if (example) example.textContent = url;
     },
 
     async submitAddService() {

@@ -583,7 +583,8 @@
         gap: 12px;
     }
 
-    .notif-header .btn {
+    .notif-header .btn,
+    .notif-header .btn-add-agent {
         width: 100%;
         justify-content: center;
     }
@@ -600,4 +601,47 @@
         flex: 1;
         justify-content: center;
     }
+}
+
+/* ============================================
+   TEST STATUS & OUTLINE BUTTON
+   ============================================ */
+
+.btn-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--accent-primary, #6366f1);
+    border: 1px solid var(--accent-primary, #6366f1);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--transition-fast, 0.15s);
+}
+
+.btn-outline:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.btn-outline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.notif-test-status {
+    font-size: 0.8rem;
+    padding: 6px 0;
+    min-height: 1.5em;
+}
+
+.notif-test-status.success {
+    color: var(--text-success, #4ade80);
+}
+
+.notif-test-status.error {
+    color: var(--text-danger, #f87171);
 }

@@ -635,6 +635,178 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 
 ---
 
+## 🧩 Add-ons
+
+Vigil supports **add-ons** — external programs that extend the server with custom functionality. Add-ons register themselves via the API, stream real-time telemetry over WebSocket, and render their UI from a declarative JSON manifest.
+
+### How Add-ons Work
+
+```
+┌──────────────┐   1. Register     ┌──────────────┐   SSE Stream   ┌──────────────┐
+│   Add-on     │ ───(POST /api)──► │ Vigil Server │ ─────────────► │   Browser    │
+│  (external)  │                   │              │                │  (Dashboard) │
+│              │ ◄──(WebSocket)──► │  /api/addons │                │  Add-ons Tab │
+│              │   2. Telemetry    │     /ws      │                │              │
+└──────────────┘                   └──────────────┘                └──────────────┘
+```
+
+1. **Register** — The add-on POSTs a JSON manifest describing its name, version, and UI pages
+2. **Connect** — The add-on opens a WebSocket to stream telemetry (progress, logs, notifications)
+3. **Render** — The Vigil dashboard reads the manifest and renders the add-on's UI automatically
+4. **Act** — Users trigger actions from the UI; the server validates and signs commands for the agent
+
+### Creating an Add-on
+
+#### Step 1: Define a Manifest
+
+The manifest is a JSON document that describes your add-on's UI. It contains pages, and each page contains components.
+
+```json
+{
+  "name": "my-addon",
+  "version": "1.0.0",
+  "description": "Example add-on for Vigil",
+  "author": "Your Name",
+  "pages": [
+    {
+      "id": "config",
+      "title": "Configuration",
+      "components": [
+        {
+          "type": "form",
+          "id": "settings-form",
+          "title": "Settings",
+          "config": {
+            "action": "apply_settings",
+            "fields": [
+              { "name": "target_pool", "label": "Target Pool", "type": "select", "required": true, "options": [{"label": "Pool A", "value": "pool-a"}] },
+              { "name": "passes", "label": "Number of Passes", "type": "number", "required": true },
+              { "name": "dry_run", "label": "Dry Run", "type": "checkbox" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "title": "Status",
+      "components": [
+        { "type": "progress", "id": "job-progress", "title": "Job Progress" },
+        { "type": "log-viewer", "id": "job-logs", "title": "Logs" },
+        { "type": "chart", "id": "speed-chart", "title": "Transfer Speed", "config": { "y_label": "MB/s" } }
+      ]
+    }
+  ]
+}
+```
+
+**Available component types:**
+
+| Type | Description |
+|------|-------------|
+| `form` | Input form with text, number, select, checkbox, range fields. Supports `visible_when`, `depends_on`, `live_calculation`, and `security_gate` |
+| `progress` | Per-job progress cards with phase tracking, speed, and ETA |
+| `chart` | Chart.js time-series with optional dual Y-axes |
+| `smart-table` | SMART attribute table with delta highlighting |
+| `log-viewer` | Auto-tailing log terminal with severity filtering |
+
+#### Step 2: Register the Add-on
+
+```bash
+curl -X POST http://YOUR_SERVER:9080/api/addons \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "manifest": {
+      "name": "my-addon",
+      "version": "1.0.0",
+      "description": "Example add-on",
+      "pages": [ ... ]
+    }
+  }'
+```
+
+The server validates the manifest structure and returns the addon record with an `id`.
+
+#### Step 3: Connect via WebSocket
+
+After registration, open a WebSocket connection to stream telemetry:
+
+```
+ws://YOUR_SERVER:9080/api/addons/ws?addon_id=<ID>
+```
+
+Send JSON frames to report status:
+
+```json
+// Heartbeat (keeps addon "online")
+{"type": "heartbeat"}
+
+// Progress update
+{"type": "progress", "payload": {
+  "job_id": "job-001",
+  "phase": "scanning",
+  "percent": 45.5,
+  "message": "Scanning drive 3 of 8",
+  "bytes_done": 5368709120,
+  "bytes_total": 11811160064
+}}
+
+// Log entry
+{"type": "log", "payload": {
+  "level": "info",
+  "message": "Starting pass 2",
+  "source": "worker-1"
+}}
+
+// Notification (published to the event bus → Shoutrrr)
+{"type": "notification", "payload": {
+  "event_type": "job_complete",
+  "severity": "info",
+  "message": "All drives passed burn-in test",
+  "metadata": {"drives": "8", "duration": "24h"}
+}}
+```
+
+All telemetry is bridged to SSE so the browser receives live updates automatically.
+
+#### Step 4: View in the Dashboard
+
+Navigate to **Extensions → Add-ons** in the sidebar. Your addon appears in the list. Click it to open its manifest-driven UI with live telemetry.
+
+### Add-on Lifecycle
+
+| Status | Meaning |
+|--------|---------|
+| **Online** | WebSocket connected and heartbeats received |
+| **Degraded** | Missed 3 consecutive heartbeat intervals |
+| **Offline** | WebSocket disconnected |
+
+The server runs a heartbeat monitor that automatically transitions addons between these states and publishes events to the notification bus.
+
+### Form Features
+
+Forms support advanced behaviors defined in the manifest:
+
+- **`visible_when`** — Conditionally show fields: `"visible_when": "mode = advanced"` (supports `=`, `!=`, `>`, `<`, `>=`, `<=`)
+- **`depends_on`** — Cascading dropdowns: when a parent field changes, child options are fetched from `GET /api/addons/{id}/options?field={name}&parent_value={val}`
+- **`live_calculation`** — Safe arithmetic expressions: `"live_calculation": "capacity * (percent / 100)"` — evaluated in the browser with a sandboxed parser
+- **`security_gate`** — Destructive actions require a 3-step confirmation: Password → Review & type CONFIRM → Execute
+
+### API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/addons` | Register/update add-on (upsert by name) |
+| `GET` | `/api/addons` | List all registered add-ons |
+| `GET` | `/api/addons/{id}` | Get add-on details + manifest |
+| `DELETE` | `/api/addons/{id}` | Deregister add-on |
+| `PUT` | `/api/addons/{id}/enabled` | Enable/disable add-on |
+| `GET` | `/api/addons/{id}/telemetry` | SSE stream (browser) |
+| `GET` | `/api/addons/ws?addon_id=X` | WebSocket (add-on process) |
+
+---
+
 ## 🔨 Build from Source
 
 ```bash

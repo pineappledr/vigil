@@ -227,6 +227,10 @@ const API = {
         return this.post('/api/notifications/test', { service_id: serviceId, message });
     },
 
+    async testNotificationURL(url, message) {
+        return this.post('/api/notifications/test-url', { url, message });
+    },
+
     async getNotificationHistory(limit = 50) {
         return this.get(`/api/notifications/history?limit=${limit}`);
     }

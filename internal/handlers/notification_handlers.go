@@ -280,6 +280,47 @@ func TestFireNotification(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// TestNotificationURL sends a test message to a raw Shoutrrr URL (no saved service needed).
+// POST /api/notifications/test-url
+func TestNotificationURL(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL     string `json:"url"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.URL == "" {
+		JSONError(w, "url is required", http.StatusBadRequest)
+		return
+	}
+
+	msg := req.Message
+	if msg == "" {
+		msg = "Vigil test notification"
+	}
+
+	sender := NotifySender
+	if sender == nil {
+		sender = notify.ShoutrrrSender{}
+	}
+
+	if err := sender.Send(req.URL, msg); err != nil {
+		log.Printf("🔔 Test URL fire failed: %v", err)
+		JSONResponse(w, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	JSONResponse(w, map[string]interface{}{
+		"success": true,
+		"message": "Test notification sent",
+	})
+}
+
 // ─── History ─────────────────────────────────────────────────────────────
 
 // GetNotificationHistory returns recent notification records.
@@ -320,6 +361,7 @@ func RegisterNotificationRoutes(mux *http.ServeMux, protect func(http.HandlerFun
 	mux.HandleFunc("PUT /api/notifications/services/{id}/digest", protect(UpdateDigestConfig))
 
 	mux.HandleFunc("POST /api/notifications/test", protect(TestFireNotification))
+	mux.HandleFunc("POST /api/notifications/test-url", protect(TestNotificationURL))
 	mux.HandleFunc("GET /api/notifications/history", protect(GetNotificationHistory))
 }
 
