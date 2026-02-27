@@ -23,7 +23,7 @@ const ManifestRenderer = {
         this.manifest = manifest;
         this.activePage = manifest.pages[0]?.id || null;
 
-        const container = document.getElementById('dashboard-view');
+        const container = document.getElementById('addons-view');
         if (!container) return;
 
         container.innerHTML = this._buildShell();

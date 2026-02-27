@@ -15,7 +15,7 @@ const NotificationSettings = {
     providerDefs: null,
 
     async render() {
-        const container = document.getElementById('dashboard-view');
+        const container = document.getElementById('notifications-view');
         if (!container) return;
 
         container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading notifications...</div>';

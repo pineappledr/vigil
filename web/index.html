@@ -83,7 +83,7 @@
 
                 <div class="nav-section">
                     <span class="nav-label">Monitoring</span>
-                    <a href="javascript:void(0)" class="nav-item" id="nav-temperature" onclick="Navigation.showTemperature()">
+                    <a href="javascript:void(0)" class="nav-item" id="nav-temperature">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
                         </svg>
@@ -93,7 +93,7 @@
 
                 <div class="nav-section">
                     <span class="nav-label">Extensions</span>
-                    <a href="javascript:void(0)" class="nav-item" id="nav-addons" onclick="Navigation.showAddons()">
+                    <a href="javascript:void(0)" class="nav-item" id="nav-addons">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2L2 7l10 5 10-5-10-5z"/>
                             <path d="M2 17l10 5 10-5"/>
@@ -105,7 +105,7 @@
 
                 <div class="nav-section">
                     <span class="nav-label">Management</span>
-                    <a href="javascript:void(0)" class="nav-item" id="nav-agents" onclick="Navigation.showAgents()">
+                    <a href="javascript:void(0)" class="nav-item" id="nav-agents">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                             <circle cx="9" cy="7" r="4"/>
@@ -114,7 +114,7 @@
                         </svg>
                         Agents
                     </a>
-                    <a href="javascript:void(0)" class="nav-item" id="nav-notifications" onclick="Navigation.showNotifications()">
+                    <a href="javascript:void(0)" class="nav-item" id="nav-notifications">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -180,7 +180,7 @@
                 </div>
             </header>
 
-            <div id="dashboard-view" class="view">
+            <div id="dashboard-view" class="view view-section">
                 <div class="summary-grid" id="summary-cards"></div>
                 <div class="section-header"><h2>Servers</h2></div>
                 <div id="server-list" class="server-grid">
@@ -197,7 +197,7 @@
                 </div>
             </div>
 
-            <div id="details-view" class="view hidden">
+            <div id="details-view" class="view view-section hidden">
                 <button class="btn-back" id="btn-back">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="19" y1="12" x2="5" y2="12"/>
@@ -215,6 +215,13 @@
                     </section>
                 </div>
             </div>
+
+            <div id="zfs-view" class="view view-section hidden"></div>
+            <div id="agents-view" class="view view-section hidden"></div>
+            <div id="addons-view" class="view view-section hidden"></div>
+            <div id="notifications-view" class="view view-section hidden"></div>
+            <div id="temperature-view" class="view view-section hidden"></div>
+            <div id="settings-view" class="view view-section settings-view hidden"></div>
         </main>
     </div>
 

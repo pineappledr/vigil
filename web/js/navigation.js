@@ -1,21 +1,32 @@
 /**
  * Vigil Dashboard - Navigation Controller
+ *
+ * Uses a centralized _switchView() to hide ALL .view-section containers
+ * and show only the target. Each major view has its own container element,
+ * eliminating innerHTML conflicts between views.
  */
 
 const Navigation = {
+    /**
+     * Central view switcher.  Hides every .view-section, then shows the
+     * one identified by targetId.  Optionally resets shared state, updates
+     * the page title, hides breadcrumbs, and highlights a nav item.
+     */
+    _switchView(targetId) {
+        document.querySelectorAll('.view-section').forEach(el => {
+            el.classList.add('hidden');
+        });
+        const target = document.getElementById(targetId);
+        if (target) target.classList.remove('hidden');
+    },
+
     showDashboard() {
         State.activeServerIndex = null;
         State.activeServerHostname = null;
         State.activeFilter = null;
         State.activeView = 'drives';
 
-        const dashboardView = document.getElementById('dashboard-view');
-        const detailsView = document.getElementById('details-view');
-        const settingsView = document.getElementById('settings-view');
-
-        if (dashboardView) dashboardView.classList.remove('hidden');
-        if (detailsView) detailsView.classList.add('hidden');
-        if (settingsView) settingsView.classList.add('hidden');
+        this._switchView('dashboard-view');
 
         const pageTitle = document.getElementById('page-title');
         const breadcrumbs = document.getElementById('breadcrumbs');
@@ -26,6 +37,7 @@ const Navigation = {
         const navDashboard = document.getElementById('nav-dashboard');
         if (navDashboard) navDashboard.classList.add('active');
 
+        Renderer.ensureDashboardStructure();
         Renderer.dashboard(State.data);
         Data.updateSidebar();
     },
@@ -42,9 +54,7 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'drives';
 
-        document.getElementById('dashboard-view')?.classList.remove('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
-        document.getElementById('settings-view')?.classList.add('hidden');
+        this._switchView('dashboard-view');
 
         document.getElementById('page-title').textContent = server.hostname;
         document.getElementById('crumb-server').textContent = server.hostname;
@@ -55,6 +65,7 @@ const Navigation = {
             el.classList.toggle('active', i === sortedIndex);
         });
 
+        Renderer.ensureDashboardStructure();
         Renderer.serverDetail(server, actualIndex);
     },
 
@@ -67,8 +78,7 @@ const Navigation = {
         State.activeServerHostname = server.hostname;
         State.activeView = 'drives';
 
-        document.getElementById('dashboard-view')?.classList.add('hidden');
-        document.getElementById('details-view')?.classList.remove('hidden');
+        this._switchView('details-view');
 
         document.getElementById('page-title').textContent = Utils.getDriveName(drive);
         document.getElementById('crumb-server').textContent = `${server.hostname} › ${Utils.getDriveName(drive)}`;
@@ -83,9 +93,7 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'zfs';
 
-        document.getElementById('dashboard-view')?.classList.remove('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
-        document.getElementById('settings-view')?.classList.add('hidden');
+        this._switchView('zfs-view');
 
         document.getElementById('page-title').textContent = 'ZFS Pools';
         document.getElementById('breadcrumbs')?.classList.add('hidden');
@@ -107,8 +115,7 @@ const Navigation = {
         State.activeFilter = filter;
         State.activeView = 'drives';
 
-        document.getElementById('dashboard-view')?.classList.remove('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
+        this._switchView('dashboard-view');
 
         const titles = {
             attention: 'Drives Needing Attention',
@@ -119,6 +126,8 @@ const Navigation = {
         document.getElementById('breadcrumbs')?.classList.add('hidden');
 
         this._clearNavSelection();
+
+        Renderer.ensureDashboardStructure();
 
         const filterFns = {
             attention: d => Utils.getHealthStatus(d) !== 'healthy',
@@ -134,9 +143,7 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'agents';
 
-        document.getElementById('dashboard-view')?.classList.remove('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
-        document.getElementById('settings-view')?.classList.add('hidden');
+        this._switchView('agents-view');
 
         document.getElementById('page-title').textContent = 'Agents';
         document.getElementById('breadcrumbs')?.classList.add('hidden');
@@ -156,9 +163,7 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'addons';
 
-        document.getElementById('dashboard-view')?.classList.remove('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
-        document.getElementById('settings-view')?.classList.add('hidden');
+        this._switchView('addons-view');
 
         document.getElementById('page-title').textContent = 'Add-ons';
         document.getElementById('breadcrumbs')?.classList.add('hidden');
@@ -178,9 +183,7 @@ const Navigation = {
         State.activeFilter = null;
         State.activeView = 'notifications';
 
-        document.getElementById('dashboard-view')?.classList.remove('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
-        document.getElementById('settings-view')?.classList.add('hidden');
+        this._switchView('notifications-view');
 
         document.getElementById('page-title').textContent = 'Notifications';
         document.getElementById('breadcrumbs')?.classList.add('hidden');
@@ -194,27 +197,40 @@ const Navigation = {
         }
     },
 
+    showTemperature() {
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = null;
+        State.activeView = 'temperature';
+
+        this._switchView('temperature-view');
+
+        document.getElementById('page-title').textContent = 'Temperature Monitor';
+        document.getElementById('breadcrumbs')?.classList.add('hidden');
+
+        this._clearNavSelection();
+        const navTemp = document.getElementById('nav-temperature');
+        if (navTemp) navTemp.classList.add('active');
+
+        if (typeof Temperature !== 'undefined' && Temperature.render) {
+            Temperature.render();
+        }
+    },
+
     showSettings() {
         document.getElementById('dropdown-menu')?.classList.remove('show');
         State.activeView = 'settings';
 
-        document.getElementById('dashboard-view')?.classList.add('hidden');
-        document.getElementById('details-view')?.classList.add('hidden');
+        this._switchView('settings-view');
 
-        let settingsView = document.getElementById('settings-view');
-        if (!settingsView) {
-            settingsView = document.createElement('div');
-            settingsView.id = 'settings-view';
-            settingsView.className = 'view settings-view';
-            document.querySelector('.main-content')?.appendChild(settingsView);
+        const settingsView = document.getElementById('settings-view');
+        if (settingsView) {
+            // Safe: settingsPage() returns a static template with no user-controlled data
+            const range = document.createRange();
+            range.selectNodeContents(settingsView);
+            range.deleteContents();
+            settingsView.append(range.createContextualFragment(Renderer.settingsPage()));
         }
-
-        settingsView.classList.remove('hidden');
-        // Safe: settingsPage() returns a static template with no user-controlled data
-        const range = document.createRange();
-        range.selectNodeContents(settingsView);
-        range.deleteContents();
-        settingsView.append(range.createContextualFragment(Renderer.settingsPage()));
 
         document.getElementById('page-title').textContent = 'Settings';
         document.getElementById('breadcrumbs')?.classList.add('hidden');

@@ -49,7 +49,7 @@ const ZFS = {
     },
 
     render() {
-        const container = document.getElementById('dashboard-view');
+        const container = document.getElementById('zfs-view');
         if (!container) return;
 
         const stats = State.getZFSStats();

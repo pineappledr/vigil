@@ -8,7 +8,7 @@ const Addons = {
     activeAddonId: null,
 
     async render() {
-        const container = document.getElementById('dashboard-view');
+        const container = document.getElementById('addons-view');
         if (!container) return;
 
         container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading add-ons...</div>';
