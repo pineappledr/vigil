@@ -23,10 +23,19 @@ const Addons = {
                 this._fetch('/api/addons/tokens')
             ]);
 
-            this.addons = this._parseArray(addonsResp);
+            if (addonsResp?.ok) {
+                const parsed = await addonsResp.json().catch(() => null);
+                this.addons = Array.isArray(parsed) ? parsed : [];
+            } else {
+                this.addons = [];
+            }
 
-            const tokensData = tokensResp?.ok ? await tokensResp.json().catch(() => null) : null;
-            this.tokens = Array.isArray(tokensData?.tokens) ? tokensData.tokens : [];
+            if (tokensResp?.ok) {
+                const data = await tokensResp.json().catch(() => null);
+                this.tokens = Array.isArray(data?.tokens) ? data.tokens : [];
+            } else {
+                this.tokens = [];
+            }
         } catch (e) {
             fetchError = e;
             this.addons = [];
@@ -56,11 +65,6 @@ const Addons = {
         } finally {
             clearTimeout(timer);
         }
-    },
-
-    _parseArray(resp) {
-        if (!resp?.ok) return [];
-        return resp.json().then(d => Array.isArray(d) ? d : []).catch(() => []);
     },
 
     // ─── View States ─────────────────────────────────────────────────────
