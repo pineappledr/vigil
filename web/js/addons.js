@@ -248,10 +248,9 @@ const Addons = {
             return;
         }
 
-        const serverURL = window.location.origin;
         const copyIcon = this._icons.copy;
 
-        const modal = Modals.create(`
+        Modals.create(`
             <div class="modal modal-add-agent">
                 <div class="modal-header">
                     <h3>Add Add-on</h3>
@@ -264,20 +263,16 @@ const Addons = {
                 </div>
                 <div class="modal-body" style="padding-bottom: 0;">
                     <p class="agent-tab-hint">
-                        Copy the <code>docker-compose.yml</code> to deploy the add-on daemon, or use the fields below to configure it manually.
+                        Register an add-on to extend Vigil with new capabilities. The add-on will connect to this server using the token below.
                     </p>
                     <div class="form-group">
                         <label>Name</label>
-                        <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Node 1">
+                        <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Hub" maxlength="128">
                     </div>
                     <div class="form-group">
-                        <label>Server URL</label>
-                        <div class="form-input-with-copy">
-                            <input type="text" id="addon-server-url" class="form-input form-input-mono" value="${serverURL}" readonly>
-                            <button class="btn-copy" onclick="Addons._copyInput('addon-server-url')" title="Copy">
-                                ${copyIcon}
-                            </button>
-                        </div>
+                        <label>Add-on URL</label>
+                        <input type="text" id="addon-url" class="form-input form-input-mono" placeholder="e.g., http://192.168.1.50:9100">
+                        <span class="form-hint">Network address where the add-on is running</span>
                     </div>
                     <div class="form-group">
                         <label>Token</label>
@@ -289,26 +284,14 @@ const Addons = {
                         </div>
                         <span class="form-hint form-hint-warning">This token expires in 1 hour. Save it — it will not be shown again.</span>
                     </div>
-                    <div class="form-group">
-                        <label>URL / IP <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
-                        <input type="text" id="addon-url" class="form-input form-input-mono" placeholder="e.g., http://192.168.1.50:8090">
-                        <span class="form-hint">Network address where this add-on will be accessible</span>
-                    </div>
                     <div id="addon-reg-error" class="form-error"></div>
                 </div>
-                <div class="modal-footer agent-modal-footer">
-                    <div class="agent-copy-group">
-                        <button class="btn btn-secondary btn-with-icon" onclick="Addons.copyCompose()">
-                            ${copyIcon}
-                            <span id="addon-copy-label">Copy docker compose</span>
-                        </button>
-                    </div>
+                <div class="modal-footer">
                     <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register Add-on</button>
                 </div>
             </div>
         `);
 
-        modal._addonState = { serverURL, token };
         document.getElementById('addon-name')?.focus();
     },
 
@@ -352,49 +335,6 @@ const Addons = {
         } catch {
             if (errorEl) errorEl.textContent = 'Connection error';
         }
-    },
-
-    copyCompose() {
-        const name = document.getElementById('addon-name')?.value.trim() || 'vigil-addon';
-        const serverURL = document.getElementById('addon-server-url')?.value || '';
-        const token = document.getElementById('addon-token')?.value || '';
-        const wsURL = serverURL.replace(/^http/, 'ws') + '/api/addons/ws';
-
-        const yaml = `# Vigil Add-on - docker-compose.yml
-services:
-  ${name}:
-    image: ghcr.io/pineappledr/vigil-addon:latest
-    container_name: ${name}
-    restart: unless-stopped
-    environment:
-      VIGIL_SERVER: ${serverURL}
-      VIGIL_WS: ${wsURL}
-      VIGIL_TOKEN: ${token}
-      ADDON_NAME: ${name}
-      TZ: \${TZ:-UTC}`;
-
-        this._copyText(yaml, null);
-
-        const label = document.getElementById('addon-copy-label');
-        if (label) {
-            const orig = label.textContent;
-            label.textContent = 'Copied!';
-            setTimeout(() => { label.textContent = orig; }, 2000);
-        }
-    },
-
-    _readonlyField(label, id, value) {
-        return `
-            <div class="form-group">
-                <label>${label}</label>
-                <div class="form-input-with-copy">
-                    <input type="text" id="${id}" class="form-input form-input-mono" value="${this._escape(value)}" readonly>
-                    <button class="btn-copy" onclick="Addons._copyInput('${id}')" title="Copy">
-                        ${this._icons.copy}
-                    </button>
-                </div>
-            </div>
-        `;
     },
 
     // ─── Addon Actions ───────────────────────────────────────────────────
