@@ -510,8 +510,10 @@ const NotificationSettings = {
 
             const labelHtml = f.type === 'checkbox' ? '' :
                 `<label>${this._escape(f.label)}${req}</label>`;
+            const docsLink = f.docs_url ?
+                ` <a href="${this._escape(f.docs_url)}" target="_blank" rel="noopener noreferrer">Shoutrrr Services</a>` : '';
             const helpHtml = f.help_text ?
-                `<span class="form-hint">${this._escape(f.help_text)}</span>` : '';
+                `<span class="form-hint">${this._escape(f.help_text)}${docsLink}</span>` : '';
 
             return `<div class="form-group">${labelHtml}${input}${helpHtml}</div>`;
         }).join('');

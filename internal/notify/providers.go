@@ -32,6 +32,7 @@ type ProviderField struct {
 	Type        FieldType      `json:"type"`
 	Placeholder string         `json:"placeholder,omitempty"`
 	HelpText    string         `json:"help_text,omitempty"`
+	DocsURL     string         `json:"docs_url,omitempty"`
 	Required    bool           `json:"required"`
 	Options     []SelectOption `json:"options,omitempty"`
 	Default     string         `json:"default,omitempty"`
@@ -188,7 +189,8 @@ var providerRegistry = map[string]ProviderDef{
 		Fields: []ProviderField{
 			{Key: "webhook_url", Label: "Webhook URL", Type: FieldText, Required: true,
 				Placeholder: "https://example.com/api/webhook",
-				HelpText:    "For all supported services and URL formats, see https://shoutrrr.nickfedor.com/v0.13.2/services/overview/"},
+				HelpText:    "For all supported services and URL formats, see the Shoutrrr documentation.",
+				DocsURL:     "https://shoutrrr.nickfedor.com/v0.13.2/services/overview/"},
 		},
 	},
 }
