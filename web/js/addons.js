@@ -227,9 +227,19 @@ const Addons = {
 
     // ─── Add Add-on Modal ────────────────────────────────────────────────
 
-    showAddAddon() {
-        Modals.create(`
-            <div class="modal">
+    async showAddAddon() {
+        let token = '';
+        try {
+            const resp = await API.createAddonToken('');
+            const data = await resp.json();
+            token = data.token || '';
+        } catch {}
+
+        const serverURL = window.location.origin;
+        const copyIcon = this._icons.copy;
+
+        const modal = Modals.create(`
+            <div class="modal modal-add-agent">
                 <div class="modal-header">
                     <h3>Add Add-on</h3>
                     <button class="modal-close" onclick="Modals.close(this)">
@@ -239,25 +249,53 @@ const Addons = {
                         </svg>
                     </button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="padding-bottom: 0;">
+                    <p class="agent-tab-hint">
+                        Copy the <code>docker-compose.yml</code> to deploy the add-on daemon, or use the fields below to configure it manually.
+                    </p>
                     <div class="form-group">
                         <label>Name</label>
                         <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Node 1">
                     </div>
                     <div class="form-group">
-                        <label>URL / IP</label>
+                        <label>Server URL</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="addon-server-url" class="form-input form-input-mono" value="${serverURL}" readonly>
+                            <button class="btn-copy" onclick="Addons._copyInput('addon-server-url')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Token</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="addon-token" class="form-input form-input-mono" value="${token}" readonly>
+                            <button class="btn-copy" onclick="Addons._copyInput('addon-token')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
+                        <span class="form-hint form-hint-warning">Save this token — it will not be shown again.</span>
+                    </div>
+                    <div class="form-group">
+                        <label>URL / IP <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
                         <input type="text" id="addon-url" class="form-input form-input-mono" placeholder="e.g., http://192.168.1.50:8090">
                         <span class="form-hint">Network address where this add-on will be accessible</span>
                     </div>
                     <div id="addon-reg-error" class="form-error"></div>
-                    <div id="addon-reg-result" class="hidden"></div>
                 </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
-                    <button class="btn btn-primary" id="addon-reg-submit" onclick="Addons.submitAddAddon()">Register Add-on</button>
+                <div class="modal-footer agent-modal-footer">
+                    <div class="agent-copy-group">
+                        <button class="btn btn-secondary btn-with-icon" onclick="Addons.copyCompose()">
+                            ${copyIcon}
+                            <span id="addon-copy-label">Copy docker compose</span>
+                        </button>
+                    </div>
+                    <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register Add-on</button>
                 </div>
             </div>
         `);
+
+        modal._addonState = { serverURL, token };
         document.getElementById('addon-name')?.focus();
     },
 
@@ -265,56 +303,53 @@ const Addons = {
         const name = document.getElementById('addon-name')?.value.trim();
         const url = document.getElementById('addon-url')?.value.trim();
         const errorEl = document.getElementById('addon-reg-error');
-        const resultEl = document.getElementById('addon-reg-result');
-        const submitBtn = document.getElementById('addon-reg-submit');
 
-        if (!name) { if (errorEl) errorEl.textContent = 'Name is required'; return; }
-        if (errorEl) errorEl.textContent = '';
-        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Registering...'; }
+        if (!name) {
+            if (errorEl) errorEl.textContent = 'Name is required';
+            return;
+        }
 
         try {
             const resp = await API.registerAddonFromUI(name, url);
             const data = await resp.json().catch(() => ({}));
 
-            if (resp.ok && data.token) {
-                document.getElementById('addon-name')?.closest('.form-group')?.classList.add('hidden');
-                document.getElementById('addon-url')?.closest('.form-group')?.classList.add('hidden');
-                if (submitBtn) submitBtn.classList.add('hidden');
-
-                const serverURL = window.location.origin;
-                const wsURL = serverURL.replace(/^http/, 'ws') + '/api/addons/ws?addon_id=' + data.addon.id;
-
-                if (resultEl) {
-                    resultEl.classList.remove('hidden');
-                    resultEl.innerHTML = `
-                        <div class="addon-reg-success">
-                            <div class="addon-reg-check">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #4ade80)" stroke-width="2" width="32" height="32">
-                                    <circle cx="12" cy="12" r="10"/><polyline points="16 8 10 16 7 13"/>
-                                </svg>
-                            </div>
-                            <p><strong>${this._escape(name)}</strong> registered successfully!</p>
-                            <span class="form-hint">Use these details to configure your add-on daemon:</span>
-                        </div>
-                        ${this._readonlyField('Server URL', 'addon-res-server', serverURL)}
-                        ${this._readonlyField('Add-on ID', 'addon-res-id', String(data.addon.id))}
-                        ${this._readonlyField('Registration Token', 'addon-res-token', data.token)}
-                        ${this._readonlyField('WebSocket Endpoint', 'addon-res-ws', wsURL)}
-                        <span class="form-hint form-hint-warning">Save this token — it will not be shown again.</span>
-                    `;
-                }
-
-                const footer = document.querySelector('.modal-footer');
-                if (footer) {
-                    footer.innerHTML = '<button class="btn btn-primary" onclick="Modals.close(this); Addons.render();">Done</button>';
-                }
+            if (resp.ok) {
+                document.querySelector('.modal-overlay')?.remove();
+                this.render();
             } else {
                 if (errorEl) errorEl.textContent = data.error || 'Failed to register add-on';
-                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Register Add-on'; }
             }
         } catch {
             if (errorEl) errorEl.textContent = 'Connection error';
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Register Add-on'; }
+        }
+    },
+
+    copyCompose() {
+        const name = document.getElementById('addon-name')?.value.trim() || 'vigil-addon';
+        const serverURL = document.getElementById('addon-server-url')?.value || '';
+        const token = document.getElementById('addon-token')?.value || '';
+        const wsURL = serverURL.replace(/^http/, 'ws') + '/api/addons/ws';
+
+        const yaml = `# Vigil Add-on - docker-compose.yml
+services:
+  ${name}:
+    image: ghcr.io/pineappledr/vigil-addon:latest
+    container_name: ${name}
+    restart: unless-stopped
+    environment:
+      VIGIL_SERVER: ${serverURL}
+      VIGIL_WS: ${wsURL}
+      VIGIL_TOKEN: ${token}
+      ADDON_NAME: ${name}
+      TZ: \${TZ:-UTC}`;
+
+        this._copyText(yaml, null);
+
+        const label = document.getElementById('addon-copy-label');
+        if (label) {
+            const orig = label.textContent;
+            label.textContent = 'Copied!';
+            setTimeout(() => { label.textContent = orig; }, 2000);
         }
     },
 
