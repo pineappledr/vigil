@@ -203,7 +203,7 @@ const Addons = {
     },
 
     _tokenRow(token) {
-        const truncated = token.token.substring(0, 16) + '...';
+        const truncated = token.token; // Already masked by the server (first 16 chars)
         const now = new Date();
         const isUsed = !!token.used_at;
         const isExpired = token.expires_at ? new Date(token.expires_at + 'Z') < now : false;
@@ -235,9 +235,18 @@ const Addons = {
         let token = '';
         try {
             const resp = await API.createAddonToken('');
+            if (!resp.ok) throw new Error('Token creation failed');
             const data = await resp.json();
             token = data.token || '';
-        } catch {}
+        } catch {
+            alert('Failed to generate registration token. Please try again.');
+            return;
+        }
+
+        if (!token) {
+            alert('Failed to generate registration token. Please try again.');
+            return;
+        }
 
         const serverURL = window.location.origin;
         const copyIcon = this._icons.copy;
@@ -278,7 +287,7 @@ const Addons = {
                                 ${copyIcon}
                             </button>
                         </div>
-                        <span class="form-hint form-hint-warning">Save this token — it will not be shown again.</span>
+                        <span class="form-hint form-hint-warning">This token expires in 1 hour. Save it — it will not be shown again.</span>
                     </div>
                     <div class="form-group">
                         <label>URL / IP <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
@@ -306,15 +315,32 @@ const Addons = {
     async submitAddAddon() {
         const name = document.getElementById('addon-name')?.value.trim();
         const url = document.getElementById('addon-url')?.value.trim();
+        const token = document.getElementById('addon-token')?.value.trim();
         const errorEl = document.getElementById('addon-reg-error');
 
         if (!name) {
             if (errorEl) errorEl.textContent = 'Name is required';
             return;
         }
+        if (name.length > 128) {
+            if (errorEl) errorEl.textContent = 'Name must be 128 characters or fewer';
+            return;
+        }
+        if (!token) {
+            if (errorEl) errorEl.textContent = 'Token is missing — close and reopen the modal';
+            return;
+        }
+        if (url && url.length > 512) {
+            if (errorEl) errorEl.textContent = 'URL must be 512 characters or fewer';
+            return;
+        }
 
         try {
-            const resp = await API.registerAddonFromUI(name, url);
+            const resp = await fetch('/api/addons/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, url, token })
+            });
             const data = await resp.json().catch(() => ({}));
 
             if (resp.ok) {

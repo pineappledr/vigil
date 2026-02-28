@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"vigil/internal/addons"
 	"vigil/internal/db"
@@ -156,22 +157,55 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 
 // ─── Admin Add-on Registration (UI Flow) ─────────────────────────────────
 
-// CreateAddonFromUI creates a new add-on record with name + URL and generates a token.
+// CreateAddonFromUI creates a new add-on record with name + URL and binds
+// the pre-generated registration token to it.
 // POST /api/addons/register
 func CreateAddonFromUI(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
-		URL  string `json:"url"`
+		Name  string `json:"name"`
+		URL   string `json:"url"`
+		Token string `json:"token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		JSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
+
+	// ── Validate inputs ──────────────────────────────────────────────
 	if req.Name == "" {
 		JSONError(w, "name is required", http.StatusBadRequest)
 		return
 	}
+	if len(req.Name) > 128 {
+		JSONError(w, "name must be 128 characters or fewer", http.StatusBadRequest)
+		return
+	}
+	if req.Token == "" {
+		JSONError(w, "token is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.URL) > 512 {
+		JSONError(w, "URL must be 512 characters or fewer", http.StatusBadRequest)
+		return
+	}
 
+	// ── Validate the pre-generated token ─────────────────────────────
+	tok, err := addons.GetRegistrationToken(db.DB, req.Token)
+	if err != nil {
+		log.Printf("❌ Register addon — token lookup: %v", err)
+		JSONError(w, "Failed to validate token", http.StatusInternalServerError)
+		return
+	}
+	if tok == nil {
+		JSONError(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+	if tok.UsedAt != nil {
+		JSONError(w, "Token has already been used", http.StatusConflict)
+		return
+	}
+
+	// ── Create the add-on ────────────────────────────────────────────
 	addonID, err := addons.RegisterWithURL(db.DB, req.Name, req.URL)
 	if err != nil {
 		log.Printf("❌ Register addon from UI: %v", err)
@@ -179,31 +213,25 @@ func CreateAddonFromUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, err := addons.CreateRegistrationToken(db.DB, req.Name, nil)
-	if err != nil {
-		log.Printf("❌ Create addon token: %v", err)
-		JSONError(w, "Add-on created but failed to generate token", http.StatusInternalServerError)
-		return
-	}
-
-	// Consume the token immediately — it's bound to this addon
-	if err := addons.ConsumeRegistrationToken(db.DB, tok.Token, addonID); err != nil {
+	// Consume the pre-generated token — bind it to this addon
+	if err := addons.ConsumeRegistrationToken(db.DB, req.Token, addonID); err != nil {
 		log.Printf("⚠️  Could not bind token to addon: %v", err)
 	}
 
 	addon, _ := addons.Get(db.DB, addonID)
-	log.Printf("📦 Add-on registered from UI: %s (id=%d)", req.Name, addonID)
+	log.Printf("📦 Add-on registered from UI: %s (id=%d, token=%.16s…)", req.Name, addonID, req.Token)
 
 	w.WriteHeader(http.StatusCreated)
 	JSONResponse(w, map[string]interface{}{
 		"addon": addon,
-		"token": tok.Token,
+		"token": req.Token,
 	})
 }
 
 // ─── Add-on Token CRUD ───────────────────────────────────────────────────
 
 // CreateAddonToken generates a new registration token for an add-on.
+// Tokens expire after 1 hour by default.
 // POST /api/addons/tokens
 func CreateAddonToken(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -211,19 +239,21 @@ func CreateAddonToken(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
-	tok, err := addons.CreateRegistrationToken(db.DB, req.Name, nil)
+	expiry := 1 * time.Hour
+	tok, err := addons.CreateRegistrationToken(db.DB, req.Name, &expiry)
 	if err != nil {
 		log.Printf("❌ Create addon token: %v", err)
 		JSONError(w, "Failed to create token", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("🔑 Add-on registration token created: %.16s... (name=%q)", tok.Token, tok.Name)
+	log.Printf("🔑 Add-on registration token created: %.16s… expires=%v (name=%q)", tok.Token, tok.ExpiresAt, tok.Name)
 	w.WriteHeader(http.StatusCreated)
 	JSONResponse(w, tok)
 }
 
 // ListAddonTokens returns all add-on registration tokens.
+// Full token values are masked — only the first 16 hex chars are returned.
 // GET /api/addons/tokens
 func ListAddonTokens(w http.ResponseWriter, r *http.Request) {
 	tokens, err := addons.ListRegistrationTokens(db.DB)
@@ -235,6 +265,14 @@ func ListAddonTokens(w http.ResponseWriter, r *http.Request) {
 	if tokens == nil {
 		tokens = []addons.RegistrationToken{}
 	}
+
+	// Mask full token values — never expose secrets in list views
+	for i := range tokens {
+		if len(tokens[i].Token) > 16 {
+			tokens[i].Token = tokens[i].Token[:16] + "…"
+		}
+	}
+
 	JSONResponse(w, map[string]interface{}{"tokens": tokens})
 }
 
