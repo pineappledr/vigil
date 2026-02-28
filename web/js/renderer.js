@@ -440,7 +440,7 @@ const Renderer = {
                                 <div class="settings-item-title">Vigil</div>
                                 <div class="settings-item-desc">Server infrastructure monitoring</div>
                             </div>
-                            <span id="settings-version">${document.getElementById('app-version')?.textContent || 'v...'}</span>
+                            <span id="settings-version">${Utils.escapeHtml(document.getElementById('app-version')?.textContent || 'v...')}</span>
                         </div>
                         <div class="settings-item">
                             <div class="settings-item-info">

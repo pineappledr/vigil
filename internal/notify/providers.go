@@ -169,12 +169,26 @@ var providerRegistry = map[string]ProviderDef{
 				Default: "8", Placeholder: "0-10"},
 		},
 	},
+	"signal": {
+		Type: "signal", Label: "Signal",
+		Fields: []ProviderField{
+			{Key: "host", Label: "Signal CLI REST API Host", Type: FieldText, Required: true,
+				Placeholder: "localhost:8080",
+				HelpText:    "Hostname and port of your signal-cli-rest-api instance"},
+			{Key: "number", Label: "Sender Number", Type: FieldText, Required: true,
+				Placeholder: "+1234567890",
+				HelpText:    "Phone number registered with signal-cli (include + prefix)"},
+			{Key: "recipients", Label: "Recipients", Type: FieldText, Required: true,
+				Placeholder: "+1234567890,+0987654321",
+				HelpText:    "Comma-separated list of recipient phone numbers"},
+		},
+	},
 	"generic": {
 		Type: "generic", Label: "Generic Webhook",
 		Fields: []ProviderField{
 			{Key: "webhook_url", Label: "Webhook URL", Type: FieldText, Required: true,
 				Placeholder: "https://example.com/api/webhook",
-				HelpText:    "Use generic+https:// prefix for HTTPS webhooks"},
+				HelpText:    "For all supported services and URL formats, see https://shoutrrr.nickfedor.com/v0.13.2/services/overview/"},
 		},
 	},
 }
@@ -250,6 +264,8 @@ func BuildShoutrrrURL(serviceType string, fields map[string]string) (string, err
 		return buildPushoverURL(fields)
 	case "gotify":
 		return buildGotifyURL(fields)
+	case "signal":
+		return buildSignalURL(fields)
 	case "generic":
 		return buildGenericURL(fields)
 	default:
@@ -438,6 +454,25 @@ func buildGotifyURL(f map[string]string) (string, error) {
 		u += "?priority=" + url.QueryEscape(f["priority"])
 	}
 	return u, nil
+}
+
+// signal://host:port/number[?recipients=...]
+func buildSignalURL(f map[string]string) (string, error) {
+	host := strings.TrimSpace(f["host"])
+	number := strings.TrimSpace(f["number"])
+	recipients := strings.TrimSpace(f["recipients"])
+	if host == "" || number == "" || recipients == "" {
+		return "", fmt.Errorf("Host, Sender Number, and Recipients are required")
+	}
+
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimRight(host, "/")
+
+	params := url.Values{}
+	params.Set("recipients", recipients)
+
+	return fmt.Sprintf("signal://%s/%s?%s", host, url.PathEscape(number), params.Encode()), nil
 }
 
 // generic+https://example.com/path  or  generic://example.com/path
