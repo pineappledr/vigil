@@ -12,16 +12,17 @@ const Renderer = {
     `,
 
     /**
-     * Ensure dashboard structure exists (ZFS.render destroys it)
+     * Ensure dashboard structure exists inside dashboard-view.
+     * Each non-dashboard view now has its own container, so
+     * dashboard-view is never overwritten by other views.
      */
     ensureDashboardStructure() {
         const container = document.getElementById('dashboard-view');
         if (!container) return false;
-        
-        // Check if structure exists
+
         const summaryCards = document.getElementById('summary-cards');
         const serverList = document.getElementById('server-list');
-        
+
         if (!summaryCards || !serverList) {
             console.log('[Renderer] Restoring dashboard structure');
             container.innerHTML = this.dashboardTemplate;
@@ -439,7 +440,7 @@ const Renderer = {
                                 <div class="settings-item-title">Vigil</div>
                                 <div class="settings-item-desc">Server infrastructure monitoring</div>
                             </div>
-                            <span id="settings-version">${document.getElementById('app-version')?.textContent || 'v...'}</span>
+                            <span id="settings-version">${Utils.escapeHtml(document.getElementById('app-version')?.textContent || 'v...')}</span>
                         </div>
                         <div class="settings-item">
                             <div class="settings-item-info">

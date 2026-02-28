@@ -37,9 +37,9 @@ const Temperature = {
     render() {
         console.log('[Temperature] render() called');
         
-        const container = document.getElementById('dashboard-view');
+        const container = document.getElementById('temperature-view');
         if (!container) {
-            console.error('[Temperature] dashboard-view container not found');
+            console.error('[Temperature] temperature-view container not found');
             return;
         }
 
@@ -1091,56 +1091,6 @@ const Temperature = {
         console.error('[Temperature]', message);
     }
 };
-
-// Add showTemperature to Navigation AFTER page loads
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initTemperatureNav);
-} else {
-    initTemperatureNav();
-}
-
-function initTemperatureNav() {
-    // Wait a tick to ensure Navigation is defined
-    setTimeout(() => {
-        if (typeof Navigation !== 'undefined') {
-            Navigation.showTemperature = function() {
-                console.log('[Nav] === showTemperature START ===');
-                
-                // Set state
-                State.activeView = 'temperature';
-                State.activeServerIndex = null;
-                State.activeServerHostname = null;
-                State.activeFilter = null;
-
-                // Show dashboard view, hide others
-                const dashboardView = document.getElementById('dashboard-view');
-                const detailsView = document.getElementById('details-view');
-                const settingsView = document.getElementById('settings-view');
-                
-                if (dashboardView) dashboardView.classList.remove('hidden');
-                if (detailsView) detailsView.classList.add('hidden');
-                if (settingsView) settingsView.classList.add('hidden');
-
-                // Update page title
-                const pageTitle = document.getElementById('page-title');
-                const breadcrumbs = document.getElementById('breadcrumbs');
-                if (pageTitle) pageTitle.textContent = 'Temperature Monitor';
-                if (breadcrumbs) breadcrumbs.classList.add('hidden');
-
-                // Update nav highlighting
-                Navigation._clearNavSelection();
-                const navTemp = document.getElementById('nav-temperature');
-                if (navTemp) navTemp.classList.add('active');
-
-                // Render temperature dashboard
-                Temperature.render();
-
-                console.log('[Nav] === showTemperature END ===');
-            };
-            console.log('[Temperature] Navigation.showTemperature registered');
-        }
-    }, 0);
-}
 
 // Make Temperature globally available
 window.Temperature = Temperature;

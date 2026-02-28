@@ -5,7 +5,7 @@
     <span style="vertical-align: middle;">Vigil</span>
   </h1>
 
-  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis and ZFS pool management.**
+  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis, ZFS pool management, extensible add-ons, and multi-channel notifications.**
   
   <p>
     <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
@@ -18,7 +18,9 @@
 
 > **⚠️ BREAKING CHANGE in v2.4.0:** This release introduces **Ed25519 key-based mutual authentication** between the server and agents. All existing agents **must be re-registered** using a one-time registration token. Agents running older versions will be rejected by the server. See [Agent Authentication](#-agent-authentication) for the new setup workflow.
 
-**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, and comprehensive ZFS pool monitoring, ensuring you never miss a critical hardware failure.
+> **🆕 v3.0:** Adds the **Add-on ecosystem** (WebSocket-connected daemons with manifest-driven UI), **multi-channel notifications** (Telegram, Discord, Slack, Email, Pushover, Gotify, webhooks) with a guided provider wizard, and **add-on registration tokens**. See [Notifications](#-notifications), [Add-ons](#-add-ons), and the companion [vigil-addons](https://github.com/pineappledr/vigil-addons) repository.
+
+**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, comprehensive ZFS pool monitoring, extensible add-ons, and multi-channel notifications — ensuring you never miss a critical hardware failure.
 
 Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
 
@@ -36,6 +38,8 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora,
 - **🏷️ Drive Aliases:** Set custom names for your drives (e.g., "Plex Media", "Backup Drive").
 - **🔧 HBA Support:** Automatic detection for SATA drives behind SAS HBA controllers (LSI SAS3224, etc.).
 - **🗄️ ZFS Pool Monitoring:** Full ZFS support with pool health, device hierarchy, scrub history, and SMART integration.
+- **🧩 Extensible Add-ons:** Third-party daemons register via API, stream telemetry over WebSocket, and render UI from a JSON manifest — no frontend code required.
+- **📣 Multi-Channel Notifications:** Guided provider wizard for Telegram, Discord, Slack, Email, Pushover, Gotify, and generic webhooks. Event routing, quiet hours, and digest batching included.
 
 ---
 
@@ -632,6 +636,226 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 | `GET` | `/api/zfs/health` | Get pools needing attention |
 | `GET` | `/api/zfs/drive/{hostname}/{serial}` | Cross-reference drive with ZFS |
 | `DELETE` | `/api/zfs/pools/{hostname}/{poolname}` | Remove pool from database |
+
+---
+
+## 📣 Notifications
+
+Vigil v3.0 introduces a multi-channel notification system powered by [Shoutrrr](https://containrrr.dev/shoutrrr/). A guided provider wizard lets you configure each channel through dedicated form fields — no need to construct raw URLs.
+
+### Supported Providers
+
+| Provider | Fields |
+|----------|--------|
+| **Telegram** | Bot Token, Chat ID, Message Thread ID, Send Silently, Parse Mode |
+| **Discord** | Webhook URL, Bot Display Name, Avatar URL |
+| **Slack** | Incoming Webhook URL, Bot Username, Icon Emoji, Channel |
+| **Email (SMTP)** | Host, Port, Security (None / STARTTLS / SSL), Username, Password, From, To, Subject |
+| **Pushover** | User Key, App Token, Device, Title, Priority, Sound |
+| **Gotify** | Server URL, App Token, Priority |
+| **Generic Webhook** | Webhook URL |
+
+### Features
+
+- **Provider Wizard** — Select a provider from the dropdown and fill in the dedicated fields. Vigil builds and validates the Shoutrrr URL automatically.
+- **Test Before Save** — Send a test notification directly from the setup modal to verify your credentials before committing.
+- **Event Rules** — Choose which event types (drive failure, ZFS errors, add-on notifications, etc.) each service should receive.
+- **Quiet Hours** — Suppress non-critical alerts during configurable time windows.
+- **Digest Batching** — Aggregate frequent events into periodic summaries instead of individual messages.
+- **Secret Masking** — Password and token fields are masked in API responses. Editing a service preserves secrets unless you explicitly change them.
+
+---
+
+## 🧩 Add-ons
+
+Vigil supports **add-ons** — external programs that extend the server with custom functionality. Add-ons register themselves via the API, stream real-time telemetry over WebSocket, and render their UI from a declarative JSON manifest.
+
+### How Add-ons Work
+
+```
+┌──────────────┐   1. Register     ┌──────────────┐   SSE Stream   ┌──────────────┐
+│   Add-on     │ ───(POST /api)──► │ Vigil Server │ ─────────────► │   Browser    │
+│  (external)  │                   │              │                │  (Dashboard) │
+│              │ ◄──(WebSocket)──► │  /api/addons │                │  Add-ons Tab │
+│              │   2. Telemetry    │     /ws      │                │              │
+└──────────────┘                   └──────────────┘                └──────────────┘
+```
+
+1. **Register** — The add-on POSTs a JSON manifest describing its name, version, and UI pages
+2. **Connect** — The add-on opens a WebSocket to stream telemetry (progress, logs, notifications)
+3. **Render** — The Vigil dashboard reads the manifest and renders the add-on's UI automatically
+4. **Act** — Users trigger actions from the UI; the server validates and signs commands for the agent
+
+### Creating an Add-on
+
+#### Step 1: Define a Manifest
+
+The manifest is a JSON document that describes your add-on's UI. It contains pages, and each page contains components.
+
+```json
+{
+  "name": "my-addon",
+  "version": "1.0.0",
+  "description": "Example add-on for Vigil",
+  "author": "Your Name",
+  "pages": [
+    {
+      "id": "config",
+      "title": "Configuration",
+      "components": [
+        {
+          "type": "form",
+          "id": "settings-form",
+          "title": "Settings",
+          "config": {
+            "action": "apply_settings",
+            "fields": [
+              { "name": "target_pool", "label": "Target Pool", "type": "select", "required": true, "options": [{"label": "Pool A", "value": "pool-a"}] },
+              { "name": "passes", "label": "Number of Passes", "type": "number", "required": true },
+              { "name": "dry_run", "label": "Dry Run", "type": "checkbox" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "title": "Status",
+      "components": [
+        { "type": "progress", "id": "job-progress", "title": "Job Progress" },
+        { "type": "log-viewer", "id": "job-logs", "title": "Logs" },
+        { "type": "chart", "id": "speed-chart", "title": "Transfer Speed", "config": { "y_label": "MB/s" } }
+      ]
+    }
+  ]
+}
+```
+
+**Available component types:**
+
+| Type | Description |
+|------|-------------|
+| `form` | Input form with text, number, select, checkbox, range fields. Supports `visible_when`, `depends_on`, `live_calculation`, and `security_gate` |
+| `progress` | Per-job progress cards with phase tracking, speed, and ETA |
+| `chart` | Chart.js time-series with optional dual Y-axes |
+| `smart-table` | SMART attribute table with delta highlighting |
+| `log-viewer` | Auto-tailing log terminal with severity filtering |
+
+#### Step 2: Register the Add-on
+
+```bash
+curl -X POST http://YOUR_SERVER:9080/api/addons \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=YOUR_SESSION_TOKEN" \
+  -d '{
+    "manifest": {
+      "name": "my-addon",
+      "version": "1.0.0",
+      "description": "Example add-on",
+      "pages": [ ... ]
+    }
+  }'
+```
+
+The server validates the manifest structure and returns the addon record with an `id`.
+
+#### Step 3: Connect via WebSocket
+
+After registration, open a WebSocket connection to stream telemetry:
+
+```
+ws://YOUR_SERVER:9080/api/addons/ws?addon_id=<ID>
+```
+
+Send JSON frames to report status:
+
+```json
+// Heartbeat (keeps addon "online")
+{"type": "heartbeat"}
+
+// Progress update
+{"type": "progress", "payload": {
+  "job_id": "job-001",
+  "phase": "scanning",
+  "percent": 45.5,
+  "message": "Scanning drive 3 of 8",
+  "bytes_done": 5368709120,
+  "bytes_total": 11811160064
+}}
+
+// Log entry
+{"type": "log", "payload": {
+  "level": "info",
+  "message": "Starting pass 2",
+  "source": "worker-1"
+}}
+
+// Notification (published to the event bus → Shoutrrr)
+{"type": "notification", "payload": {
+  "event_type": "job_complete",
+  "severity": "info",
+  "message": "All drives passed burn-in test",
+  "metadata": {"drives": "8", "duration": "24h"}
+}}
+```
+
+All telemetry is bridged to SSE so the browser receives live updates automatically.
+
+#### Step 4: View in the Dashboard
+
+Navigate to **Extensions → Add-ons** in the sidebar. Your addon appears in the list. Click it to open its manifest-driven UI with live telemetry.
+
+### Add-on Lifecycle
+
+| Status | Meaning |
+|--------|---------|
+| **Online** | WebSocket connected and heartbeats received |
+| **Degraded** | Missed 3 consecutive heartbeat intervals |
+| **Offline** | WebSocket disconnected |
+
+The server runs a heartbeat monitor that automatically transitions addons between these states and publishes events to the notification bus.
+
+### Form Features
+
+Forms support advanced behaviors defined in the manifest:
+
+- **`visible_when`** — Conditionally show fields: `"visible_when": "mode = advanced"` (supports `=`, `!=`, `>`, `<`, `>=`, `<=`)
+- **`depends_on`** — Cascading dropdowns: when a parent field changes, child options are fetched from `GET /api/addons/{id}/options?field={name}&parent_value={val}`
+- **`live_calculation`** — Safe arithmetic expressions: `"live_calculation": "capacity * (percent / 100)"` — evaluated in the browser with a sandboxed parser
+- **`security_gate`** — Destructive actions require a 3-step confirmation: Password → Review & type CONFIRM → Execute
+
+### API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/addons` | Register/update add-on (upsert by name) |
+| `GET` | `/api/addons` | List all registered add-ons |
+| `GET` | `/api/addons/{id}` | Get add-on details + manifest |
+| `DELETE` | `/api/addons/{id}` | Deregister add-on |
+| `PUT` | `/api/addons/{id}/enabled` | Enable/disable add-on |
+| `GET` | `/api/addons/{id}/telemetry` | SSE stream (browser) |
+| `GET` | `/api/addons/ws?addon_id=X` | WebSocket (add-on process) |
+| `POST` | `/api/addons/register` | Register add-on from UI wizard |
+| `POST` | `/api/addons/tokens` | Create add-on registration token |
+| `GET` | `/api/addons/tokens` | List add-on registration tokens |
+| `DELETE` | `/api/addons/tokens/{id}` | Delete add-on registration token |
+
+### Notification Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/notifications/providers` | Get provider field schemas (for wizard) |
+| `GET` | `/api/notifications/services` | List notification services |
+| `GET` | `/api/notifications/services/{id}` | Get service details (secrets masked) |
+| `POST` | `/api/notifications/services` | Create notification service |
+| `PUT` | `/api/notifications/services/{id}` | Update notification service |
+| `DELETE` | `/api/notifications/services/{id}` | Delete notification service |
+| `PUT` | `/api/notifications/services/{id}/rules` | Update event routing rules |
+| `PUT` | `/api/notifications/services/{id}/quiet-hours` | Configure quiet hours |
+| `PUT` | `/api/notifications/services/{id}/digest` | Configure digest batching |
+| `POST` | `/api/notifications/test` | Fire a test notification |
+| `POST` | `/api/notifications/test-url` | Test a Shoutrrr URL or provider fields |
+| `GET` | `/api/notifications/history` | Get notification dispatch history |
 
 ---
 

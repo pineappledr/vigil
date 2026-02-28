@@ -10,14 +10,17 @@ import (
 	"syscall"
 	"time"
 
+	"vigil/internal/addons"
 	"vigil/internal/agents"
 	"vigil/internal/auth"
 	"vigil/internal/config"
 	"vigil/internal/crypto"
 	"vigil/internal/db"
+	"vigil/internal/events"
 	"vigil/internal/handlers"
 	"vigil/internal/middleware"
 	"vigil/internal/models"
+	"vigil/internal/notify"
 	"vigil/internal/smart"
 	"vigil/internal/wearout"
 )
@@ -61,6 +64,16 @@ func main() {
 	// Run wearout tables migration
 	if err := wearout.MigrateWearoutTables(db.DB); err != nil {
 		log.Printf("⚠️  Wearout migration warning: %v", err)
+	}
+
+	// Run add-on registry migration
+	if err := addons.Migrate(db.DB); err != nil {
+		log.Printf("⚠️  Add-on migration warning: %v", err)
+	}
+
+	// Run notification services migration
+	if err := notify.Migrate(db.DB); err != nil {
+		log.Printf("⚠️  Notification migration warning: %v", err)
 	}
 
 	// Load or generate server Ed25519 key pair
@@ -129,6 +142,20 @@ func main() {
 			}
 		}
 	}()
+
+	// Add-on runtime: event bus, telemetry broker, websocket hub, heartbeat monitor
+	eventBus := events.NewBus()
+	broker := addons.NewTelemetryBroker()
+	handlers.TelemetryBroker = broker
+	handlers.WebSocketHub = addons.NewWebSocketHub(db.DB, eventBus, broker)
+	hbm := addons.NewHeartbeatMonitor(db.DB, eventBus, 1*time.Minute, 3)
+	hbm.Start()
+	defer hbm.Stop()
+
+	// Wire notification dispatch to event bus
+	dispatcher := notify.NewDispatcher(db.DB, eventBus, nil)
+	dispatcher.Start()
+	defer dispatcher.Stop()
 
 	mux := setupRoutes(cfg)
 	handler := middleware.Logging(middleware.CORS(mux))
@@ -220,6 +247,12 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 
 	// ─── Wearout Endpoints ───────────────────────────────────────────────
 	handlers.RegisterWearoutRoutes(mux, protect)
+
+	// ─── Add-on Endpoints ────────────────────────────────────────────────
+	handlers.RegisterAddonRoutes(mux, protect)
+
+	// ─── Notification Endpoints ──────────────────────────────────────────
+	handlers.RegisterNotificationRoutes(mux, protect)
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))

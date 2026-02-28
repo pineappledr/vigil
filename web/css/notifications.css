@@ -1,0 +1,702 @@
+/* ============================================
+   NOTIFICATION SETTINGS PAGE
+   ============================================ */
+
+.notif-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.notif-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.notif-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.notif-sidebar {
+    min-width: 0;
+}
+
+.notif-content {
+    min-width: 0;
+}
+
+.notif-hint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 24px 0;
+}
+
+/* ─── Service list ───────────────────────── */
+
+.notif-service-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.notif-service-item {
+    padding: 12px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.notif-service-item:hover {
+    border-color: var(--border-hover);
+}
+
+.notif-service-item.active {
+    border-color: var(--accent-primary);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.notif-service-item.disabled {
+    opacity: 0.6;
+}
+
+.notif-service-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.notif-service-type {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.notif-service-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.notif-service-badge.enabled {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.notif-service-badge.disabled {
+    background: rgba(107, 114, 128, 0.2);
+    color: var(--text-muted);
+}
+
+/* ─── Empty state ────────────────────────── */
+
+.notif-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.notif-empty svg {
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.notif-empty p {
+    font-size: 0.9375rem;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+}
+
+.notif-empty .hint {
+    font-size: 0.8rem;
+}
+
+/* ─── Service detail ─────────────────────── */
+
+.notif-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.notif-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.notif-detail-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.notif-detail-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.notif-section {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+}
+
+.notif-section h4 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.notif-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.notif-severity-toggles {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.notif-form-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.notif-time-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notif-time-range span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.form-input-sm {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    width: auto;
+    min-width: 80px;
+}
+
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+    border: none;
+}
+
+.btn-danger:hover {
+    opacity: 0.9;
+}
+
+.btn-danger-outline {
+    background: none;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all var(--transition-fast);
+}
+
+.btn-danger-outline:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.btn-danger-outline svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ─── Event rules table ──────────────────── */
+
+.notif-rules-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+}
+
+.notif-rules-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.notif-rules-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(136, 146, 176, 0.05);
+}
+
+.notif-rules-table input[type="checkbox"] {
+    accent-color: var(--accent-primary);
+}
+
+.notif-rules-table input[type="number"] {
+    max-width: 100px;
+}
+
+/* ─── Status flash ───────────────────────── */
+
+.notif-status {
+    font-size: 0.8rem;
+    padding: 8px 0;
+    min-height: 1.2em;
+    transition: color 0.3s;
+}
+
+.notif-status.success {
+    color: var(--success);
+}
+
+.notif-status.error {
+    color: var(--danger);
+}
+
+/* ─── History table ──────────────────────── */
+
+.notif-history-section {
+    margin-top: 8px;
+}
+
+.notif-history-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.notif-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.notif-history-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.notif-history-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(136, 146, 176, 0.05);
+}
+
+.notif-history-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.notif-time {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.notif-msg {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notif-status-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.notif-status-badge.sent {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+}
+
+.notif-status-badge.failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
+
+.notif-error-hint {
+    color: var(--danger);
+    font-weight: 700;
+    cursor: help;
+    margin-left: 4px;
+}
+
+/* ─── Loading spinner ────────────────────── */
+
+.loading-spinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   SECURITY GATE MODAL
+   ============================================ */
+
+.gate-steps {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.gate-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--bg-primary);
+}
+
+.gate-step.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.gate-step.done {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+}
+
+.gate-summary {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+}
+
+.gate-summary-action {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    color: var(--warning);
+}
+
+.gate-summary-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.gate-summary-item {
+    display: flex;
+    gap: 8px;
+    font-size: 0.8rem;
+}
+
+.gate-label {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.gate-value {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+/* ============================================
+   RANGE SLIDER
+   ============================================ */
+
+.form-range-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.form-range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.form-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    border: 2px solid var(--bg-elevated);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.form-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    border: 2px solid var(--bg-elevated);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.form-range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.form-range-value {
+    font-weight: 600;
+    color: var(--accent-secondary);
+    font-family: var(--font-mono);
+}
+
+/* ============================================
+   NOTIFICATIONS RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+    .notif-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .notif-service-list {
+        flex-direction: row;
+        overflow-x: auto;
+        gap: 8px;
+        padding-bottom: 4px;
+    }
+
+    .notif-service-item {
+        min-width: 140px;
+        flex-shrink: 0;
+    }
+
+    .notif-detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .notif-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .notif-form-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .notif-severity-toggles {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .notif-history-table {
+        font-size: 0.75rem;
+    }
+
+    .notif-history-table th,
+    .notif-history-table td {
+        padding: 6px 8px;
+    }
+
+    .notif-msg {
+        max-width: 140px;
+    }
+
+    .gate-steps {
+        flex-direction: column;
+        gap: 6px;
+    }
+}
+
+@media (max-width: 480px) {
+    .notif-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .notif-header .btn,
+    .notif-header .btn-add-agent {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .notif-section {
+        padding: 12px 14px;
+    }
+
+    .notif-detail-actions {
+        width: 100%;
+    }
+
+    .notif-detail-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+/* ============================================
+   TEST STATUS & OUTLINE BUTTON
+   ============================================ */
+
+.btn-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--accent-primary, #6366f1);
+    border: 1px solid var(--accent-primary, #6366f1);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--transition-fast, 0.15s);
+}
+
+.btn-outline:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.btn-outline:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.notif-test-status {
+    font-size: 0.8rem;
+    padding: 6px 0;
+    min-height: 1.5em;
+}
+
+.notif-test-status.success {
+    color: var(--text-success, #4ade80);
+}
+
+.notif-test-status.error {
+    color: var(--text-danger, #f87171);
+}
+
+/* ============================================
+   PROVIDER WIZARD MODAL
+   ============================================ */
+
+.modal-provider-wizard {
+    max-width: 520px;
+}
+
+.modal-provider-wizard .modal-body {
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.modal-divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 16px 0;
+}
+
+/* Password field with eye toggle */
+.form-input-password-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.form-input-password-wrap .form-input {
+    padding-right: 42px;
+}
+
+.btn-eye-toggle {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.btn-eye-toggle:hover {
+    color: var(--accent-primary);
+}
+
+/* Required field asterisk */
+.form-required {
+    color: var(--danger);
+    font-weight: 600;
+}

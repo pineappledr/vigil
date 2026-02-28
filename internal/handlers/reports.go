@@ -9,6 +9,7 @@ import (
 
 	"vigil/internal/agents"
 	"vigil/internal/db"
+	"vigil/internal/smart"
 	"vigil/internal/wearout"
 )
 
@@ -65,6 +66,9 @@ func Report(w http.ResponseWriter, r *http.Request) {
 
 	// Process SMART-based wearout calculations
 	wearout.ProcessWearoutFromReport(db.DB, hostname, payload)
+
+	// Process SMART health analysis with event publishing
+	smart.ProcessReportWithEvents(db.DB, EventBus, hostname, payload)
 
 	// Process ZFS data if present
 	poolCount := 0

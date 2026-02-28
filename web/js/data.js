@@ -46,30 +46,33 @@ const Data = {
     },
 
     updateCurrentView() {
-        // Views that manage their own content — don't overwrite
-        if (State.activeView === 'agents' || State.activeView === 'settings') {
+        // Views that manage their own content and container — skip
+        if (['agents', 'settings', 'addons', 'notifications'].includes(State.activeView)) {
             return;
         }
 
-        const dashboardView = document.getElementById('dashboard-view');
-        const detailsView = document.getElementById('details-view');
-
-        // Don't update if details view is showing
-        if (detailsView && !detailsView.classList.contains('hidden')) return;
-
-        // Don't update if dashboard is hidden
-        if (dashboardView && dashboardView.classList.contains('hidden')) return;
-
-        // Update based on current view
+        // ZFS and Temperature have their own containers; refresh their data
         if (State.activeView === 'temperature') {
             if (typeof Temperature !== 'undefined' && Temperature.loadData) {
                 Temperature.loadData();
             }
-        } else if (State.activeView === 'zfs') {
+            return;
+        }
+        if (State.activeView === 'zfs') {
             if (typeof ZFS !== 'undefined' && ZFS.render) {
                 ZFS.render();
             }
-        } else if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
+            return;
+        }
+
+        // Dashboard-family views (overview, server detail, filtered drives)
+        const dashboardView = document.getElementById('dashboard-view');
+        const detailsView = document.getElementById('details-view');
+
+        if (detailsView && !detailsView.classList.contains('hidden')) return;
+        if (dashboardView && dashboardView.classList.contains('hidden')) return;
+
+        if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
         } else if (State.activeFilter) {
             const filterFn = State.activeFilter === 'attention'

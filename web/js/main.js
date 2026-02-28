@@ -92,14 +92,54 @@ function setupEventListeners() {
         });
     }
 
+    // Agents nav
+    const navAgents = document.getElementById('nav-agents');
+    if (navAgents) {
+        navAgents.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            Navigation.showAgents();
+        });
+    }
+
+    // Add-ons nav
+    const navAddons = document.getElementById('nav-addons');
+    if (navAddons) {
+        navAddons.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            Navigation.showAddons();
+        });
+    }
+
+    // Notifications nav
+    const navNotifications = document.getElementById('nav-notifications');
+    if (navNotifications) {
+        navNotifications.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            Navigation.showNotifications();
+        });
+    }
+
+    // Temperature nav
+    const navTemperature = document.getElementById('nav-temperature');
+    if (navTemperature) {
+        navTemperature.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            Navigation.showTemperature();
+        });
+    }
+
     // Refresh button
     const refreshBtn = document.getElementById('btn-refresh');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             Data.fetch();
-            if (State.activeView === 'agents' && typeof Agents !== 'undefined') {
-                Agents.render();
-            }
+            if (State.activeView === 'agents' && typeof Agents !== 'undefined') Agents.render();
+            if (State.activeView === 'addons' && typeof Addons !== 'undefined') Addons.render();
+            if (State.activeView === 'notifications' && typeof NotificationSettings !== 'undefined') NotificationSettings.render();
         });
     }
 

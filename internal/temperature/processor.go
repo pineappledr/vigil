@@ -2,16 +2,19 @@ package temperature
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"vigil/internal/events"
 	"vigil/internal/settings"
 )
 
 // Processor handles temperature data processing and alert generation
 type Processor struct {
 	DB              *sql.DB
+	Bus             *events.Bus
 	mu              sync.Mutex
 	running         bool
 	stopChan        chan struct{}
@@ -25,10 +28,12 @@ type processingRequest struct {
 	Timestamp    time.Time
 }
 
-// NewProcessor creates a new temperature processor
-func NewProcessor(database *sql.DB) *Processor {
+// NewProcessor creates a new temperature processor.
+// The bus parameter is optional; if nil, no events are published.
+func NewProcessor(database *sql.DB, bus *events.Bus) *Processor {
 	return &Processor{
 		DB:              database,
+		Bus:             bus,
 		stopChan:        make(chan struct{}),
 		processingQueue: make(chan processingRequest, 100),
 	}
@@ -105,7 +110,45 @@ func (p *Processor) processReadingSync(hostname, serial string, temperature int)
 	for _, alert := range alerts {
 		log.Printf("[Temperature] Alert: %s - %s (%s/%s)",
 			alert.AlertType, alert.Message, hostname, serial)
+		p.publishAlert(hostname, serial, &alert)
 	}
+}
+
+// publishAlert sends a temperature alert to the event bus.
+func (p *Processor) publishAlert(hostname, serial string, alert *TemperatureAlert) {
+	if p.Bus == nil {
+		return
+	}
+
+	var evtType events.EventType
+	var severity events.Severity
+
+	switch alert.AlertType {
+	case AlertTypeCritical:
+		evtType = events.TempCritical
+		severity = events.SeverityCritical
+	case AlertTypeWarning, AlertTypeSpike:
+		evtType = events.TempAlert
+		severity = events.SeverityWarning
+	case AlertTypeRecovery:
+		evtType = events.TempAlert
+		severity = events.SeverityInfo
+	default:
+		return
+	}
+
+	p.Bus.Publish(events.Event{
+		Type:         evtType,
+		Severity:     severity,
+		Hostname:     hostname,
+		SerialNumber: serial,
+		Message:      alert.Message,
+		Metadata: map[string]string{
+			"alert_type":  alert.AlertType,
+			"temperature": fmt.Sprintf("%d", alert.Temperature),
+			"threshold":   fmt.Sprintf("%d", alert.Threshold),
+		},
+	})
 }
 
 // periodicTasks runs scheduled maintenance tasks
