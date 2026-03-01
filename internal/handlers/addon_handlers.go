@@ -581,16 +581,17 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	// Safe: target host verified against admin-registered addon URL.
+	// Safe: target host verified against admin-registered addon URL,
+	// path restricted to /api/*, traversal blocked, scheme validated.
 	safeURL := parsed.String()
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, safeURL, nil)
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, safeURL, nil) // #nosec G107 G704 -- host validated against admin-registered addon URL
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G107 G704 -- see validation above
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
