@@ -36,15 +36,20 @@ type ManifestComponent struct {
 
 // FormField is a field inside a "form" component's config.
 type FormField struct {
-	Name            string       `json:"name"`
-	Label           string       `json:"label"`
-	Type            string       `json:"type"` // text, number, select, checkbox, hidden
-	Required        bool         `json:"required,omitempty"`
-	Options         []FormOption `json:"options,omitempty"`
-	DependsOn       string       `json:"depends_on,omitempty"`
-	VisibleWhen     string       `json:"visible_when,omitempty"`
-	LiveCalculation string       `json:"live_calculation,omitempty"`
-	SecurityGate    bool         `json:"security_gate,omitempty"`
+	Name            string          `json:"name"`
+	Label           string          `json:"label"`
+	Type            string          `json:"type"` // text, number, select, checkbox, toggle, hidden
+	Required        bool            `json:"required,omitempty"`
+	Options         []FormOption    `json:"options,omitempty"`
+	Source          string          `json:"source,omitempty"`
+	Placeholder     string          `json:"placeholder,omitempty"`
+	Default         json.RawMessage `json:"default,omitempty"`
+	Min             *float64        `json:"min,omitempty"`
+	Max             *float64        `json:"max,omitempty"`
+	DependsOn       string          `json:"depends_on,omitempty"`
+	VisibleWhen     json.RawMessage `json:"visible_when,omitempty"`
+	LiveCalculation string          `json:"live_calculation,omitempty"`
+	SecurityGate    bool            `json:"security_gate,omitempty"`
 }
 
 // FormOption is a select option.
