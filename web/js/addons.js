@@ -194,6 +194,11 @@ const Addons = {
                         <button class="btn-addon-toggle" onclick="event.stopPropagation(); Addons.toggleEnabled(${addon.id}, ${!addon.enabled})" title="${addon.enabled ? 'Disable' : 'Enable'}">
                             ${addon.enabled ? this._icons.toggleOn : this._icons.toggleOff}
                         </button>
+                        <button class="btn-agent-delete" onclick="event.stopPropagation(); Addons.confirmDeleteAddon(${addon.id})" title="Delete add-on">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 ${addon.description ? `<p class="addon-description">${this._escape(addon.description)}</p>` : ''}
@@ -233,11 +238,22 @@ const Addons = {
 
     async showAddAddon() {
         let token = '';
+        let serverPubKey = '';
+
         try {
-            const resp = await API.createAddonToken('');
-            if (!resp.ok) throw new Error('Token creation failed');
-            const data = await resp.json();
-            token = data.token || '';
+            const [tokenResp, pubKeyResp] = await Promise.all([
+                API.createAddonToken(''),
+                API.getServerPubKey()
+            ]);
+
+            if (!tokenResp.ok) throw new Error('Token creation failed');
+            const tokenData = await tokenResp.json();
+            token = tokenData.token || '';
+
+            if (pubKeyResp.ok) {
+                const pkData = await pubKeyResp.json();
+                serverPubKey = pkData.public_key || '';
+            }
         } catch {
             alert('Failed to generate registration token. Please try again.');
             return;
@@ -249,6 +265,7 @@ const Addons = {
         }
 
         const copyIcon = this._icons.copy;
+        const serverURL = window.location.origin;
 
         Modals.create(`
             <div class="modal modal-add-agent">
@@ -273,6 +290,25 @@ const Addons = {
                         <label>Add-on URL</label>
                         <input type="text" id="addon-url" class="form-input form-input-mono" placeholder="e.g., http://192.168.1.50:9100">
                         <span class="form-hint">Network address where the add-on is running</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Server URL</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="addon-server-url" class="form-input form-input-mono" value="${serverURL}" readonly>
+                            <button class="btn-copy" onclick="Addons._copyInput('addon-server-url')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Public Key</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="addon-pubkey" class="form-input form-input-mono" value="${serverPubKey}" readonly>
+                            <button class="btn-copy" onclick="Addons._copyInput('addon-pubkey')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
+                        <span class="form-hint">Ed25519 public key for command signature verification</span>
                     </div>
                     <div class="form-group">
                         <label>Token</label>
@@ -407,6 +443,65 @@ const Addons = {
             } else {
                 const data = await resp.json().catch(() => ({}));
                 if (errorEl) errorEl.textContent = data.error || 'Failed to update add-on';
+            }
+        } catch {
+            if (errorEl) errorEl.textContent = 'Connection error';
+        }
+    },
+
+    confirmDeleteAddon(id) {
+        const addon = this.addons.find(a => a.id === id);
+        const name = addon ? this._escape(addon.name) : `Add-on #${id}`;
+
+        Modals.create(`
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>Delete Add-on</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-message">Enter your password to permanently delete <strong>${name}</strong>. This action cannot be undone.</p>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="addon-delete-password" class="form-input" placeholder="Enter your password">
+                    </div>
+                    <div id="addon-delete-error" class="form-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-danger" onclick="Addons.submitDeleteAddon(${id})">Delete</button>
+                </div>
+            </div>
+        `);
+        document.getElementById('addon-delete-password')?.focus();
+    },
+
+    async submitDeleteAddon(id) {
+        const password = document.getElementById('addon-delete-password')?.value;
+        const errorEl = document.getElementById('addon-delete-error');
+
+        if (!password) {
+            if (errorEl) errorEl.textContent = 'Password is required';
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/addons/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            if (resp.ok) {
+                document.querySelector('.modal-overlay')?.remove();
+                this.render();
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                if (errorEl) errorEl.textContent = data.error || 'Failed to delete add-on';
             }
         } catch {
             if (errorEl) errorEl.textContent = 'Connection error';

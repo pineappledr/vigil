@@ -103,11 +103,36 @@ func GetAddon(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeregisterAddon removes an add-on.
+// Requires the user's password for confirmation.
 // DELETE /api/addons/{id}
 func DeregisterAddon(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
 		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the user's password
+	session := auth.GetSessionFromContext(r)
+	if session == nil {
+		JSONError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var storedHash string
+	if err := db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&storedHash); err != nil {
+		JSONError(w, "Failed to verify password", http.StatusInternalServerError)
+		return
+	}
+	if !auth.CheckPassword(storedHash, req.Password) {
+		JSONError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
 
@@ -123,7 +148,7 @@ func DeregisterAddon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("📦 Add-on deregistered: %s (id=%d)", addon.Name, id)
+	log.Printf("📦 Add-on deregistered: %s (id=%d, by=%s)", addon.Name, id, session.Username)
 	JSONResponse(w, map[string]string{"status": "deregistered"})
 }
 
