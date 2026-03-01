@@ -452,6 +452,7 @@ const Addons = {
         const name = document.getElementById('addon-name')?.value.trim() || 'addon';
         const image = document.getElementById('addon-image')?.value.trim();
         const version = document.getElementById('addon-version')?.value.trim();
+        const addonURL = document.getElementById('addon-url')?.value.trim() || '';
         const serverURL = document.getElementById('addon-server-url')?.value || '';
         const pubKey = document.getElementById('addon-pubkey')?.value || '';
         const token = document.getElementById('addon-token')?.value || '';
@@ -464,17 +465,39 @@ const Addons = {
         const tag = version || 'latest';
         const containerName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
-        return `# ${name} - docker-compose.yml
+        // Extract port from addon URL if provided (e.g., "http://192.168.1.50:9100" → "9100")
+        let port = '';
+        if (addonURL) {
+            try {
+                const parsed = new URL(addonURL);
+                port = parsed.port || '';
+            } catch {}
+        }
+
+        let yaml = `# ${name} - docker-compose.yml
 services:
   ${containerName}:
     image: ${image}:${tag}
     container_name: ${containerName}
-    restart: unless-stopped
-    environment:
+    restart: unless-stopped`;
+
+        if (port) {
+            yaml += `\n    ports:\n      - "${port}:${port}"`;
+        }
+
+        yaml += `\n    environment:
       VIGIL_URL: ${serverURL}
       VIGIL_AGENT_TOKEN: ${token}
       VIGIL_SERVER_PUBKEY: ${pubKey}
-      TZ: \${TZ:-UTC}`;
+      TZ: \${TZ:-UTC}
+      BURNIN_HUB_DATA_DIR: "/data"
+    volumes:
+      - ${containerName}-data:/data
+
+volumes:
+  ${containerName}-data:`;
+
+        return yaml;
     },
 
     _generateAddonEnvVars() {
