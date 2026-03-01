@@ -33,17 +33,30 @@ const SmartTableComponent = {
         const columns = config.columns || ['ID', 'Attribute', 'Value', 'Worst', 'Threshold', 'Raw Value'];
         const isStructured = columns.length > 0 && typeof columns[0] === 'object';
 
+        const sortState = config.default_sort
+            ? { key: config.default_sort.key, dir: config.default_sort.direction || 'asc' }
+            : null;
+
         this._tables[compId] = {
             rows: [],
             prevRows: {},
             config: config || {},
             columns,
             isStructured,
-            addonId
+            addonId,
+            sort: sortState
         };
 
         const headers = isStructured
-            ? columns.map(c => `<th>${this._escape(c.label || c.key)}</th>`).join('')
+            ? columns.map(c => {
+                if (config.sortable && c.key && c.format !== 'actions') {
+                    const arrow = sortState && sortState.key === c.key
+                        ? (sortState.dir === 'asc' ? ' &#9650;' : ' &#9660;')
+                        : '';
+                    return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${this._escape(c.label || c.key)}${arrow}</th>`;
+                }
+                return `<th>${this._escape(c.label || c.key)}</th>`;
+            }).join('')
             : columns.map(c => `<th>${this._escape(c)}</th>`).join('');
 
         const colCount = columns.length;
@@ -216,14 +229,15 @@ const SmartTableComponent = {
             return;
         }
 
-        tbody.innerHTML = rows.map(row => {
+        entry.rows = rows;
+        const displayRows = this._sortRows(rows, entry.sort);
+
+        tbody.innerHTML = displayRows.map(row => {
             return `<tr>${entry.columns.map(col => {
                 const val = row[col.key];
                 return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
         }).join('');
-
-        entry.rows = rows;
     },
 
     _formatValue(val, format, row, col) {
@@ -306,6 +320,52 @@ const SmartTableComponent = {
         } finally {
             btnEl.disabled = false;
         }
+    },
+
+    _toggleSort(compId, key) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+
+        if (entry.sort && entry.sort.key === key) {
+            entry.sort.dir = entry.sort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            entry.sort = { key, dir: 'asc' };
+        }
+
+        // Re-render headers with updated arrows
+        const thead = document.querySelector(`#smart-table-${compId} thead tr`);
+        if (thead) {
+            thead.innerHTML = entry.columns.map(c => {
+                if (entry.config.sortable && c.key && c.format !== 'actions') {
+                    const arrow = entry.sort && entry.sort.key === c.key
+                        ? (entry.sort.dir === 'asc' ? ' &#9650;' : ' &#9660;')
+                        : '';
+                    return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${this._escape(c.label || c.key)}${arrow}</th>`;
+                }
+                return `<th>${this._escape(c.label || c.key)}</th>`;
+            }).join('');
+        }
+
+        // Re-render with sorted data
+        if (entry.rows.length > 0) {
+            this._updateStructuredTable(compId, entry, entry.rows);
+        }
+    },
+
+    _sortRows(rows, sort) {
+        if (!sort) return rows;
+        const sorted = [...rows];
+        sorted.sort((a, b) => {
+            let va = a[sort.key], vb = b[sort.key];
+            if (va === undefined || va === null) va = '';
+            if (vb === undefined || vb === null) vb = '';
+            if (typeof va === 'string') va = va.toLowerCase();
+            if (typeof vb === 'string') vb = vb.toLowerCase();
+            if (va < vb) return sort.dir === 'asc' ? -1 : 1;
+            if (va > vb) return sort.dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return sorted;
     },
 
     _formatBytes(bytes) {

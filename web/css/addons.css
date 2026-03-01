@@ -944,6 +944,18 @@
     color: #ffd080;
 }
 
+/* ── Sortable table headers ────────────────────── */
+
+.smart-th-sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+
+.smart-th-sortable:hover {
+    color: var(--text-primary);
+}
+
 /* ── Status dots for tables ─────────────────────── */
 
 .status-dot-wrap {
