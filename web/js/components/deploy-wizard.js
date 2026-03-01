@@ -137,8 +137,9 @@ const DeployWizardComponent = {
             errorMsg = 'Could not auto-fill from add-on. The Vigil server cannot reach the add-on URL.';
         }
 
-        // Fallback: use the registered addon URL for hub_url if prefill failed
-        if (!wiz.prefill.hub_url && wiz.addonUrl) {
+        // Always prefer the registered addon URL for hub_url — the Hub's
+        // auto-detected hostname is often a Docker container ID.
+        if (wiz.addonUrl) {
             wiz.prefill.hub_url = wiz.addonUrl;
         }
 
