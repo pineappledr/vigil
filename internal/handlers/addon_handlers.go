@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -414,6 +415,10 @@ func AddonTelemetrySSE(w http.ResponseWriter, r *http.Request) {
 // This allows the frontend to fetch data (e.g., deploy-info) from the
 // add-on without CORS issues.
 // GET /api/addons/{id}/proxy?path=/api/deploy-info
+//
+// Security: The target URL is constructed from the addon's registered URL
+// (stored by an admin) combined with an allowlisted API path. Only paths
+// starting with "/api/" are permitted to prevent path traversal.
 func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -422,8 +427,13 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := r.URL.Query().Get("path")
-	if path == "" || !strings.HasPrefix(path, "/") {
-		JSONError(w, "path query parameter is required and must start with /", http.StatusBadRequest)
+	if path == "" || !strings.HasPrefix(path, "/api/") {
+		JSONError(w, "path must start with /api/", http.StatusBadRequest)
+		return
+	}
+	// Block path traversal attempts.
+	if strings.Contains(path, "..") {
+		JSONError(w, "invalid path", http.StatusBadRequest)
 		return
 	}
 
@@ -442,12 +452,30 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetURL := strings.TrimRight(addon.URL, "/") + path
+	// Build and validate the target URL from the admin-registered addon URL.
+	targetURL, err := url.JoinPath(addon.URL, path)
+	if err != nil {
+		JSONError(w, "invalid addon URL", http.StatusBadRequest)
+		return
+	}
+	parsed, err := url.Parse(targetURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		JSONError(w, "invalid addon URL scheme", http.StatusBadRequest)
+		return
+	}
+
+	// Target URL is safe: base URL is admin-registered, path is restricted to /api/*,
+	// scheme is validated (http/https only), and path traversal is blocked above.
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsed.String(), nil) // #nosec G704
+	if err != nil {
+		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
+		return
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(targetURL)
+	resp, err := client.Do(req) // #nosec G704
 	if err != nil {
-		log.Printf("❌ Proxy request to %s: %v", targetURL, err)
+		log.Printf("❌ Proxy request to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
 		return
 	}
