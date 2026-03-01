@@ -362,7 +362,26 @@ const DeployWizardComponent = {
                 label.textContent = 'Copied!';
                 setTimeout(() => { label.textContent = orig; }, 2000);
             }
+            // Reset user-input fields so the wizard is ready for the next deployment
+            this._resetUserFields(compId);
         });
+    },
+
+    /** Clear user-input fields after a successful copy, keeping prefill values intact. */
+    _resetUserFields(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+
+        const env = wiz.config.docker?.environment || {};
+        for (const [envKey, envDef] of Object.entries(env)) {
+            if (envDef.source !== 'user_input') continue;
+            const input = document.getElementById(`dw-ui-${compId}-${envKey}`);
+            if (input) input.value = '';
+        }
+
+        // Also reset the version field
+        const version = document.getElementById(`dw-version-${compId}`);
+        if (version) version.value = '';
     },
 
     _generateDockerCompose(compId) {

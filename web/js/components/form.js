@@ -2,19 +2,27 @@
  * Vigil Dashboard - Form Component (Task 4.3)
  *
  * Renders manifest form fields with full support for:
- *  - Field types: text, number, select, checkbox, hidden, range
- *  - visible_when: conditional visibility ("field=value" or "field!=value")
+ *  - Field types: text, number, select, checkbox, toggle, hidden, range
+ *  - source: dynamic select options fetched from addon API (addon_agents, agent_drives)
+ *  - visible_when: conditional visibility (string "field=value" or object {"field": ["v1","v2"]})
  *  - depends_on: cascading select — re-fetches options when parent changes
  *  - live_calculation: safe arithmetic formulas evaluated on every input
  *  - security_gate: multi-step flow — Step 1: Password → Step 2: Path Confirm → Step 3: OK
  */
 
 const FormComponent = {
-    _forms: {},  // keyed by componentId → { fields, addonId, action, gateStep }
+    _forms: {},  // keyed by componentId → { fields, addonId, action, gateStep, sourceData }
+
+    // Map source names to addon API paths (same as SmartTableComponent)
+    _sourceMap: {
+        'addon_agents': '/api/agents',
+        'agent_drives': '/api/agents',   // drives come from agents
+        'job_history': '/api/jobs/history'
+    },
 
     /**
      * @param {string} compId  - Manifest component ID
-     * @param {Object} config  - { fields: FormField[], action?: string }
+     * @param {Object} config  - { fields: FormField[], action?: string, submit_label?: string }
      * @param {number} addonId - Parent add-on ID
      * @returns {string} HTML
      */
@@ -27,7 +35,9 @@ const FormComponent = {
         this._forms[compId] = {
             fields, addonId,
             action: config.action || '',
-            gateStep: 0  // 0=idle, 1=password, 2=path confirm, 3=done
+            submitLabel: config.submit_label || 'Submit',
+            gateStep: 0,  // 0=idle, 1=password, 2=path confirm, 3=done
+            sourceData: {} // cached source data keyed by source name
         };
 
         const fieldHtml = fields.map(f => this._renderField(compId, f)).join('');
@@ -36,17 +46,149 @@ const FormComponent = {
         setTimeout(() => {
             this._evaluateVisibility(compId);
             this._evaluateCalculations(compId);
+            this._fetchSources(compId);
         }, 0);
+
+        const submitLabel = this._escape(config.submit_label || 'Submit');
 
         return `
             <form class="addon-form" id="form-${compId}" onsubmit="FormComponent.submit(event, '${compId}')">
                 ${fieldHtml}
                 <div class="addon-form-actions">
-                    <button type="submit" class="btn btn-primary">Submit</button>
+                    <button type="submit" class="btn btn-primary">${submitLabel}</button>
                 </div>
                 <div class="addon-form-error" id="form-error-${compId}"></div>
             </form>
         `;
+    },
+
+    // ─── Source Fetching ──────────────────────────────────────────────────
+
+    /** Fetch source data for all source-backed select fields. */
+    async _fetchSources(compId) {
+        const meta = this._forms[compId];
+        if (!meta) return;
+
+        // Collect unique sources needed
+        const sourcesNeeded = new Set();
+        for (const field of meta.fields) {
+            if (field.source && this._sourceMap[field.source]) {
+                sourcesNeeded.add(field.source);
+            }
+        }
+
+        for (const source of sourcesNeeded) {
+            await this._fetchSource(compId, source);
+        }
+    },
+
+    async _fetchSource(compId, source) {
+        const meta = this._forms[compId];
+        if (!meta) return;
+
+        const path = this._sourceMap[source];
+        if (!path) return;
+
+        try {
+            const resp = await fetch(`/api/addons/${meta.addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) {
+                console.error(`[Form] Source fetch failed for ${source}: HTTP ${resp.status}`);
+                this._setSourceError(compId, source, `Failed to load (HTTP ${resp.status})`);
+                return;
+            }
+
+            const data = await resp.json();
+            meta.sourceData[source] = data;
+
+            // Populate all selects backed by this source
+            this._populateSourceSelects(compId, source, data);
+        } catch (e) {
+            console.error(`[Form] Source fetch error for ${source}:`, e);
+            this._setSourceError(compId, source, 'Could not reach add-on');
+        }
+    },
+
+    /** Populate select elements that use a given source. */
+    _populateSourceSelects(compId, source, data) {
+        const meta = this._forms[compId];
+        if (!meta) return;
+
+        for (const field of meta.fields) {
+            if (field.source !== source) continue;
+            // Skip fields that depend on another field (they get populated via depends_on)
+            if (field.depends_on) continue;
+
+            const select = document.getElementById(`field-${compId}-${field.name}`);
+            if (!select) continue;
+
+            const options = this._sourceToOptions(source, data, field);
+            const placeholder = field.placeholder || 'Select...';
+            select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
+                options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
+            select.disabled = false;
+        }
+    },
+
+    /** Convert raw source data into {value, label}[] for a select. */
+    _sourceToOptions(source, data, field) {
+        if (!Array.isArray(data)) return [];
+
+        switch (source) {
+            case 'addon_agents':
+                return data.map(a => ({
+                    value: a.agent_id,
+                    label: `${a.agent_id} (${a.hostname || 'unknown'})`
+                }));
+
+            case 'agent_drives': {
+                // Flatten drives from all agents
+                const drives = [];
+                for (const agent of data) {
+                    if (agent.drives && Array.isArray(agent.drives)) {
+                        for (const drive of agent.drives) {
+                            const cap = drive.capacity_bytes
+                                ? ` (${this._formatBytes(drive.capacity_bytes)})`
+                                : '';
+                            drives.push({
+                                value: drive.path,
+                                label: `${drive.path} - ${drive.model || 'Unknown'}${cap}`,
+                                agent_id: agent.agent_id
+                            });
+                        }
+                    }
+                }
+                return drives;
+            }
+
+            default:
+                return data.map((item, i) => ({
+                    value: item.id || item.value || String(i),
+                    label: item.name || item.label || String(item)
+                }));
+        }
+    },
+
+    /** Set error state on source-backed selects. */
+    _setSourceError(compId, source, message) {
+        const meta = this._forms[compId];
+        if (!meta) return;
+
+        for (const field of meta.fields) {
+            if (field.source !== source) continue;
+            const select = document.getElementById(`field-${compId}-${field.name}`);
+            if (select) {
+                select.innerHTML = `<option value="">${this._escape(message)}</option>`;
+                select.disabled = false;
+            }
+        }
+    },
+
+    _formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1000;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     },
 
     // ─── Field Rendering ──────────────────────────────────────────────────
@@ -54,8 +196,19 @@ const FormComponent = {
     _renderField(compId, field) {
         const id = `field-${compId}-${field.name}`;
         const required = field.required ? 'required' : '';
-        const hidden = field.visible_when ? 'style="display:none"' : '';
-        const vw = field.visible_when ? `data-visible-when="${this._escape(field.visible_when)}"` : '';
+        const hasVisibleWhen = field.visible_when != null;
+        const hidden = hasVisibleWhen ? 'style="display:none"' : '';
+
+        // Store visible_when as a JSON data attribute when it's an object
+        let vwAttr = '';
+        if (hasVisibleWhen) {
+            if (typeof field.visible_when === 'object') {
+                vwAttr = `data-visible-when-json='${JSON.stringify(field.visible_when)}'`;
+            } else {
+                vwAttr = `data-visible-when="${this._escape(field.visible_when)}"`;
+            }
+        }
+
         const dep = field.depends_on ? `data-depends-on="${this._escape(field.depends_on)}"` : '';
         const calc = field.live_calculation ? `data-calc="${this._escape(field.live_calculation)}"` : '';
 
@@ -70,7 +223,7 @@ const FormComponent = {
             : '';
 
         return `
-            <div class="form-group addon-form-group" id="fg-${id}" ${hidden} ${vw} ${dep} ${calc}>
+            <div class="form-group addon-form-group" id="fg-${id}" ${hidden} ${vwAttr} ${dep} ${calc}>
                 ${field.type !== 'checkbox' ? `<label for="${id}">${this._escape(field.label || field.name)}</label>` : ''}
                 ${input}
                 ${calcDisplay}
@@ -87,14 +240,19 @@ const FormComponent = {
                 return this._selectInput(id, field, required, ev, name);
             case 'checkbox':
                 return this._checkboxInput(id, field, ev, name);
+            case 'toggle':
+                return this._toggleInput(id, field, ev, name);
             case 'range':
                 return this._rangeInput(id, field, ev, name);
-            case 'number':
+            case 'number': {
+                const def = field.default != null ? `value="${field.default}"` : '';
                 return `<input type="number" id="${id}" name="${name}" class="form-input" ${required}
                             ${field.min != null ? `min="${field.min}"` : ''}
                             ${field.max != null ? `max="${field.max}"` : ''}
                             ${field.step != null ? `step="${field.step}"` : ''}
+                            ${def}
                             oninput="${ev}">`;
+            }
             default: // text
                 return `<input type="text" id="${id}" name="${name}" class="form-input" ${required}
                             oninput="${ev}">`;
@@ -102,13 +260,25 @@ const FormComponent = {
     },
 
     _selectInput(id, field, required, ev, name) {
+        // Source-backed selects start with "Loading..." placeholder
+        if (field.source && this._sourceMap[field.source]) {
+            const placeholder = field.depends_on
+                ? `Select a ${this._escape(field.depends_on)} first...`
+                : 'Loading...';
+            return `<select id="${id}" name="${name}" class="form-input" ${required}
+                        onchange="${ev}" disabled>
+                        <option value="">${placeholder}</option>
+                    </select>`;
+        }
+
+        // Static options
         const options = (field.options || [])
             .map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`)
             .join('');
 
         return `<select id="${id}" name="${name}" class="form-input" ${required}
                     onchange="${ev}">
-                    <option value="">Select...</option>
+                    <option value="">${this._escape(field.placeholder || 'Select...')}</option>
                     ${options}
                 </select>`;
     },
@@ -117,6 +287,14 @@ const FormComponent = {
         return `<label class="addon-checkbox">
                     <input type="checkbox" id="${id}" name="${name}" onchange="${ev}">
                     ${this._escape(field.label || field.name)}
+                </label>`;
+    },
+
+    _toggleInput(id, field, ev, name) {
+        const checked = field.default === true ? 'checked' : '';
+        return `<label class="addon-toggle">
+                    <input type="checkbox" id="${id}" name="${name}" onchange="${ev}" ${checked}>
+                    <span class="toggle-label">${this._escape(field.label || field.name)}</span>
                 </label>`;
     },
 
@@ -160,15 +338,35 @@ const FormComponent = {
         const form = document.getElementById(`form-${compId}`);
         if (!form) return;
 
+        // Handle string-based visible_when (legacy)
         form.querySelectorAll('[data-visible-when]').forEach(group => {
             const expr = group.dataset.visibleWhen;
             const visible = this._evalCondition(compId, expr);
             group.style.display = visible ? '' : 'none';
         });
+
+        // Handle object-based visible_when (new format: {"field": ["val1", "val2"]})
+        form.querySelectorAll('[data-visible-when-json]').forEach(group => {
+            const spec = JSON.parse(group.dataset.visibleWhenJson);
+            const visible = this._evalObjectCondition(compId, spec);
+            group.style.display = visible ? '' : 'none';
+        });
+    },
+
+    /** Evaluate object-style visible_when: { "fieldName": ["val1", "val2"] } */
+    _evalObjectCondition(compId, spec) {
+        for (const [fieldName, allowedValues] of Object.entries(spec)) {
+            const currentValue = this._getFieldValue(compId, fieldName);
+            const allowed = Array.isArray(allowedValues) ? allowedValues : [allowedValues];
+            if (!allowed.includes(currentValue)) {
+                return false;
+            }
+        }
+        return true;
     },
 
     /**
-     * Evaluate a visibility condition.
+     * Evaluate a string visibility condition.
      * Supports: "field=value", "field!=value", "field>value", "field<value"
      */
     _evalCondition(compId, expr) {
@@ -199,8 +397,7 @@ const FormComponent = {
 
     /**
      * Cascading depends_on: when a parent field changes, update dependent selects.
-     * The add-on must expose a GET /api/addons/{id}/options?field={name}&parent_value={val}
-     * endpoint to supply dynamic options.
+     * Supports both source-backed selects and API-fetched options.
      */
     _evaluateDependsOn(compId, changedField) {
         const form = document.getElementById(`form-${compId}`);
@@ -211,29 +408,76 @@ const FormComponent = {
             const parentName = group.dataset.dependsOn;
             if (parentName !== changedField) return;
 
-            // Find the select inside this group
             const select = group.querySelector('select');
             if (!select) return;
 
             const parentValue = this._getFieldValue(compId, parentName);
             const fieldName = select.name;
 
-            // Clear and set loading state
-            select.innerHTML = '<option value="">Loading...</option>';
-            select.disabled = true;
+            // Find the field definition
+            const fieldDef = meta.fields.find(f => f.name === fieldName);
 
-            // Fetch new options from the addon
-            this._fetchDependentOptions(meta.addonId, fieldName, parentValue)
-                .then(options => {
-                    select.innerHTML = '<option value="">Select...</option>' +
-                        options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
-                    select.disabled = false;
-                })
-                .catch(() => {
-                    select.innerHTML = '<option value="">Failed to load options</option>';
-                    select.disabled = false;
-                });
+            if (fieldDef && fieldDef.source && meta.sourceData[fieldDef.source]) {
+                // Source-backed dependent select — filter from cached data
+                this._populateDependentSource(compId, fieldDef, parentValue, select);
+            } else {
+                // API-fetched dependent select (legacy path)
+                select.innerHTML = '<option value="">Loading...</option>';
+                select.disabled = true;
+
+                this._fetchDependentOptions(meta.addonId, fieldName, parentValue)
+                    .then(options => {
+                        const placeholder = fieldDef?.placeholder || 'Select...';
+                        select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
+                            options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
+                        select.disabled = false;
+                    })
+                    .catch(() => {
+                        select.innerHTML = '<option value="">Failed to load options</option>';
+                        select.disabled = false;
+                    });
+            }
         });
+    },
+
+    /** Populate a dependent select from cached source data, filtered by parent value. */
+    _populateDependentSource(compId, fieldDef, parentValue, select) {
+        const meta = this._forms[compId];
+        const data = meta.sourceData[fieldDef.source];
+        if (!data || !Array.isArray(data)) return;
+
+        let options = this._sourceToOptions(fieldDef.source, data, fieldDef);
+
+        // Filter by parent value (e.g., filter drives by agent_id)
+        if (parentValue && fieldDef.source === 'agent_drives') {
+            // Only show drives for the selected agent
+            const agentDrives = [];
+            for (const agent of data) {
+                if (agent.agent_id === parentValue && agent.drives) {
+                    for (const drive of agent.drives) {
+                        const cap = drive.capacity_bytes
+                            ? ` (${this._formatBytes(drive.capacity_bytes)})`
+                            : '';
+                        agentDrives.push({
+                            value: drive.path,
+                            label: `${drive.path} - ${drive.model || 'Unknown'}${cap}`
+                        });
+                    }
+                }
+            }
+            options = agentDrives;
+        }
+
+        const placeholder = fieldDef.placeholder || 'Select...';
+        if (!parentValue) {
+            select.innerHTML = `<option value="">Select a ${this._escape(fieldDef.depends_on)} first...</option>`;
+        } else if (options.length === 0) {
+            select.innerHTML = `<option value="">No options available</option>`;
+        } else {
+            select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
+                options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
+        }
+        select.disabled = false;
     },
 
     async _fetchDependentOptions(addonId, fieldName, parentValue) {
