@@ -57,8 +57,19 @@ const SmartTableComponent = {
             ? 'Loading data...'
             : (isStructured ? 'No data' : 'Waiting for SMART data...');
 
+        const refreshBtn = (config.source && addonId)
+            ? `<button class="smart-table-refresh" id="smart-refresh-${compId}" title="Refresh"
+                       onclick="SmartTableComponent.refresh('${this._escapeJS(compId)}')">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                       <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                   </svg>
+               </button>`
+            : '';
+
         return `
             <div class="smart-table-container" id="smart-table-${compId}">
+                ${refreshBtn}
                 <table class="smart-table">
                     <thead>
                         <tr>${headers}</tr>
@@ -69,6 +80,19 @@ const SmartTableComponent = {
                 </table>
             </div>
         `;
+    },
+
+    /** Public refresh — re-fetches source data with a spin animation. */
+    refresh(compId) {
+        const btn = document.getElementById(`smart-refresh-${compId}`);
+        if (btn) {
+            btn.classList.add('spinning');
+            // Remove spinning class after fetch completes (or after timeout)
+            const cleanup = () => btn.classList.remove('spinning');
+            this._fetchSource(compId).then(cleanup).catch(cleanup);
+            return;
+        }
+        this._fetchSource(compId);
     },
 
     // ─── Source Data Fetching ─────────────────────────────────────────────
@@ -195,14 +219,21 @@ const SmartTableComponent = {
         tbody.innerHTML = rows.map(row => {
             return `<tr>${entry.columns.map(col => {
                 const val = row[col.key];
-                return `<td>${this._formatValue(val, col.format)}</td>`;
+                return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
         }).join('');
 
         entry.rows = rows;
     },
 
-    _formatValue(val, format) {
+    _formatValue(val, format, row, col) {
+        if (format === 'status_dot') {
+            return this._formatStatusDot(val);
+        }
+        if (format === 'actions') {
+            return this._formatActions(row, col);
+        }
+
         if (val === undefined || val === null) return '';
 
         switch (format) {
@@ -216,6 +247,66 @@ const SmartTableComponent = {
                 return this._formatRelativeTime(val);
             default:
                 return this._escape(String(val));
+        }
+    },
+
+    _formatStatusDot(status) {
+        const colorMap = {
+            online:  { color: 'var(--success, #10b981)', label: 'Online' },
+            offline: { color: 'var(--danger, #ef4444)',  label: 'Offline' },
+            busy:    { color: 'var(--warning, #f59e0b)', label: 'Busy' }
+        };
+        const info = colorMap[status] || colorMap.offline;
+        return `<span class="status-dot-wrap" title="${info.label}">` +
+               `<span class="status-dot" style="background:${info.color}"></span> ` +
+               `<span class="status-dot-label">${info.label}</span></span>`;
+    },
+
+    _formatActions(row, col) {
+        if (!col || !col.actions) return '';
+        return col.actions.map(action => {
+            if (action.type === 'delete') {
+                const idKey = action.id_key || 'id';
+                const idVal = row[idKey] || '';
+                return `<button class="btn-table-action btn-table-delete" title="${this._escape(action.label || 'Delete')}"
+                            onclick="SmartTableComponent._handleAction('delete','${this._escapeJS(idVal)}',this)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                            </svg>
+                        </button>`;
+            }
+            return '';
+        }).join('');
+    },
+
+    async _handleAction(type, id, btnEl) {
+        if (type !== 'delete') return;
+        if (!confirm(`Are you sure you want to delete "${id}"?`)) return;
+
+        // Find which table this button belongs to
+        const container = btnEl.closest('.smart-table-container');
+        if (!container) return;
+        const compId = container.id.replace('smart-table-', '');
+        const entry = this._tables[compId];
+        if (!entry || !entry.addonId) return;
+
+        btnEl.disabled = true;
+        try {
+            const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent('/api/agents/' + id)}`, {
+                method: 'DELETE'
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                alert(err.error || `Delete failed (HTTP ${resp.status})`);
+                return;
+            }
+            // Refresh table
+            this.refresh(compId);
+        } catch (e) {
+            alert('Failed to delete: ' + e.message);
+        } finally {
+            btnEl.disabled = false;
         }
     },
 
@@ -323,5 +414,10 @@ const SmartTableComponent = {
         const div = document.createElement('div');
         div.textContent = String(str);
         return div.innerHTML;
+    },
+
+    _escapeJS(str) {
+        if (!str) return '';
+        return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     }
 };

@@ -509,10 +509,9 @@ func AddonTelemetrySSE(w http.ResponseWriter, r *http.Request) {
 
 // ─── Addon Proxy ─────────────────────────────────────────────────────────
 
-// ProxyAddonRequest proxies a GET request to the add-on's own API.
-// This allows the frontend to fetch data (e.g., deploy-info) from the
-// add-on without CORS issues.
-// GET /api/addons/{id}/proxy?path=/api/deploy-info
+// ProxyAddonRequest proxies a request to the add-on's own API.
+// This allows the frontend to interact with addon APIs without CORS issues.
+// GET/DELETE /api/addons/{id}/proxy?path=/api/deploy-info
 //
 // Security: The target URL is constructed from the addon's registered URL
 // (stored by an admin) combined with an allowlisted API path. Only paths
@@ -564,7 +563,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Target URL is safe: base URL is admin-registered, path is restricted to /api/*,
 	// scheme is validated (http/https only), and path traversal is blocked above.
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsed.String(), nil) // #nosec G704
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, parsed.String(), nil) // #nosec G704
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
@@ -814,6 +813,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("GET /api/addons", protect(ListAddons))
 	mux.HandleFunc("GET /api/addons/{id}", protect(GetAddon))
 	mux.HandleFunc("GET /api/addons/{id}/proxy", protect(ProxyAddonRequest))
+	mux.HandleFunc("DELETE /api/addons/{id}/proxy", protect(ProxyAddonRequest))
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))

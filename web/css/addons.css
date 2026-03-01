@@ -707,6 +707,32 @@
 
 .smart-table-container {
     overflow-x: auto;
+    position: relative;
+}
+
+.smart-table-refresh {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, border-color 0.15s;
+    z-index: 1;
+}
+
+.smart-table-refresh:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.smart-table-refresh.spinning svg {
+    animation: spin 0.6s linear infinite;
 }
 
 .smart-table {
@@ -916,6 +942,57 @@
 
 .log-line.log-warn .log-msg {
     color: #ffd080;
+}
+
+/* ── Status dots for tables ─────────────────────── */
+
+.status-dot-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.status-dot-label {
+    text-transform: capitalize;
+}
+
+/* ── Table action buttons ─────────────────────── */
+
+.btn-table-action {
+    padding: 4px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-table-action:hover {
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.btn-table-delete:hover {
+    color: var(--danger, #ef4444);
+    border-color: var(--danger, #ef4444);
+}
+
+.btn-table-action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 /* ── Error states ─────────────────────────────── */
