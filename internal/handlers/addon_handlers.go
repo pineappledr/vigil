@@ -284,6 +284,81 @@ func CreateAddonFromUI(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ─── Add-on Self-Registration (Programmatic) ─────────────────────────────
+
+// ConnectAddon allows an add-on to submit its manifest using a registration
+// token. The token must have been previously bound to an add-on via the
+// admin UI flow (POST /api/addons/register).
+//
+// This endpoint is NOT behind the user session middleware — it authenticates
+// via the addon registration token in the Authorization header.
+//
+// POST /api/addons/connect
+func ConnectAddon(w http.ResponseWriter, r *http.Request) {
+	// Extract Bearer token.
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		JSONError(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
+		return
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Look up the registration token.
+	tok, err := addons.GetRegistrationToken(db.DB, token)
+	if err != nil {
+		log.Printf("❌ ConnectAddon — token lookup: %v", err)
+		JSONError(w, "Failed to validate token", http.StatusInternalServerError)
+		return
+	}
+	if tok == nil {
+		JSONError(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+	if tok.UsedByAddonID == nil {
+		// Token exists but hasn't been bound to an addon yet (admin hasn't
+		// finished the "Register Add-on" step in the UI). Tell the addon to retry.
+		JSONError(w, "Token not yet bound to an add-on — complete registration in the Vigil UI first", http.StatusPreconditionFailed)
+		return
+	}
+
+	// Parse the manifest from the request body.
+	var req struct {
+		ManifestJSON json.RawMessage `json:"manifest"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if len(req.ManifestJSON) == 0 {
+		JSONError(w, "manifest is required", http.StatusBadRequest)
+		return
+	}
+
+	manifest, err := addons.ValidateManifest(req.ManifestJSON)
+	if err != nil {
+		JSONError(w, fmt.Sprintf("Invalid manifest: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Update the addon's manifest and mark it online.
+	addonID := *tok.UsedByAddonID
+	if err := addons.UpdateManifest(db.DB, addonID, manifest.Version,
+		manifest.Description, string(req.ManifestJSON)); err != nil {
+		log.Printf("❌ ConnectAddon — update manifest: %v", err)
+		JSONError(w, "Failed to update add-on manifest", http.StatusInternalServerError)
+		return
+	}
+
+	addon, _ := addons.Get(db.DB, addonID)
+	log.Printf("📦 Add-on connected: %s v%s (id=%d)", manifest.Name, manifest.Version, addonID)
+
+	JSONResponse(w, map[string]interface{}{
+		"addon_id":   addonID,
+		"session_id": tok.Token[:16],
+		"addon":      addon,
+	})
+}
+
 // ─── Add-on Token CRUD ───────────────────────────────────────────────────
 
 // CreateAddonToken generates a new registration token for an add-on.
@@ -505,6 +580,9 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("POST /api/addons/tokens", protect(CreateAddonToken))
 	mux.HandleFunc("GET /api/addons/tokens", protect(ListAddonTokens))
 	mux.HandleFunc("DELETE /api/addons/tokens/{id}", protect(DeleteAddonToken))
+
+	// Add-on self-registration — NOT behind protect (uses registration token auth)
+	mux.HandleFunc("POST /api/addons/connect", ConnectAddon)
 
 	// WebSocket telemetry ingestion — add-ons connect here to stream data
 	if WebSocketHub != nil {
