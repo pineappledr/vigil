@@ -17,12 +17,13 @@ const DeployWizardComponent = {
     _wizards: {},   // keyed by compId
 
     /**
-     * @param {string} compId  - Manifest component ID
-     * @param {Object} config  - Deploy wizard config from manifest
-     * @param {number} addonId - Parent add-on ID
+     * @param {string} compId   - Manifest component ID
+     * @param {Object} config   - Deploy wizard config from manifest
+     * @param {number} addonId  - Parent add-on ID
+     * @param {string} addonUrl - Registered add-on URL (fallback for prefill)
      * @returns {string} HTML
      */
-    render(compId, config, addonId) {
+    render(compId, config, addonId, addonUrl) {
         const hasDocker = !!config.docker;
         const hasBinary = !!config.binary;
 
@@ -36,7 +37,7 @@ const DeployWizardComponent = {
         const defaultPlatform = hasDocker ? dockerPlatforms[0] : binaryPlatforms[0];
 
         this._wizards[compId] = {
-            config, addonId,
+            config, addonId, addonUrl,
             tab: defaultTab,
             platform: defaultPlatform,
             prefill: {},
@@ -129,11 +130,16 @@ const DeployWizardComponent = {
             if (resp.ok) {
                 wiz.prefill = await resp.json();
             } else {
-                errorMsg = `Failed to load (HTTP ${resp.status}). Check that the add-on URL is reachable from the Vigil server.`;
+                errorMsg = `Could not auto-fill from add-on (HTTP ${resp.status}). The Vigil server cannot reach the add-on URL. Values below have been pre-filled from the registered add-on URL where possible.`;
             }
         } catch (e) {
             console.error(`[DeployWizard] Failed to fetch prefill for ${compId}:`, e);
-            errorMsg = 'Could not reach add-on. Check that the add-on URL is reachable from the Vigil server.';
+            errorMsg = 'Could not auto-fill from add-on. The Vigil server cannot reach the add-on URL.';
+        }
+
+        // Fallback: use the registered addon URL for hub_url if prefill failed
+        if (!wiz.prefill.hub_url && wiz.addonUrl) {
+            wiz.prefill.hub_url = wiz.addonUrl;
         }
 
         wiz.loading = false;
@@ -153,23 +159,28 @@ const DeployWizardComponent = {
             if (envDef.source !== 'prefill') continue;
             const input = document.getElementById(`dw-pf-${compId}-${envKey}`);
             if (input) {
+                // If this field already has a value (from fallback), keep it readonly
+                if (input.value) continue;
                 input.placeholder = 'Enter manually';
                 input.removeAttribute('readonly');
                 input.classList.add('prefill-error');
             }
         }
 
-        // Show error hint below the first prefill field
+        // Show error banner above all fields
         const container = document.getElementById(`dw-${compId}`);
         if (container) {
             const existing = container.querySelector('.deploy-wizard-error');
             if (!existing) {
-                const firstPrefill = container.querySelector('.prefill-error');
-                if (firstPrefill) {
-                    const errDiv = document.createElement('div');
-                    errDiv.className = 'deploy-wizard-error';
-                    errDiv.textContent = message;
-                    firstPrefill.closest('.form-group')?.insertAdjacentElement('beforebegin', errDiv);
+                const errDiv = document.createElement('div');
+                errDiv.className = 'deploy-wizard-error';
+                errDiv.textContent = message;
+                // Insert after the hint paragraph
+                const hint = container.querySelector('.agent-tab-hint');
+                if (hint) {
+                    hint.insertAdjacentElement('afterend', errDiv);
+                } else {
+                    container.prepend(errDiv);
                 }
             }
         }

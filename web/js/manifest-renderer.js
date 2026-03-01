@@ -154,7 +154,7 @@ const ManifestRenderer = {
 
             case 'deploy-wizard':
                 return typeof DeployWizardComponent !== 'undefined'
-                    ? DeployWizardComponent.render(comp.id, config, this.addon.id)
+                    ? DeployWizardComponent.render(comp.id, config, this.addon.id, this.addon.url)
                     : '<p class="component-unavailable">Deploy Wizard component not loaded</p>';
 
             default:
