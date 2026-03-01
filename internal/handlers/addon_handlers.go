@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -342,6 +343,15 @@ func ConnectAddon(w http.ResponseWriter, r *http.Request) {
 
 	// Update the addon's manifest and mark it online.
 	addonID := *tok.UsedByAddonID
+
+	// Check for version change before updating.
+	oldAddon, _ := addons.Get(db.DB, addonID)
+	var versionChanged bool
+	if oldAddon != nil && oldAddon.Version != "" && oldAddon.Version != "0.0.0" && oldAddon.Version != manifest.Version {
+		versionChanged = true
+		log.Printf("📦 Add-on %s updated: v%s → v%s (id=%d)", manifest.Name, oldAddon.Version, manifest.Version, addonID)
+	}
+
 	if err := addons.UpdateManifest(db.DB, addonID, manifest.Version,
 		manifest.Description, string(req.ManifestJSON)); err != nil {
 		log.Printf("❌ ConnectAddon — update manifest: %v", err)
@@ -352,11 +362,24 @@ func ConnectAddon(w http.ResponseWriter, r *http.Request) {
 	addon, _ := addons.Get(db.DB, addonID)
 	log.Printf("📦 Add-on connected: %s v%s (id=%d)", manifest.Name, manifest.Version, addonID)
 
-	JSONResponse(w, map[string]interface{}{
+	// Send version-change notification via telemetry if the version changed.
+	if versionChanged && TelemetryBroker != nil {
+		TelemetryBroker.Publish(addons.TelemetryEvent{
+			AddonID: addonID,
+			Type:    "notification",
+			Payload: json.RawMessage(fmt.Sprintf(`{"message":"Add-on %s updated to v%s","severity":"info"}`, manifest.Name, manifest.Version)),
+		})
+	}
+
+	resp := map[string]interface{}{
 		"addon_id":   addonID,
 		"session_id": tok.Token[:16],
 		"addon":      addon,
-	})
+	}
+	if versionChanged && oldAddon != nil {
+		resp["previous_version"] = oldAddon.Version
+	}
+	JSONResponse(w, resp)
 }
 
 // ─── Add-on Token CRUD ───────────────────────────────────────────────────
@@ -561,6 +584,228 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, io.LimitReader(resp.Body, 64*1024)) // 64 KiB limit
 }
 
+// ─── Update Check ────────────────────────────────────────────────────────
+
+// CheckAddonUpdates queries the container registry for newer image tags.
+// It extracts the Docker image reference from the addon's manifest
+// (deploy-wizard component) and checks for tags newer than the current one.
+// GET /api/addons/{id}/check-updates
+func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	addon, err := addons.Get(db.DB, id)
+	if err != nil || addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+
+	// Extract Docker image from manifest deploy-wizard config.
+	image, currentTag := extractDockerImage(addon.ManifestJSON)
+	if image == "" {
+		JSONResponse(w, map[string]interface{}{
+			"update_available": false,
+			"message":          "No Docker image found in manifest",
+		})
+		return
+	}
+
+	// Query the container registry for available tags.
+	tags, err := queryRegistryTags(r.Context(), image)
+	if err != nil {
+		log.Printf("⚠️  Registry tag check for %s: %v", image, err)
+		JSONResponse(w, map[string]interface{}{
+			"update_available": false,
+			"current_tag":      currentTag,
+			"image":            image,
+			"error":            err.Error(),
+		})
+		return
+	}
+
+	// Find the latest semver tag.
+	latestTag := findLatestTag(tags, currentTag)
+
+	JSONResponse(w, map[string]interface{}{
+		"update_available": latestTag != "" && latestTag != currentTag,
+		"current_tag":      currentTag,
+		"latest_tag":       latestTag,
+		"image":            image,
+		"current_version":  addon.Version,
+	})
+}
+
+// extractDockerImage parses the manifest JSON and returns the Docker image
+// and default tag from the first deploy-wizard component found.
+func extractDockerImage(manifestJSON string) (image, tag string) {
+	var m addons.Manifest
+	if err := json.Unmarshal([]byte(manifestJSON), &m); err != nil {
+		return "", ""
+	}
+
+	for _, page := range m.Pages {
+		for _, comp := range page.Components {
+			if comp.Type != "deploy-wizard" || len(comp.Config) == 0 {
+				continue
+			}
+			var cfg addons.DeployWizardConfig
+			if err := json.Unmarshal(comp.Config, &cfg); err != nil {
+				continue
+			}
+			if cfg.Docker != nil && cfg.Docker.Image != "" {
+				t := cfg.Docker.DefaultTag
+				if t == "" {
+					t = "latest"
+				}
+				return cfg.Docker.Image, t
+			}
+		}
+	}
+	return "", ""
+}
+
+// queryRegistryTags fetches available tags from a container registry.
+// Supports ghcr.io and Docker Hub via the OCI distribution API.
+func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
+	// Parse image into registry + repository
+	registry, repo := parseImageRef(image)
+
+	var tagsURL string
+	switch {
+	case strings.Contains(registry, "ghcr.io"):
+		tagsURL = fmt.Sprintf("https://ghcr.io/v2/%s/tags/list", repo)
+	case registry == "docker.io" || registry == "":
+		// Docker Hub
+		if !strings.Contains(repo, "/") {
+			repo = "library/" + repo
+		}
+		tagsURL = fmt.Sprintf("https://registry-1.docker.io/v2/%s/tags/list", repo)
+	default:
+		tagsURL = fmt.Sprintf("https://%s/v2/%s/tags/list", registry, repo)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tagsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	// For ghcr.io public images, anonymous access works with this Accept header.
+	req.Header.Set("Accept", "application/json")
+
+	// For Docker Hub, we may need a token. Try anonymous first.
+	if strings.Contains(registry, "docker.io") || registry == "" {
+		// Get anonymous token for Docker Hub
+		tokenURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", repo)
+		tokenReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+		tokenResp, err := client.Do(tokenReq)
+		if err == nil {
+			defer tokenResp.Body.Close()
+			var tokenData struct {
+				Token string `json:"token"`
+			}
+			if json.NewDecoder(tokenResp.Body).Decode(&tokenData) == nil && tokenData.Token != "" {
+				req.Header.Set("Authorization", "Bearer "+tokenData.Token)
+			}
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tags: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("registry returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Tags []string `json:"tags"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decoding tags: %w", err)
+	}
+
+	return result.Tags, nil
+}
+
+// parseImageRef splits an image reference like "ghcr.io/org/repo" into
+// registry ("ghcr.io") and repository ("org/repo").
+func parseImageRef(image string) (registry, repo string) {
+	// Remove tag if present
+	if idx := strings.LastIndex(image, ":"); idx > 0 {
+		image = image[:idx]
+	}
+
+	parts := strings.SplitN(image, "/", 2)
+	if len(parts) == 1 {
+		// e.g., "nginx" → Docker Hub library
+		return "docker.io", parts[0]
+	}
+
+	// Check if first part looks like a registry (contains a dot or is localhost)
+	if strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":") || parts[0] == "localhost" {
+		return parts[0], parts[1]
+	}
+
+	// e.g., "user/repo" → Docker Hub
+	return "docker.io", image
+}
+
+// findLatestTag returns the highest semver tag from the list, or empty if
+// the current tag is already the latest. Non-semver tags are ignored.
+func findLatestTag(tags []string, currentTag string) string {
+	type semver struct {
+		major, minor, patch int
+		original            string
+	}
+
+	parseSemver := func(tag string) (semver, bool) {
+		t := strings.TrimPrefix(tag, "v")
+		var s semver
+		n, _ := fmt.Sscanf(t, "%d.%d.%d", &s.major, &s.minor, &s.patch)
+		if n >= 2 {
+			s.original = tag
+			return s, true
+		}
+		return semver{}, false
+	}
+
+	compareSemver := func(a, b semver) int {
+		if a.major != b.major {
+			return a.major - b.major
+		}
+		if a.minor != b.minor {
+			return a.minor - b.minor
+		}
+		return a.patch - b.patch
+	}
+
+	var best semver
+	var found bool
+
+	for _, tag := range tags {
+		sv, ok := parseSemver(tag)
+		if !ok {
+			continue
+		}
+		if !found || compareSemver(sv, best) > 0 {
+			best = sv
+			found = true
+		}
+	}
+
+	if !found {
+		return ""
+	}
+	return best.original
+}
+
 // ─── Route Registration ──────────────────────────────────────────────────
 
 // RegisterAddonRoutes registers all add-on API routes.
@@ -572,6 +817,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
+	mux.HandleFunc("GET /api/addons/{id}/check-updates", protect(CheckAddonUpdates))
 
 	// Admin UI registration flow
 	mux.HandleFunc("POST /api/addons/register", protect(CreateAddonFromUI))

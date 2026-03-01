@@ -311,6 +311,39 @@
     border-radius: 4px;
 }
 
+.addon-update-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--primary, #3b82f6);
+    animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+#addon-check-updates-btn {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    gap: 4px;
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+#addon-check-updates-btn svg.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .manifest-desc {
     font-size: 0.85rem;
     color: var(--text-muted);

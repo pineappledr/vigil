@@ -61,6 +61,18 @@ const ManifestRenderer = {
                         <h2>${this._escape(a.name)}</h2>
                         <span class="manifest-version">v${this._escape(m.version)}</span>
                         <span class="addon-status-badge addon-${a.status}">${this._capitalize(a.status)}</span>
+                        <span class="addon-update-badge" id="addon-update-badge" style="display:none;">
+                            Update available
+                        </span>
+                        <button class="btn btn-sm btn-secondary" id="addon-check-updates-btn"
+                                onclick="ManifestRenderer.checkForUpdates()"
+                                title="Check container registry for newer image tags">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                            Check for updates
+                        </button>
                     </div>
                     ${m.description ? `<p class="manifest-desc">${this._escape(m.description)}</p>` : ''}
                 </div>
@@ -132,7 +144,7 @@ const ManifestRenderer = {
 
             case 'smart-table':
                 return typeof SmartTableComponent !== 'undefined'
-                    ? SmartTableComponent.render(comp.id, config)
+                    ? SmartTableComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">SMART Table component not loaded</p>';
 
             case 'log-viewer':
@@ -263,6 +275,43 @@ const ManifestRenderer = {
     _destroyCharts() {
         this._chartInstances.forEach(c => { try { c.destroy(); } catch {} });
         this._chartInstances = [];
+    },
+
+    // ─── Update Check ────────────────────────────────────────────────────
+
+    async checkForUpdates() {
+        if (!this.addon?.id) return;
+
+        const btn = document.getElementById('addon-check-updates-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.querySelector('svg')?.classList.add('spin');
+        }
+
+        try {
+            const resp = await fetch(`/api/addons/${this.addon.id}/check-updates`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+            const data = await resp.json();
+            const badge = document.getElementById('addon-update-badge');
+
+            if (data.update_available && badge) {
+                badge.style.display = '';
+                badge.textContent = `Update: ${data.latest_tag}`;
+                badge.title = `Current: ${data.current_tag} → Latest: ${data.latest_tag} (${data.image})`;
+            } else if (badge) {
+                badge.style.display = 'none';
+                this._showToast({ message: 'No updates available', severity: 'info' });
+            }
+        } catch (e) {
+            console.error('[ManifestRenderer] Update check failed:', e);
+            this._showToast({ message: 'Update check failed', severity: 'warning' });
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.querySelector('svg')?.classList.remove('spin');
+            }
+        }
     },
 
     // ─── Helpers ──────────────────────────────────────────────────────────
