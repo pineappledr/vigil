@@ -293,9 +293,7 @@ const SmartTableComponent = {
 
         btnEl.disabled = true;
         try {
-            const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent('/api/agents/' + id)}`, {
-                method: 'DELETE'
-            });
+            const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent('/api/agents/' + id)}&method=DELETE`);
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({}));
                 alert(err.error || `Delete failed (HTTP ${resp.status})`);

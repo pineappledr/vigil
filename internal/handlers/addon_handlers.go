@@ -561,9 +561,16 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Allow overriding the upstream method via ?method=DELETE (etc.)
+	// so the frontend can issue DELETE/PUT through a GET/POST proxy route.
+	upstreamMethod := r.Method
+	if m := r.URL.Query().Get("method"); m != "" {
+		upstreamMethod = strings.ToUpper(m)
+	}
+
 	// Target URL is safe: base URL is admin-registered, path is restricted to /api/*,
 	// scheme is validated (http/https only), and path traversal is blocked above.
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, parsed.String(), nil) // #nosec G704
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, parsed.String(), nil) // #nosec G704
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
@@ -813,7 +820,6 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("GET /api/addons", protect(ListAddons))
 	mux.HandleFunc("GET /api/addons/{id}", protect(GetAddon))
 	mux.HandleFunc("GET /api/addons/{id}/proxy", protect(ProxyAddonRequest))
-	mux.HandleFunc("DELETE /api/addons/{id}/proxy", protect(ProxyAddonRequest))
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
