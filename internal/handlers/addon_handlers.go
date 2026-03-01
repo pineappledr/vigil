@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"vigil/internal/addons"
@@ -406,6 +408,56 @@ func AddonTelemetrySSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ─── Addon Proxy ─────────────────────────────────────────────────────────
+
+// ProxyAddonRequest proxies a GET request to the add-on's own API.
+// This allows the frontend to fetch data (e.g., deploy-info) from the
+// add-on without CORS issues.
+// GET /api/addons/{id}/proxy?path=/api/deploy-info
+func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" || !strings.HasPrefix(path, "/") {
+		JSONError(w, "path query parameter is required and must start with /", http.StatusBadRequest)
+		return
+	}
+
+	addon, err := addons.Get(db.DB, id)
+	if err != nil {
+		log.Printf("❌ Proxy addon lookup: %v", err)
+		JSONError(w, "Failed to look up add-on", http.StatusInternalServerError)
+		return
+	}
+	if addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+	if addon.URL == "" {
+		JSONError(w, "Add-on has no URL configured", http.StatusBadRequest)
+		return
+	}
+
+	targetURL := strings.TrimRight(addon.URL, "/") + path
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(targetURL)
+	if err != nil {
+		log.Printf("❌ Proxy request to %s: %v", targetURL, err)
+		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, io.LimitReader(resp.Body, 64*1024)) // 64 KiB limit
+}
+
 // ─── Route Registration ──────────────────────────────────────────────────
 
 // RegisterAddonRoutes registers all add-on API routes.
@@ -413,6 +465,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("POST /api/addons", protect(RegisterAddon))
 	mux.HandleFunc("GET /api/addons", protect(ListAddons))
 	mux.HandleFunc("GET /api/addons/{id}", protect(GetAddon))
+	mux.HandleFunc("GET /api/addons/{id}/proxy", protect(ProxyAddonRequest))
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))

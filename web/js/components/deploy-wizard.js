@@ -1,0 +1,467 @@
+/**
+ * Vigil Dashboard - Deploy Wizard Component
+ *
+ * Renders a deployment helper inside addon pages. Provides Docker/Binary
+ * tabs with platform selection, pre-filled connection details from the
+ * addon's own API, and one-click copy of docker-compose or install commands.
+ *
+ * Config schema (from manifest.json):
+ *   target_label   - Display label (e.g., "Agent")
+ *   docker         - { image, default_tag, container_name, ports[], privileged,
+ *                      volumes[], environment{}, platforms{} }
+ *   binary         - { install_url, platforms{} }
+ *   prefill_endpoint - Path on addon to fetch pre-fill data (e.g., "/api/deploy-info")
+ */
+
+const DeployWizardComponent = {
+    _wizards: {},   // keyed by compId
+
+    /**
+     * @param {string} compId  - Manifest component ID
+     * @param {Object} config  - Deploy wizard config from manifest
+     * @param {number} addonId - Parent add-on ID
+     * @returns {string} HTML
+     */
+    render(compId, config, addonId) {
+        const hasDocker = !!config.docker;
+        const hasBinary = !!config.binary;
+
+        if (!hasDocker && !hasBinary) {
+            return '<p class="component-unavailable">No deployment options configured</p>';
+        }
+
+        const defaultTab = hasDocker ? 'docker' : 'binary';
+        const dockerPlatforms = hasDocker ? Object.keys(config.docker.platforms) : [];
+        const binaryPlatforms = hasBinary ? Object.keys(config.binary.platforms) : [];
+        const defaultPlatform = hasDocker ? dockerPlatforms[0] : binaryPlatforms[0];
+
+        this._wizards[compId] = {
+            config, addonId,
+            tab: defaultTab,
+            platform: defaultPlatform,
+            prefill: {},
+            loading: true
+        };
+
+        // Fetch prefill data after DOM insertion
+        if (config.prefill_endpoint) {
+            setTimeout(() => this._fetchPrefill(compId), 0);
+        } else {
+            setTimeout(() => {
+                this._wizards[compId].loading = false;
+                this._updateDisplay(compId);
+            }, 0);
+        }
+
+        const label = config.target_label || 'Component';
+
+        // Build tab bar
+        const tabs = [];
+        if (hasDocker) tabs.push({ key: 'docker', label: 'Docker' });
+        if (hasBinary) tabs.push({ key: 'binary', label: 'Binary' });
+
+        const tabBar = tabs.length > 1
+            ? `<div class="agent-tab-bar">
+                ${tabs.map(t =>
+                    `<button class="agent-tab${t.key === defaultTab ? ' active' : ''}"
+                            data-tab="${t.key}"
+                            onclick="DeployWizardComponent.switchTab('${this._escapeJS(compId)}', '${t.key}')">${t.label}</button>`
+                ).join('')}
+               </div>`
+            : '';
+
+        // Build platform bar
+        const platformBar = this._buildPlatformBar(compId, config, defaultTab);
+
+        // Build hint
+        const hintText = this._getHint(config, defaultTab, defaultPlatform);
+
+        // Build user-input fields from environment config
+        const userFields = this._buildUserFields(compId, config);
+
+        // Build readonly prefill fields
+        const prefillFields = this._buildPrefillFields(compId, config);
+
+        // Copy button icon
+        const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>`;
+
+        return `
+            <div class="deploy-wizard" id="dw-${compId}">
+                ${tabBar}
+                <div class="agent-platform-bar" id="dw-platform-${compId}">
+                    ${platformBar}
+                </div>
+                <p class="agent-tab-hint" id="dw-hint-${compId}">${hintText}</p>
+
+                ${prefillFields}
+                ${userFields}
+
+                <div class="form-group">
+                    <label>Version</label>
+                    <input type="text" id="dw-version-${compId}" class="form-input"
+                           placeholder="latest" value="">
+                    <span class="form-hint" style="margin-top: 4px;">Leave empty for latest. Use a tag like <code>v1.0.0</code> for a specific version.</span>
+                </div>
+
+                <div class="deploy-wizard-footer" style="display: flex; justify-content: flex-start; margin-top: 16px;">
+                    <button class="btn btn-secondary btn-with-icon" id="dw-copy-btn-${compId}"
+                            onclick="DeployWizardComponent.copyInstall('${this._escapeJS(compId)}')">
+                        ${copyIcon}
+                        <span id="dw-copy-label-${compId}">Copy docker compose</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    },
+
+    // ─── Prefill ─────────────────────────────────────────────────────────
+
+    async _fetchPrefill(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+
+        try {
+            const endpoint = wiz.config.prefill_endpoint;
+            const resp = await fetch(`/api/addons/${wiz.addonId}/proxy?path=${encodeURIComponent(endpoint)}`);
+            if (resp.ok) {
+                wiz.prefill = await resp.json();
+            }
+        } catch (e) {
+            console.error(`[DeployWizard] Failed to fetch prefill for ${compId}:`, e);
+        }
+
+        wiz.loading = false;
+        this._updatePrefillFields(compId);
+    },
+
+    _updatePrefillFields(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+
+        const env = wiz.config.docker?.environment || {};
+        for (const [envKey, envDef] of Object.entries(env)) {
+            if (envDef.source === 'prefill' && envDef.key) {
+                const input = document.getElementById(`dw-pf-${compId}-${envKey}`);
+                if (input) {
+                    input.value = wiz.prefill[envDef.key] || '';
+                }
+            }
+        }
+    },
+
+    // ─── Tab & Platform Switching ────────────────────────────────────────
+
+    switchTab(compId, tab) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+        wiz.tab = tab;
+
+        // Update tab buttons
+        const container = document.getElementById(`dw-${compId}`);
+        if (container) {
+            container.querySelectorAll('.agent-tab').forEach(el => {
+                el.classList.toggle('active', el.dataset.tab === tab);
+            });
+        }
+
+        // Rebuild platform bar
+        const platformBar = document.getElementById(`dw-platform-${compId}`);
+        if (platformBar) {
+            platformBar.innerHTML = this._buildPlatformBar(compId, wiz.config, tab);
+        }
+
+        // Set default platform for new tab
+        const platforms = tab === 'docker'
+            ? Object.keys(wiz.config.docker?.platforms || {})
+            : Object.keys(wiz.config.binary?.platforms || {});
+        wiz.platform = platforms[0] || '';
+
+        // Update hint
+        this._updateHint(compId);
+
+        // Update copy button label
+        const label = document.getElementById(`dw-copy-label-${compId}`);
+        if (label) {
+            label.textContent = tab === 'docker' ? 'Copy docker compose' : 'Copy install command';
+        }
+    },
+
+    switchPlatform(compId, platform) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+        wiz.platform = platform;
+
+        const bar = document.getElementById(`dw-platform-${compId}`);
+        if (bar) {
+            bar.querySelectorAll('.agent-platform-btn').forEach(el => {
+                el.classList.toggle('active', el.dataset.platform === platform);
+            });
+        }
+
+        this._updateHint(compId);
+    },
+
+    _buildPlatformBar(compId, config, tab) {
+        const platforms = tab === 'docker'
+            ? config.docker?.platforms || {}
+            : config.binary?.platforms || {};
+
+        const keys = Object.keys(platforms);
+        if (keys.length <= 1 && tab === 'docker') {
+            // Single platform — no bar needed for docker
+            return '';
+        }
+
+        return keys.map((key, i) =>
+            `<button class="agent-platform-btn${i === 0 ? ' active' : ''}"
+                    data-platform="${this._escape(key)}"
+                    onclick="DeployWizardComponent.switchPlatform('${this._escapeJS(compId)}', '${this._escapeJS(key)}')">${this._escape(platforms[key].label || key)}</button>`
+        ).join('');
+    },
+
+    _getHint(config, tab, platform) {
+        const platforms = tab === 'docker'
+            ? config.docker?.platforms || {}
+            : config.binary?.platforms || {};
+        return platforms[platform]?.hint || '';
+    },
+
+    _updateHint(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+        const hint = document.getElementById(`dw-hint-${compId}`);
+        if (hint) {
+            hint.innerHTML = this._getHint(wiz.config, wiz.tab, wiz.platform);
+        }
+    },
+
+    _updateDisplay(compId) {
+        this._updatePrefillFields(compId);
+    },
+
+    // ─── Field Building ──────────────────────────────────────────────────
+
+    _buildPrefillFields(compId, config) {
+        const env = config.docker?.environment || {};
+        const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>`;
+
+        let html = '';
+        for (const [envKey, envDef] of Object.entries(env)) {
+            if (envDef.source !== 'prefill') continue;
+            const fieldId = `dw-pf-${compId}-${envKey}`;
+            const label = envDef.label || envKey;
+
+            html += `
+                <div class="form-group">
+                    <label>${this._escape(label)}</label>
+                    <div class="form-input-with-copy">
+                        <input type="text" id="${fieldId}" class="form-input form-input-mono"
+                               value="" readonly placeholder="Loading...">
+                        <button class="btn-copy" onclick="DeployWizardComponent._copyField('${fieldId}')" title="Copy">
+                            ${copyIcon}
+                        </button>
+                    </div>
+                    ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
+                </div>
+            `;
+        }
+        return html;
+    },
+
+    _buildUserFields(compId, config) {
+        const env = config.docker?.environment || {};
+        let html = '';
+
+        for (const [envKey, envDef] of Object.entries(env)) {
+            if (envDef.source !== 'user_input') continue;
+            const fieldId = `dw-ui-${compId}-${envKey}`;
+            const label = envDef.label || envKey;
+            const placeholder = envDef.placeholder || '';
+
+            html += `
+                <div class="form-group">
+                    <label>${this._escape(label)}</label>
+                    <input type="text" id="${fieldId}" class="form-input"
+                           placeholder="${this._escape(placeholder)}">
+                    ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
+                </div>
+            `;
+        }
+        return html;
+    },
+
+    // ─── Copy & Generation ───────────────────────────────────────────────
+
+    copyInstall(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+
+        const text = wiz.tab === 'docker'
+            ? this._generateDockerCompose(compId)
+            : this._generateBinaryInstall(compId);
+
+        this._copyToClipboard(text, () => {
+            const label = document.getElementById(`dw-copy-label-${compId}`);
+            if (label) {
+                const orig = label.textContent;
+                label.textContent = 'Copied!';
+                setTimeout(() => { label.textContent = orig; }, 2000);
+            }
+        });
+    },
+
+    _generateDockerCompose(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz || !wiz.config.docker) return '';
+
+        const docker = wiz.config.docker;
+        const platform = wiz.config.docker.platforms[wiz.platform] || {};
+        const version = document.getElementById(`dw-version-${compId}`)?.value.trim();
+        const tag = version || docker.default_tag || 'latest';
+        const image = `${docker.image}:${tag}`;
+        const containerName = docker.container_name || docker.image.split('/').pop();
+
+        // Build environment block
+        const envLines = [];
+        const env = docker.environment || {};
+        for (const [envKey, envDef] of Object.entries(env)) {
+            const val = this._resolveEnvValue(compId, envKey, envDef);
+            envLines.push(`      ${envKey}: ${val}`);
+        }
+
+        // Build volumes
+        let volumes = (docker.volumes || []).map(v => `      - ${v}`);
+        if (platform.extra_volumes) {
+            volumes = volumes.concat(platform.extra_volumes.map(v => `      - ${v}`));
+        }
+
+        // Build ports
+        const ports = (docker.ports || []).map(p => `      - "${p}"`);
+
+        // Build extras
+        let extras = '';
+        if (docker.privileged) extras += '\n    privileged: true';
+        if (platform.pid) extras += `\n    pid: ${platform.pid}`;
+
+        const platformLabel = platform.label || wiz.platform;
+
+        let yaml = `# ${containerName} - docker-compose.yml (${platformLabel})
+services:
+  ${containerName}:
+    image: ${image}
+    container_name: ${containerName}
+    restart: unless-stopped${extras}`;
+
+        if (ports.length > 0) {
+            yaml += `\n    ports:\n${ports.join('\n')}`;
+        }
+
+        if (envLines.length > 0) {
+            yaml += `\n    environment:\n${envLines.join('\n')}`;
+        }
+
+        if (volumes.length > 0) {
+            yaml += `\n    volumes:\n${volumes.join('\n')}`;
+        }
+
+        return yaml;
+    },
+
+    _generateBinaryInstall(compId) {
+        const wiz = this._wizards[compId];
+        if (!wiz || !wiz.config.binary) return '';
+
+        const binary = wiz.config.binary;
+        const version = document.getElementById(`dw-version-${compId}`)?.value.trim();
+        const versionFlag = version ? ` -v "${version}"` : '';
+
+        // Collect env values for flags
+        const env = wiz.config.docker?.environment || {};
+        let flags = '';
+        for (const [envKey, envDef] of Object.entries(env)) {
+            if (envDef.source === 'literal') continue;
+            const val = this._resolveEnvValue(compId, envKey, envDef);
+            if (val) {
+                flags += ` -e ${envKey}="${val}"`;
+            }
+        }
+
+        return `curl -sL ${binary.install_url} | bash -s --${flags}${versionFlag}`;
+    },
+
+    _resolveEnvValue(compId, envKey, envDef) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return '';
+
+        switch (envDef.source) {
+            case 'prefill': {
+                const input = document.getElementById(`dw-pf-${compId}-${envKey}`);
+                return input?.value || wiz.prefill[envDef.key] || '';
+            }
+            case 'user_input': {
+                const input = document.getElementById(`dw-ui-${compId}-${envKey}`);
+                return input?.value || envDef.placeholder || '';
+            }
+            case 'literal':
+                return envDef.value || '';
+            default:
+                return '';
+        }
+    },
+
+    // ─── Clipboard Helpers ───────────────────────────────────────────────
+
+    _copyField(inputId) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        this._copyToClipboard(input.value, () => {
+            const btn = input.parentElement.querySelector('.btn-copy');
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
+                setTimeout(() => { btn.innerHTML = orig; }, 2000);
+            }
+        });
+    },
+
+    _copyToClipboard(text, onSuccess) {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+                this._fallbackCopy(text);
+                if (onSuccess) onSuccess();
+            });
+        } else {
+            this._fallbackCopy(text);
+            if (onSuccess) onSuccess();
+        }
+    },
+
+    _fallbackCopy(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+    },
+
+    // ─── Helpers ─────────────────────────────────────────────────────────
+
+    _escape(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    },
+
+    _escapeJS(str) {
+        if (!str) return '';
+        return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+};

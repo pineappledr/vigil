@@ -267,7 +267,7 @@ const Addons = {
         const copyIcon = this._icons.copy;
         const serverURL = window.location.origin;
 
-        Modals.create(`
+        const modal = Modals.create(`
             <div class="modal modal-add-agent">
                 <div class="modal-header">
                     <h3>Add Add-on</h3>
@@ -279,17 +279,26 @@ const Addons = {
                     </button>
                 </div>
                 <div class="modal-body" style="padding-bottom: 0;">
-                    <p class="agent-tab-hint">
-                        Register an add-on to extend Vigil with new capabilities. The add-on will connect to this server using the token below.
+                    <div class="agent-tab-bar">
+                        <button class="agent-tab active" data-tab="docker" onclick="Addons._switchAddonTab('docker')">Docker</button>
+                        <button class="agent-tab" data-tab="binary" onclick="Addons._switchAddonTab('binary')">Binary</button>
+                    </div>
+                    <p class="agent-tab-hint" id="addon-tab-hint">
+                        Deploy the add-on with Docker, then register it below.
                     </p>
                     <div class="form-group">
                         <label>Name</label>
                         <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Hub" maxlength="128">
                     </div>
+                    <div class="form-group" id="addon-image-group">
+                        <label>Docker Image</label>
+                        <input type="text" id="addon-image" class="form-input form-input-mono" placeholder="e.g., ghcr.io/pineappledr/burnin-hub">
+                        <span class="form-hint">Docker image for the add-on. Used to generate the docker-compose below.</span>
+                    </div>
                     <div class="form-group">
                         <label>Add-on URL</label>
                         <input type="text" id="addon-url" class="form-input form-input-mono" placeholder="e.g., http://192.168.1.50:9100">
-                        <span class="form-hint">Network address where the add-on is running</span>
+                        <span class="form-hint">Network address where the add-on will be running</span>
                     </div>
                     <div class="form-group">
                         <label>Server URL</label>
@@ -320,14 +329,26 @@ const Addons = {
                         </div>
                         <span class="form-hint form-hint-warning">This token expires in 1 hour. Save it — it will not be shown again.</span>
                     </div>
+                    <div class="form-group">
+                        <label>Version</label>
+                        <input type="text" id="addon-version" class="form-input" placeholder="latest" value="">
+                        <span class="form-hint" style="margin-top: 4px;">Leave empty for latest. Use a tag like <code>v1.0.0</code> for a specific version.</span>
+                    </div>
                     <div id="addon-reg-error" class="form-error"></div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer agent-modal-footer">
+                    <div class="agent-copy-group">
+                        <button class="btn btn-secondary btn-with-icon" id="addon-copy-btn" onclick="Addons._copyAddonInstall()">
+                            ${copyIcon}
+                            <span id="addon-copy-label">Copy docker compose</span>
+                        </button>
+                    </div>
                     <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register Add-on</button>
                 </div>
             </div>
         `);
 
+        modal._addonState = { tab: 'docker', serverURL, serverPubKey, token };
         document.getElementById('addon-name')?.focus();
     },
 
@@ -371,6 +392,99 @@ const Addons = {
         } catch {
             if (errorEl) errorEl.textContent = 'Connection error';
         }
+    },
+
+    // ─── Add Add-on Deployment Helpers ─────────────────────────────────────
+
+    _switchAddonTab(tab) {
+        document.querySelectorAll('.modal .agent-tab').forEach(el => {
+            el.classList.toggle('active', el.dataset.tab === tab);
+        });
+
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay?._addonState) overlay._addonState.tab = tab;
+
+        const hint = document.getElementById('addon-tab-hint');
+        const imageGroup = document.getElementById('addon-image-group');
+        const label = document.getElementById('addon-copy-label');
+
+        if (tab === 'docker') {
+            if (hint) hint.textContent = 'Deploy the add-on with Docker, then register it below.';
+            if (imageGroup) imageGroup.style.display = '';
+            if (label) label.textContent = 'Copy docker compose';
+        } else {
+            if (hint) hint.textContent = 'Install the add-on binary, then register it below.';
+            if (imageGroup) imageGroup.style.display = 'none';
+            if (label) label.textContent = 'Copy environment variables';
+        }
+    },
+
+    _copyAddonInstall() {
+        const overlay = document.querySelector('.modal-overlay');
+        const st = overlay?._addonState;
+        if (!st) return;
+
+        const text = st.tab === 'docker'
+            ? this._generateAddonCompose()
+            : this._generateAddonEnvVars();
+
+        if (!text) return;
+        const flash = () => {
+            const label = document.getElementById('addon-copy-label');
+            if (label) {
+                const orig = label.textContent;
+                label.textContent = 'Copied!';
+                setTimeout(() => { label.textContent = orig; }, 2000);
+            }
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(flash).catch(() => {
+                this._fallbackCopy(text);
+                flash();
+            });
+        } else {
+            this._fallbackCopy(text);
+            flash();
+        }
+    },
+
+    _generateAddonCompose() {
+        const name = document.getElementById('addon-name')?.value.trim() || 'addon';
+        const image = document.getElementById('addon-image')?.value.trim();
+        const version = document.getElementById('addon-version')?.value.trim();
+        const serverURL = document.getElementById('addon-server-url')?.value || '';
+        const pubKey = document.getElementById('addon-pubkey')?.value || '';
+        const token = document.getElementById('addon-token')?.value || '';
+
+        if (!image) {
+            alert('Enter a Docker image to generate the docker-compose.');
+            return '';
+        }
+
+        const tag = version || 'latest';
+        const containerName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+        return `# ${name} - docker-compose.yml
+services:
+  ${containerName}:
+    image: ${image}:${tag}
+    container_name: ${containerName}
+    restart: unless-stopped
+    environment:
+      VIGIL_URL: ${serverURL}
+      VIGIL_AGENT_TOKEN: ${token}
+      VIGIL_SERVER_PUBKEY: ${pubKey}
+      TZ: \${TZ:-UTC}`;
+    },
+
+    _generateAddonEnvVars() {
+        const serverURL = document.getElementById('addon-server-url')?.value || '';
+        const pubKey = document.getElementById('addon-pubkey')?.value || '';
+        const token = document.getElementById('addon-token')?.value || '';
+
+        return `VIGIL_URL="${serverURL}"
+VIGIL_AGENT_TOKEN="${token}"
+VIGIL_SERVER_PUBKEY="${pubKey}"`;
     },
 
     // ─── Addon Actions ───────────────────────────────────────────────────

@@ -65,11 +65,12 @@ const (
 
 // validComponentTypes is the set of recognised component types.
 var validComponentTypes = map[string]bool{
-	"form":        true,
-	"progress":    true,
-	"chart":       true,
-	"smart-table": true,
-	"log-viewer":  true,
+	"form":           true,
+	"progress":       true,
+	"chart":          true,
+	"smart-table":    true,
+	"log-viewer":     true,
+	"deploy-wizard":  true,
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
@@ -152,6 +153,9 @@ func validateComponent(pi, ci int, comp ManifestComponent, ids map[string]bool) 
 	if comp.Type == "form" && len(comp.Config) > 0 {
 		return validateFormConfig(prefix, comp.Config)
 	}
+	if comp.Type == "deploy-wizard" && len(comp.Config) > 0 {
+		return validateDeployWizardConfig(prefix, comp.Config)
+	}
 	return nil
 }
 
@@ -175,6 +179,88 @@ func validateFormConfig(prefix string, raw json.RawMessage) error {
 			}
 		}
 	}
+	return nil
+}
+
+// ── Deploy wizard config ────────────────────────────────────────────────
+
+// DeployWizardConfig describes the configuration for a deploy-wizard component.
+type DeployWizardConfig struct {
+	TargetLabel     string              `json:"target_label"`
+	Docker          *DockerDeployConfig `json:"docker,omitempty"`
+	Binary          *BinaryDeployConfig `json:"binary,omitempty"`
+	PrefillEndpoint string              `json:"prefill_endpoint,omitempty"`
+}
+
+// DockerDeployConfig describes Docker deployment options.
+type DockerDeployConfig struct {
+	Image         string                       `json:"image"`
+	DefaultTag    string                       `json:"default_tag"`
+	ContainerName string                       `json:"container_name,omitempty"`
+	Ports         []string                     `json:"ports,omitempty"`
+	Privileged    bool                         `json:"privileged,omitempty"`
+	Volumes       []string                     `json:"volumes,omitempty"`
+	Environment   map[string]DeployEnvVar      `json:"environment,omitempty"`
+	Platforms     map[string]DeployPlatformDef `json:"platforms"`
+}
+
+// BinaryDeployConfig describes binary installation options.
+type BinaryDeployConfig struct {
+	InstallURL string                       `json:"install_url"`
+	Platforms  map[string]DeployPlatformDef `json:"platforms"`
+}
+
+// DeployEnvVar describes a single environment variable in the deploy wizard.
+type DeployEnvVar struct {
+	Source      string `json:"source"`                // prefill, user_input, literal
+	Key         string `json:"key,omitempty"`          // key in prefill response
+	Label       string `json:"label,omitempty"`
+	Placeholder string `json:"placeholder,omitempty"`
+	Hint        string `json:"hint,omitempty"`
+	Value       string `json:"value,omitempty"`        // for literal source
+	Readonly    bool   `json:"readonly,omitempty"`
+}
+
+// DeployPlatformDef describes a deployment platform option.
+type DeployPlatformDef struct {
+	Label        string   `json:"label"`
+	Hint         string   `json:"hint,omitempty"`
+	ExtraVolumes []string `json:"extra_volumes,omitempty"`
+	PID          string   `json:"pid,omitempty"`
+}
+
+func validateDeployWizardConfig(prefix string, raw json.RawMessage) error {
+	var cfg DeployWizardConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return fmt.Errorf("%s: invalid deploy-wizard config: %w", prefix, err)
+	}
+
+	if cfg.Docker == nil && cfg.Binary == nil {
+		return fmt.Errorf("%s: deploy-wizard requires at least one of docker or binary config", prefix)
+	}
+
+	if cfg.Docker != nil {
+		if cfg.Docker.Image == "" {
+			return fmt.Errorf("%s: deploy-wizard docker.image is required", prefix)
+		}
+		if len(cfg.Docker.Platforms) == 0 {
+			return fmt.Errorf("%s: deploy-wizard docker.platforms requires at least one entry", prefix)
+		}
+	}
+
+	if cfg.Binary != nil {
+		if cfg.Binary.InstallURL == "" {
+			return fmt.Errorf("%s: deploy-wizard binary.install_url is required", prefix)
+		}
+		if len(cfg.Binary.Platforms) == 0 {
+			return fmt.Errorf("%s: deploy-wizard binary.platforms requires at least one entry", prefix)
+		}
+	}
+
+	if cfg.PrefillEndpoint != "" && !strings.HasPrefix(cfg.PrefillEndpoint, "/") {
+		return fmt.Errorf("%s: deploy-wizard prefill_endpoint must start with /", prefix)
+	}
+
 	return nil
 }
 

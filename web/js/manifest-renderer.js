@@ -140,6 +140,11 @@ const ManifestRenderer = {
                     ? LogViewerComponent.render(comp.id, config)
                     : '<p class="component-unavailable">Log Viewer component not loaded</p>';
 
+            case 'deploy-wizard':
+                return typeof DeployWizardComponent !== 'undefined'
+                    ? DeployWizardComponent.render(comp.id, config, this.addon.id)
+                    : '<p class="component-unavailable">Deploy Wizard component not loaded</p>';
+
             default:
                 return `<p class="component-unavailable">Unknown component type: ${this._escape(comp.type)}</p>`;
         }
