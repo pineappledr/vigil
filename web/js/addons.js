@@ -357,11 +357,60 @@ const Addons = {
         this.render();
     },
 
-    async toggleEnabled(id, enabled) {
+    toggleEnabled(id, enabled) {
+        const addon = this.addons.find(a => a.id === id);
+        const name = addon ? this._escape(addon.name) : `Add-on #${id}`;
+        const action = enabled ? 'Enable' : 'Disable';
+
+        Modals.create(`
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>${action} Add-on</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-message">Enter your password to ${action.toLowerCase()} <strong>${name}</strong>.</p>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="addon-toggle-password" class="form-input" placeholder="Enter your password">
+                    </div>
+                    <div id="addon-toggle-error" class="form-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-primary" onclick="Addons.submitToggleEnabled(${id}, ${enabled})">${action}</button>
+                </div>
+            </div>
+        `);
+        document.getElementById('addon-toggle-password')?.focus();
+    },
+
+    async submitToggleEnabled(id, enabled) {
+        const password = document.getElementById('addon-toggle-password')?.value;
+        const errorEl = document.getElementById('addon-toggle-error');
+
+        if (!password) {
+            if (errorEl) errorEl.textContent = 'Password is required';
+            return;
+        }
+
         try {
-            const resp = await API.setAddonEnabled(id, enabled);
-            if (resp.ok) this.render();
-        } catch {}
+            const resp = await API.setAddonEnabled(id, enabled, password);
+            if (resp.ok) {
+                document.querySelector('.modal-overlay')?.remove();
+                this.render();
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                if (errorEl) errorEl.textContent = data.error || 'Failed to update add-on';
+            }
+        } catch {
+            if (errorEl) errorEl.textContent = 'Connection error';
+        }
     },
 
     async deleteToken(id) {

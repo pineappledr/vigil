@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"vigil/internal/addons"
+	"vigil/internal/auth"
 	"vigil/internal/db"
 )
 
@@ -127,6 +128,7 @@ func DeregisterAddon(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetAddonEnabled enables or disables an add-on.
+// Requires the user's password for confirmation.
 // PUT /api/addons/{id}/enabled
 func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
@@ -136,10 +138,27 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Enabled bool `json:"enabled"`
+		Enabled  bool   `json:"enabled"`
+		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the user's password
+	session := auth.GetSessionFromContext(r)
+	if session == nil {
+		JSONError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var storedHash string
+	if err := db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&storedHash); err != nil {
+		JSONError(w, "Failed to verify password", http.StatusInternalServerError)
+		return
+	}
+	if !auth.CheckPassword(storedHash, req.Password) {
+		JSONError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
 
@@ -147,6 +166,15 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 		log.Printf("❌ Set addon enabled: %v", err)
 		JSONError(w, "Failed to update add-on", http.StatusInternalServerError)
 		return
+	}
+
+	action := "enabled"
+	if !req.Enabled {
+		action = "disabled"
+	}
+	addon, _ := addons.Get(db.DB, id)
+	if addon != nil {
+		log.Printf("📦 Add-on %s: %s (id=%d, by=%s)", action, addon.Name, id, session.Username)
 	}
 
 	JSONResponse(w, map[string]interface{}{

@@ -201,8 +201,8 @@ const API = {
         return this.delete(`/api/addons/tokens/${id}`);
     },
 
-    async setAddonEnabled(id, enabled) {
-        return this.put(`/api/addons/${id}/enabled`, { enabled });
+    async setAddonEnabled(id, enabled, password) {
+        return this.put(`/api/addons/${id}/enabled`, { enabled, password });
     },
 
     // ─── Notification Endpoints ──────────────────────────────────────────────
