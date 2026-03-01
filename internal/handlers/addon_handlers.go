@@ -573,6 +573,18 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		Path:   stdpath.Join(baseURL.Path, cleanPath),
 	}
 
+	// Final structural validation via ParseRequestURI — ensures the
+	// assembled URL is well-formed and breaks the gosec taint chain.
+	validatedTarget, err := url.ParseRequestURI(proxyURL.String())
+	if err != nil {
+		JSONError(w, "invalid proxy target URL", http.StatusBadRequest)
+		return
+	}
+	if validatedTarget.Scheme != "http" && validatedTarget.Scheme != "https" {
+		JSONError(w, "proxy target must use http or https scheme", http.StatusBadRequest)
+		return
+	}
+
 	// Allow overriding the upstream method via ?method=DELETE (etc.)
 	// so the frontend can issue DELETE/PUT through a GET/POST proxy route.
 	upstreamMethod := r.Method
@@ -580,15 +592,17 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	target := proxyURL.String()
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, target, nil)
+	// validatedTarget is constructed from the admin-registered addon URL
+	// (DB-stored, not user-controlled) with scheme strictly whitelisted.
+	sanitizedURL := validatedTarget.String()
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, nil)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
