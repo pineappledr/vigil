@@ -319,13 +319,16 @@ const DeployWizardComponent = {
                     <label>${this._escape(label)}</label>
                     <div class="form-input-with-copy">
                         <input type="${isSecret ? 'password' : 'text'}" id="${fieldId}" class="form-input form-input-mono"
-                               value="" readonly placeholder="Loading...">
-                        ${isSecret ? `<button class="btn-copy" onclick="DeployWizardComponent._toggleSecret('${fieldId}')" title="Show/Hide" id="dw-eye-${fieldId}">
-                            ${eyeIcon}
-                        </button>` : ''}
-                        <button class="btn-copy" onclick="DeployWizardComponent._copyField('${fieldId}')" title="Copy">
-                            ${copyIcon}
-                        </button>
+                               value="" readonly placeholder="Loading..."
+                               style="padding-right: ${isSecret ? '68px' : '38px'}">
+                        <div class="form-input-actions">
+                            ${isSecret ? `<button class="btn-copy" onclick="DeployWizardComponent._toggleSecret('${fieldId}')" title="Show/Hide" id="dw-eye-${fieldId}">
+                                ${eyeIcon}
+                            </button>` : ''}
+                            <button class="btn-copy" onclick="DeployWizardComponent._copyField('${fieldId}')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
                     </div>
                     ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
                 </div>
@@ -519,7 +522,9 @@ services:
         const input = document.getElementById(inputId);
         if (!input) return;
         this._copyToClipboard(input.value, () => {
-            const btn = input.parentElement.querySelector('.btn-copy');
+            // Find the copy button (last .btn-copy in the wrapper, not the eye toggle).
+            const btns = input.parentElement.querySelectorAll('.btn-copy[title="Copy"]');
+            const btn = btns.length ? btns[0] : input.parentElement.querySelector('.btn-copy:last-of-type');
             if (btn) {
                 const orig = btn.innerHTML;
                 btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>';
