@@ -549,15 +549,28 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build and validate the target URL from the admin-registered addon URL.
+	// Parse the admin-registered addon base URL (trusted).
+	baseURL, err := url.Parse(addon.URL)
+	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
+		JSONError(w, "invalid addon URL", http.StatusBadRequest)
+		return
+	}
+
+	// Build the target URL by resolving the path against the trusted base.
 	targetURL, err := url.JoinPath(addon.URL, path)
 	if err != nil {
 		JSONError(w, "invalid addon URL", http.StatusBadRequest)
 		return
 	}
 	parsed, err := url.Parse(targetURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		JSONError(w, "invalid addon URL scheme", http.StatusBadRequest)
+	if err != nil {
+		JSONError(w, "invalid target URL", http.StatusBadRequest)
+		return
+	}
+
+	// SSRF guard: verify the resolved URL still points to the same host.
+	if parsed.Host != baseURL.Host || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		JSONError(w, "proxy target does not match addon host", http.StatusBadRequest)
 		return
 	}
 
@@ -568,16 +581,16 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	// Target URL is safe: base URL is admin-registered, path is restricted to /api/*,
-	// scheme is validated (http/https only), and path traversal is blocked above.
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, parsed.String(), nil) // #nosec G704
+	// Safe: target host verified against admin-registered addon URL.
+	safeURL := parsed.String()
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, safeURL, nil)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req) // #nosec G704
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
@@ -633,7 +646,7 @@ func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the latest semver tag.
-	latestTag := findLatestTag(tags, currentTag)
+	latestTag := findLatestTag(tags)
 
 	JSONResponse(w, map[string]interface{}{
 		"update_available": latestTag != "" && latestTag != currentTag,
@@ -765,7 +778,7 @@ func parseImageRef(image string) (registry, repo string) {
 
 // findLatestTag returns the highest semver tag from the list, or empty if
 // the current tag is already the latest. Non-semver tags are ignored.
-func findLatestTag(tags []string, currentTag string) string {
+func findLatestTag(tags []string) string {
 	type semver struct {
 		major, minor, patch int
 		original            string
