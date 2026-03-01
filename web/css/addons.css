@@ -871,6 +871,26 @@
     color: #ffd080;
 }
 
+/* ── Error states ─────────────────────────────── */
+
+.smart-table-error {
+    color: var(--warning, #f59e0b) !important;
+    font-style: italic;
+}
+
+.deploy-wizard-error {
+    font-size: 0.8rem;
+    color: var(--warning, #f59e0b);
+    padding: 8px 12px;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.prefill-error {
+    border-color: var(--warning, #f59e0b) !important;
+}
+
 /* ============================================
    ADD-ONS RESPONSIVE
    ============================================ */

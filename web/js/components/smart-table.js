@@ -53,6 +53,10 @@ const SmartTableComponent = {
             setTimeout(() => this._fetchSource(compId), 0);
         }
 
+        const emptyText = (config.source && addonId)
+            ? 'Loading data...'
+            : (isStructured ? 'No data' : 'Waiting for SMART data...');
+
         return `
             <div class="smart-table-container" id="smart-table-${compId}">
                 <table class="smart-table">
@@ -60,7 +64,7 @@ const SmartTableComponent = {
                         <tr>${headers}</tr>
                     </thead>
                     <tbody id="smart-tbody-${compId}">
-                        <tr><td colspan="${colCount}" class="smart-table-empty">Waiting for SMART data...</td></tr>
+                        <tr><td colspan="${colCount}" class="smart-table-empty">${emptyText}</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -85,7 +89,10 @@ const SmartTableComponent = {
 
         try {
             const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`);
-            if (!resp.ok) return;
+            if (!resp.ok) {
+                this._showTableError(compId, entry, `Failed to load data (HTTP ${resp.status})`);
+                return;
+            }
 
             let data = await resp.json();
 
@@ -114,7 +121,14 @@ const SmartTableComponent = {
             }
         } catch (e) {
             console.error(`[SmartTable] Failed to fetch source for ${compId}:`, e);
+            this._showTableError(compId, entry, 'Could not reach add-on — check that the add-on URL is reachable from the Vigil server');
         }
+    },
+
+    _showTableError(compId, entry, message) {
+        const tbody = document.getElementById(`smart-tbody-${compId}`);
+        if (!tbody) return;
+        tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty smart-table-error">${this._escape(message)}</td></tr>`;
     },
 
     // ─── Telemetry Updates ───────────────────────────────────────────────

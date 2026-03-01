@@ -122,18 +122,57 @@ const DeployWizardComponent = {
         const wiz = this._wizards[compId];
         if (!wiz) return;
 
+        let errorMsg = null;
         try {
             const endpoint = wiz.config.prefill_endpoint;
             const resp = await fetch(`/api/addons/${wiz.addonId}/proxy?path=${encodeURIComponent(endpoint)}`);
             if (resp.ok) {
                 wiz.prefill = await resp.json();
+            } else {
+                errorMsg = `Failed to load (HTTP ${resp.status}). Check that the add-on URL is reachable from the Vigil server.`;
             }
         } catch (e) {
             console.error(`[DeployWizard] Failed to fetch prefill for ${compId}:`, e);
+            errorMsg = 'Could not reach add-on. Check that the add-on URL is reachable from the Vigil server.';
         }
 
         wiz.loading = false;
         this._updatePrefillFields(compId);
+
+        if (errorMsg) {
+            this._showPrefillError(compId, errorMsg);
+        }
+    },
+
+    _showPrefillError(compId, message) {
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+
+        const env = wiz.config.docker?.environment || {};
+        for (const [envKey, envDef] of Object.entries(env)) {
+            if (envDef.source !== 'prefill') continue;
+            const input = document.getElementById(`dw-pf-${compId}-${envKey}`);
+            if (input) {
+                input.placeholder = 'Enter manually';
+                input.removeAttribute('readonly');
+                input.classList.add('prefill-error');
+            }
+        }
+
+        // Show error hint below the first prefill field
+        const container = document.getElementById(`dw-${compId}`);
+        if (container) {
+            const existing = container.querySelector('.deploy-wizard-error');
+            if (!existing) {
+                const firstPrefill = container.querySelector('.prefill-error');
+                if (firstPrefill) {
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'deploy-wizard-error';
+                    errDiv.textContent = message;
+                    firstPrefill.closest('.form-group')?.insertAdjacentElement('beforebegin', errDiv);
+                }
+            }
+        }
     },
 
     _updatePrefillFields(compId) {
