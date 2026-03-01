@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	stdpath "path"
 	"strings"
 	"time"
 
@@ -549,29 +550,27 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the admin-registered addon base URL (trusted).
+	// Parse the admin-registered addon base URL (trusted, not user-controlled).
 	baseURL, err := url.Parse(addon.URL)
 	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
 		JSONError(w, "invalid addon URL", http.StatusBadRequest)
 		return
 	}
 
-	// Build the target URL by resolving the path against the trusted base.
-	targetURL, err := url.JoinPath(addon.URL, path)
-	if err != nil {
-		JSONError(w, "invalid addon URL", http.StatusBadRequest)
-		return
-	}
-	parsed, err := url.Parse(targetURL)
-	if err != nil {
-		JSONError(w, "invalid target URL", http.StatusBadRequest)
+	// Validate and clean the user-supplied path, then construct the target
+	// URL entirely from trusted components to break the taint chain.
+	cleanPath := stdpath.Clean(path)
+	if !strings.HasPrefix(cleanPath, "/api/") {
+		JSONError(w, "path must start with /api/", http.StatusBadRequest)
 		return
 	}
 
-	// SSRF guard: verify the resolved URL still points to the same host.
-	if parsed.Host != baseURL.Host || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		JSONError(w, "proxy target does not match addon host", http.StatusBadRequest)
-		return
+	// Reconstruct from trusted base — only scheme, host, and base path
+	// come from the admin-registered addon URL (stored in DB).
+	proxyURL := url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+		Path:   stdpath.Join(baseURL.Path, cleanPath),
 	}
 
 	// Allow overriding the upstream method via ?method=DELETE (etc.)
@@ -581,17 +580,15 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	// Safe: target host verified against admin-registered addon URL,
-	// path restricted to /api/*, traversal blocked, scheme validated.
-	safeURL := parsed.String()
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, safeURL, nil) // #nosec G107 G704 -- host validated against admin-registered addon URL
+	target := proxyURL.String()
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, target, nil)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req) // #nosec G107 G704 -- see validation above
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
