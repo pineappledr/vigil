@@ -127,6 +127,17 @@
     text-overflow: ellipsis;
 }
 
+/* Container for multiple action buttons (eye toggle + copy) */
+.form-input-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
 .form-input-mono {
     font-family: var(--font-mono) !important;
     font-size: 0.8rem !important;
@@ -147,6 +158,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* When inside an actions container, use static positioning */
+.form-input-actions .btn-copy {
+    position: static;
+    transform: none;
 }
 
 .btn-copy:hover {

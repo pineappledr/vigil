@@ -129,6 +129,23 @@ func SetEnabled(db *sql.DB, id int64, enabled bool) error {
 	return expectOneRow(res, "set addon enabled")
 }
 
+// UpdateManifest updates the manifest, version, description, and status for an existing add-on.
+func UpdateManifest(db *sql.DB, id int64, version, description, manifestJSON string) error {
+	res, err := db.Exec(`
+		UPDATE addons SET
+			version       = ?,
+			description   = ?,
+			manifest_json = ?,
+			status        = 'online',
+			last_seen     = CURRENT_TIMESTAMP,
+			updated_at    = CURRENT_TIMESTAMP
+		WHERE id = ?`, version, description, manifestJSON, id)
+	if err != nil {
+		return fmt.Errorf("update addon manifest: %w", err)
+	}
+	return expectOneRow(res, "update addon manifest")
+}
+
 // TouchHeartbeat updates last_seen for a given add-on.
 func TouchHeartbeat(db *sql.DB, id int64) error {
 	_, err := db.Exec(`UPDATE addons SET last_seen = CURRENT_TIMESTAMP WHERE id = ?`, id)
@@ -242,12 +259,18 @@ func CreateRegistrationToken(db *sql.DB, name string, expiresIn *time.Duration) 
 
 // GetRegistrationToken retrieves a token by its value.
 // Returns nil, nil if not found or expired.
+// Tokens that are already bound to an addon (used_by_addon_id IS NOT NULL) never expire,
+// so that running addon services can always reconnect.
 func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) {
 	row := db.QueryRow(`
 		SELECT id, token, COALESCE(name,''), created_at,
 		       expires_at, used_at, used_by_addon_id
 		FROM addon_registration_tokens
-		WHERE token = ? AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+		WHERE token = ? AND (
+			used_by_addon_id IS NOT NULL
+			OR expires_at IS NULL
+			OR expires_at > CURRENT_TIMESTAMP
+		)
 	`, token)
 
 	var t RegistrationToken

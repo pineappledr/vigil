@@ -311,6 +311,39 @@
     border-radius: 4px;
 }
 
+.addon-update-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--primary, #3b82f6);
+    animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+#addon-check-updates-btn {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    gap: 4px;
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+#addon-check-updates-btn svg.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .manifest-desc {
     font-size: 0.85rem;
     color: var(--text-muted);
@@ -450,6 +483,53 @@
     height: 16px;
     cursor: pointer;
     accent-color: var(--accent-primary);
+}
+
+.addon-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.addon-toggle input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 40px;
+    height: 22px;
+    background: var(--bg-tertiary);
+    border-radius: 11px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.addon-toggle input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.addon-toggle input[type="checkbox"]:checked {
+    background: var(--accent-primary);
+}
+
+.addon-toggle input[type="checkbox"]:checked::after {
+    transform: translateX(18px);
+    background: #fff;
+}
+
+.addon-toggle .toggle-label {
+    font-size: 0.85rem;
+    color: var(--text-primary);
 }
 
 .form-calc-result {
@@ -627,6 +707,32 @@
 
 .smart-table-container {
     overflow-x: auto;
+    position: relative;
+}
+
+.smart-table-refresh {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, border-color 0.15s;
+    z-index: 1;
+}
+
+.smart-table-refresh:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.smart-table-refresh.spinning svg {
+    animation: spin 0.6s linear infinite;
 }
 
 .smart-table {
@@ -836,6 +942,89 @@
 
 .log-line.log-warn .log-msg {
     color: #ffd080;
+}
+
+/* ── Sortable table headers ────────────────────── */
+
+.smart-th-sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+
+.smart-th-sortable:hover {
+    color: var(--text-primary);
+}
+
+/* ── Status dots for tables ─────────────────────── */
+
+.status-dot-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.status-dot-label {
+    text-transform: capitalize;
+}
+
+/* ── Table action buttons ─────────────────────── */
+
+.btn-table-action {
+    padding: 4px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-table-action:hover {
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.btn-table-delete:hover {
+    color: var(--danger, #ef4444);
+    border-color: var(--danger, #ef4444);
+}
+
+.btn-table-action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── Error states ─────────────────────────────── */
+
+.smart-table-error {
+    color: var(--warning, #f59e0b) !important;
+    font-style: italic;
+}
+
+.deploy-wizard-error {
+    font-size: 0.8rem;
+    color: var(--warning, #f59e0b);
+    padding: 8px 12px;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+.prefill-error {
+    border-color: var(--warning, #f59e0b) !important;
 }
 
 /* ============================================

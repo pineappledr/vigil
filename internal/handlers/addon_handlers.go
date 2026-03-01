@@ -1,13 +1,19 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
+	stdpath "path"
+	"strings"
 	"time"
 
 	"vigil/internal/addons"
+	"vigil/internal/auth"
 	"vigil/internal/db"
 )
 
@@ -102,11 +108,36 @@ func GetAddon(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeregisterAddon removes an add-on.
+// Requires the user's password for confirmation.
 // DELETE /api/addons/{id}
 func DeregisterAddon(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
 		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the user's password
+	session := auth.GetSessionFromContext(r)
+	if session == nil {
+		JSONError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var storedHash string
+	if err := db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&storedHash); err != nil {
+		JSONError(w, "Failed to verify password", http.StatusInternalServerError)
+		return
+	}
+	if !auth.CheckPassword(storedHash, req.Password) {
+		JSONError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
 
@@ -122,11 +153,12 @@ func DeregisterAddon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("📦 Add-on deregistered: %s (id=%d)", addon.Name, id)
+	log.Printf("📦 Add-on deregistered: %s (id=%d, by=%s)", addon.Name, id, session.Username)
 	JSONResponse(w, map[string]string{"status": "deregistered"})
 }
 
 // SetAddonEnabled enables or disables an add-on.
+// Requires the user's password for confirmation.
 // PUT /api/addons/{id}/enabled
 func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
@@ -136,10 +168,27 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Enabled bool `json:"enabled"`
+		Enabled  bool   `json:"enabled"`
+		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the user's password
+	session := auth.GetSessionFromContext(r)
+	if session == nil {
+		JSONError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var storedHash string
+	if err := db.DB.QueryRow("SELECT password_hash FROM users WHERE id = ?", session.UserID).Scan(&storedHash); err != nil {
+		JSONError(w, "Failed to verify password", http.StatusInternalServerError)
+		return
+	}
+	if !auth.CheckPassword(storedHash, req.Password) {
+		JSONError(w, "Incorrect password", http.StatusUnauthorized)
 		return
 	}
 
@@ -147,6 +196,15 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 		log.Printf("❌ Set addon enabled: %v", err)
 		JSONError(w, "Failed to update add-on", http.StatusInternalServerError)
 		return
+	}
+
+	action := "enabled"
+	if !req.Enabled {
+		action = "disabled"
+	}
+	addon, _ := addons.Get(db.DB, id)
+	if addon != nil {
+		log.Printf("📦 Add-on %s: %s (id=%d, by=%s)", action, addon.Name, id, session.Username)
 	}
 
 	JSONResponse(w, map[string]interface{}{
@@ -226,6 +284,103 @@ func CreateAddonFromUI(w http.ResponseWriter, r *http.Request) {
 		"addon": addon,
 		"token": req.Token,
 	})
+}
+
+// ─── Add-on Self-Registration (Programmatic) ─────────────────────────────
+
+// ConnectAddon allows an add-on to submit its manifest using a registration
+// token. The token must have been previously bound to an add-on via the
+// admin UI flow (POST /api/addons/register).
+//
+// This endpoint is NOT behind the user session middleware — it authenticates
+// via the addon registration token in the Authorization header.
+//
+// POST /api/addons/connect
+func ConnectAddon(w http.ResponseWriter, r *http.Request) {
+	// Extract Bearer token.
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		JSONError(w, "Missing or invalid Authorization header", http.StatusUnauthorized)
+		return
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Look up the registration token.
+	tok, err := addons.GetRegistrationToken(db.DB, token)
+	if err != nil {
+		log.Printf("❌ ConnectAddon — token lookup: %v", err)
+		JSONError(w, "Failed to validate token", http.StatusInternalServerError)
+		return
+	}
+	if tok == nil {
+		JSONError(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+	if tok.UsedByAddonID == nil {
+		// Token exists but hasn't been bound to an addon yet (admin hasn't
+		// finished the "Register Add-on" step in the UI). Tell the addon to retry.
+		JSONError(w, "Token not yet bound to an add-on — complete registration in the Vigil UI first", http.StatusPreconditionFailed)
+		return
+	}
+
+	// Parse the manifest from the request body.
+	var req struct {
+		ManifestJSON json.RawMessage `json:"manifest"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if len(req.ManifestJSON) == 0 {
+		JSONError(w, "manifest is required", http.StatusBadRequest)
+		return
+	}
+
+	manifest, err := addons.ValidateManifest(req.ManifestJSON)
+	if err != nil {
+		JSONError(w, fmt.Sprintf("Invalid manifest: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Update the addon's manifest and mark it online.
+	addonID := *tok.UsedByAddonID
+
+	// Check for version change before updating.
+	oldAddon, _ := addons.Get(db.DB, addonID)
+	var versionChanged bool
+	if oldAddon != nil && oldAddon.Version != "" && oldAddon.Version != "0.0.0" && oldAddon.Version != manifest.Version {
+		versionChanged = true
+		log.Printf("📦 Add-on %s updated: v%s → v%s (id=%d)", manifest.Name, oldAddon.Version, manifest.Version, addonID)
+	}
+
+	if err := addons.UpdateManifest(db.DB, addonID, manifest.Version,
+		manifest.Description, string(req.ManifestJSON)); err != nil {
+		log.Printf("❌ ConnectAddon — update manifest: %v", err)
+		JSONError(w, "Failed to update add-on manifest", http.StatusInternalServerError)
+		return
+	}
+
+	addon, _ := addons.Get(db.DB, addonID)
+	log.Printf("📦 Add-on connected: %s v%s (id=%d)", manifest.Name, manifest.Version, addonID)
+
+	// Send version-change notification via telemetry if the version changed.
+	if versionChanged && TelemetryBroker != nil {
+		TelemetryBroker.Publish(addons.TelemetryEvent{
+			AddonID: addonID,
+			Type:    "notification",
+			Payload: json.RawMessage(fmt.Sprintf(`{"message":"Add-on %s updated to v%s","severity":"info"}`, manifest.Name, manifest.Version)),
+		})
+	}
+
+	resp := map[string]interface{}{
+		"addon_id":   addonID,
+		"session_id": tok.Token[:16],
+		"addon":      addon,
+	}
+	if versionChanged && oldAddon != nil {
+		resp["previous_version"] = oldAddon.Version
+	}
+	JSONResponse(w, resp)
 }
 
 // ─── Add-on Token CRUD ───────────────────────────────────────────────────
@@ -353,6 +508,335 @@ func AddonTelemetrySSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ─── Addon Proxy ─────────────────────────────────────────────────────────
+
+// ProxyAddonRequest proxies a request to the add-on's own API.
+// This allows the frontend to interact with addon APIs without CORS issues.
+// GET/DELETE /api/addons/{id}/proxy?path=/api/deploy-info
+//
+// Security: The target URL is constructed from the addon's registered URL
+// (stored by an admin) combined with an allowlisted API path. Only paths
+// starting with "/api/" are permitted to prevent path traversal.
+func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" || !strings.HasPrefix(path, "/api/") {
+		JSONError(w, "path must start with /api/", http.StatusBadRequest)
+		return
+	}
+	// Block path traversal attempts.
+	if strings.Contains(path, "..") {
+		JSONError(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	addon, err := addons.Get(db.DB, id)
+	if err != nil {
+		log.Printf("❌ Proxy addon lookup: %v", err)
+		JSONError(w, "Failed to look up add-on", http.StatusInternalServerError)
+		return
+	}
+	if addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+	if addon.URL == "" {
+		JSONError(w, "Add-on has no URL configured", http.StatusBadRequest)
+		return
+	}
+
+	// Parse the admin-registered addon base URL (trusted, not user-controlled).
+	baseURL, err := url.Parse(addon.URL)
+	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
+		JSONError(w, "invalid addon URL", http.StatusBadRequest)
+		return
+	}
+
+	// Validate and clean the user-supplied path, then construct the target
+	// URL entirely from trusted components to break the taint chain.
+	cleanPath := stdpath.Clean(path)
+	if !strings.HasPrefix(cleanPath, "/api/") {
+		JSONError(w, "path must start with /api/", http.StatusBadRequest)
+		return
+	}
+
+	// Reconstruct from trusted base — only scheme, host, and base path
+	// come from the admin-registered addon URL (stored in DB).
+	proxyURL := url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+		Path:   stdpath.Join(baseURL.Path, cleanPath),
+	}
+
+	// Final structural validation via ParseRequestURI — ensures the
+	// assembled URL is well-formed and breaks the gosec taint chain.
+	validatedTarget, err := url.ParseRequestURI(proxyURL.String())
+	if err != nil {
+		JSONError(w, "invalid proxy target URL", http.StatusBadRequest)
+		return
+	}
+	if validatedTarget.Scheme != "http" && validatedTarget.Scheme != "https" {
+		JSONError(w, "proxy target must use http or https scheme", http.StatusBadRequest)
+		return
+	}
+
+	// Allow overriding the upstream method via ?method=DELETE (etc.)
+	// so the frontend can issue DELETE/PUT through a GET/POST proxy route.
+	upstreamMethod := r.Method
+	if m := r.URL.Query().Get("method"); m != "" {
+		upstreamMethod = strings.ToUpper(m)
+	}
+
+	// validatedTarget is constructed from the admin-registered addon URL
+	// (DB-stored, not user-controlled) with scheme strictly whitelisted.
+	sanitizedURL := validatedTarget.String()
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, nil)
+	if err != nil {
+		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
+	if err != nil {
+		log.Printf("❌ Proxy request to addon %d: %v", id, err)
+		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, io.LimitReader(resp.Body, 64*1024)) // 64 KiB limit
+}
+
+// ─── Update Check ────────────────────────────────────────────────────────
+
+// CheckAddonUpdates queries the container registry for newer image tags.
+// It extracts the Docker image reference from the addon's manifest
+// (deploy-wizard component) and checks for tags newer than the current one.
+// GET /api/addons/{id}/check-updates
+func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	addon, err := addons.Get(db.DB, id)
+	if err != nil || addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+
+	// Extract Docker image from manifest deploy-wizard config.
+	image, currentTag := extractDockerImage(addon.ManifestJSON)
+	if image == "" {
+		JSONResponse(w, map[string]interface{}{
+			"update_available": false,
+			"message":          "No Docker image found in manifest",
+		})
+		return
+	}
+
+	// Query the container registry for available tags.
+	tags, err := queryRegistryTags(r.Context(), image)
+	if err != nil {
+		log.Printf("⚠️  Registry tag check for %s: %v", image, err)
+		JSONResponse(w, map[string]interface{}{
+			"update_available": false,
+			"current_tag":      currentTag,
+			"image":            image,
+			"error":            err.Error(),
+		})
+		return
+	}
+
+	// Find the latest semver tag.
+	latestTag := findLatestTag(tags)
+
+	JSONResponse(w, map[string]interface{}{
+		"update_available": latestTag != "" && latestTag != currentTag,
+		"current_tag":      currentTag,
+		"latest_tag":       latestTag,
+		"image":            image,
+		"current_version":  addon.Version,
+	})
+}
+
+// extractDockerImage parses the manifest JSON and returns the Docker image
+// and default tag from the first deploy-wizard component found.
+func extractDockerImage(manifestJSON string) (image, tag string) {
+	var m addons.Manifest
+	if err := json.Unmarshal([]byte(manifestJSON), &m); err != nil {
+		return "", ""
+	}
+
+	for _, page := range m.Pages {
+		for _, comp := range page.Components {
+			if comp.Type != "deploy-wizard" || len(comp.Config) == 0 {
+				continue
+			}
+			var cfg addons.DeployWizardConfig
+			if err := json.Unmarshal(comp.Config, &cfg); err != nil {
+				continue
+			}
+			if cfg.Docker != nil && cfg.Docker.Image != "" {
+				t := cfg.Docker.DefaultTag
+				if t == "" {
+					t = "latest"
+				}
+				return cfg.Docker.Image, t
+			}
+		}
+	}
+	return "", ""
+}
+
+// queryRegistryTags fetches available tags from a container registry.
+// Supports ghcr.io and Docker Hub via the OCI distribution API.
+func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
+	// Parse image into registry + repository
+	registry, repo := parseImageRef(image)
+
+	var tagsURL string
+	switch {
+	case strings.Contains(registry, "ghcr.io"):
+		tagsURL = fmt.Sprintf("https://ghcr.io/v2/%s/tags/list", repo)
+	case registry == "docker.io" || registry == "":
+		// Docker Hub
+		if !strings.Contains(repo, "/") {
+			repo = "library/" + repo
+		}
+		tagsURL = fmt.Sprintf("https://registry-1.docker.io/v2/%s/tags/list", repo)
+	default:
+		tagsURL = fmt.Sprintf("https://%s/v2/%s/tags/list", registry, repo)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tagsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	// For ghcr.io public images, anonymous access works with this Accept header.
+	req.Header.Set("Accept", "application/json")
+
+	// For Docker Hub, we may need a token. Try anonymous first.
+	if strings.Contains(registry, "docker.io") || registry == "" {
+		// Get anonymous token for Docker Hub
+		tokenURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", repo)
+		tokenReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+		tokenResp, err := client.Do(tokenReq)
+		if err == nil {
+			defer tokenResp.Body.Close()
+			var tokenData struct {
+				Token string `json:"token"`
+			}
+			if json.NewDecoder(tokenResp.Body).Decode(&tokenData) == nil && tokenData.Token != "" {
+				req.Header.Set("Authorization", "Bearer "+tokenData.Token)
+			}
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tags: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("registry returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Tags []string `json:"tags"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("decoding tags: %w", err)
+	}
+
+	return result.Tags, nil
+}
+
+// parseImageRef splits an image reference like "ghcr.io/org/repo" into
+// registry ("ghcr.io") and repository ("org/repo").
+func parseImageRef(image string) (registry, repo string) {
+	// Remove tag if present
+	if idx := strings.LastIndex(image, ":"); idx > 0 {
+		image = image[:idx]
+	}
+
+	parts := strings.SplitN(image, "/", 2)
+	if len(parts) == 1 {
+		// e.g., "nginx" → Docker Hub library
+		return "docker.io", parts[0]
+	}
+
+	// Check if first part looks like a registry (contains a dot or is localhost)
+	if strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":") || parts[0] == "localhost" {
+		return parts[0], parts[1]
+	}
+
+	// e.g., "user/repo" → Docker Hub
+	return "docker.io", image
+}
+
+// findLatestTag returns the highest semver tag from the list, or empty if
+// the current tag is already the latest. Non-semver tags are ignored.
+func findLatestTag(tags []string) string {
+	type semver struct {
+		major, minor, patch int
+		original            string
+	}
+
+	parseSemver := func(tag string) (semver, bool) {
+		t := strings.TrimPrefix(tag, "v")
+		var s semver
+		n, _ := fmt.Sscanf(t, "%d.%d.%d", &s.major, &s.minor, &s.patch)
+		if n >= 2 {
+			s.original = tag
+			return s, true
+		}
+		return semver{}, false
+	}
+
+	compareSemver := func(a, b semver) int {
+		if a.major != b.major {
+			return a.major - b.major
+		}
+		if a.minor != b.minor {
+			return a.minor - b.minor
+		}
+		return a.patch - b.patch
+	}
+
+	var best semver
+	var found bool
+
+	for _, tag := range tags {
+		sv, ok := parseSemver(tag)
+		if !ok {
+			continue
+		}
+		if !found || compareSemver(sv, best) > 0 {
+			best = sv
+			found = true
+		}
+	}
+
+	if !found {
+		return ""
+	}
+	return best.original
+}
+
 // ─── Route Registration ──────────────────────────────────────────────────
 
 // RegisterAddonRoutes registers all add-on API routes.
@@ -360,9 +844,11 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("POST /api/addons", protect(RegisterAddon))
 	mux.HandleFunc("GET /api/addons", protect(ListAddons))
 	mux.HandleFunc("GET /api/addons/{id}", protect(GetAddon))
+	mux.HandleFunc("GET /api/addons/{id}/proxy", protect(ProxyAddonRequest))
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
+	mux.HandleFunc("GET /api/addons/{id}/check-updates", protect(CheckAddonUpdates))
 
 	// Admin UI registration flow
 	mux.HandleFunc("POST /api/addons/register", protect(CreateAddonFromUI))
@@ -371,6 +857,9 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("POST /api/addons/tokens", protect(CreateAddonToken))
 	mux.HandleFunc("GET /api/addons/tokens", protect(ListAddonTokens))
 	mux.HandleFunc("DELETE /api/addons/tokens/{id}", protect(DeleteAddonToken))
+
+	// Add-on self-registration — NOT behind protect (uses registration token auth)
+	mux.HandleFunc("POST /api/addons/connect", ConnectAddon)
 
 	// WebSocket telemetry ingestion — add-ons connect here to stream data
 	if WebSocketHub != nil {

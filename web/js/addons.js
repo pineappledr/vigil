@@ -194,6 +194,11 @@ const Addons = {
                         <button class="btn-addon-toggle" onclick="event.stopPropagation(); Addons.toggleEnabled(${addon.id}, ${!addon.enabled})" title="${addon.enabled ? 'Disable' : 'Enable'}">
                             ${addon.enabled ? this._icons.toggleOn : this._icons.toggleOff}
                         </button>
+                        <button class="btn-agent-delete" onclick="event.stopPropagation(); Addons.confirmDeleteAddon(${addon.id})" title="Delete add-on">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 ${addon.description ? `<p class="addon-description">${this._escape(addon.description)}</p>` : ''}
@@ -233,11 +238,22 @@ const Addons = {
 
     async showAddAddon() {
         let token = '';
+        let serverPubKey = '';
+
         try {
-            const resp = await API.createAddonToken('');
-            if (!resp.ok) throw new Error('Token creation failed');
-            const data = await resp.json();
-            token = data.token || '';
+            const [tokenResp, pubKeyResp] = await Promise.all([
+                API.createAddonToken(''),
+                API.getServerPubKey()
+            ]);
+
+            if (!tokenResp.ok) throw new Error('Token creation failed');
+            const tokenData = await tokenResp.json();
+            token = tokenData.token || '';
+
+            if (pubKeyResp.ok) {
+                const pkData = await pubKeyResp.json();
+                serverPubKey = pkData.public_key || '';
+            }
         } catch {
             alert('Failed to generate registration token. Please try again.');
             return;
@@ -249,8 +265,9 @@ const Addons = {
         }
 
         const copyIcon = this._icons.copy;
+        const serverURL = window.location.origin;
 
-        Modals.create(`
+        const modal = Modals.create(`
             <div class="modal modal-add-agent">
                 <div class="modal-header">
                     <h3>Add Add-on</h3>
@@ -262,17 +279,45 @@ const Addons = {
                     </button>
                 </div>
                 <div class="modal-body" style="padding-bottom: 0;">
-                    <p class="agent-tab-hint">
-                        Register an add-on to extend Vigil with new capabilities. The add-on will connect to this server using the token below.
+                    <div class="agent-tab-bar">
+                        <button class="agent-tab active" data-tab="docker" onclick="Addons._switchAddonTab('docker')">Docker</button>
+                        <button class="agent-tab" data-tab="binary" onclick="Addons._switchAddonTab('binary')">Binary</button>
+                    </div>
+                    <p class="agent-tab-hint" id="addon-tab-hint">
+                        Deploy the add-on with Docker, then register it below.
                     </p>
                     <div class="form-group">
                         <label>Name</label>
                         <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Hub" maxlength="128">
                     </div>
+                    <div class="form-group" id="addon-image-group">
+                        <label>Docker Image</label>
+                        <input type="text" id="addon-image" class="form-input form-input-mono" placeholder="e.g., ghcr.io/pineappledr/burnin-hub">
+                        <span class="form-hint">Docker image for the add-on. Used to generate the docker-compose below.</span>
+                    </div>
                     <div class="form-group">
                         <label>Add-on URL</label>
                         <input type="text" id="addon-url" class="form-input form-input-mono" placeholder="e.g., http://192.168.1.50:9100">
-                        <span class="form-hint">Network address where the add-on is running</span>
+                        <span class="form-hint">Network address where the add-on will be running</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Server URL</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="addon-server-url" class="form-input form-input-mono" value="${serverURL}" readonly>
+                            <button class="btn-copy" onclick="Addons._copyInput('addon-server-url')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Public Key</label>
+                        <div class="form-input-with-copy">
+                            <input type="text" id="addon-pubkey" class="form-input form-input-mono" value="${serverPubKey}" readonly>
+                            <button class="btn-copy" onclick="Addons._copyInput('addon-pubkey')" title="Copy">
+                                ${copyIcon}
+                            </button>
+                        </div>
+                        <span class="form-hint">Ed25519 public key for command signature verification</span>
                     </div>
                     <div class="form-group">
                         <label>Token</label>
@@ -284,14 +329,26 @@ const Addons = {
                         </div>
                         <span class="form-hint form-hint-warning">This token expires in 1 hour. Save it — it will not be shown again.</span>
                     </div>
+                    <div class="form-group">
+                        <label>Version</label>
+                        <input type="text" id="addon-version" class="form-input" placeholder="latest" value="">
+                        <span class="form-hint" style="margin-top: 4px;">Leave empty for latest. Use a tag like <code>v1.0.0</code> for a specific version.</span>
+                    </div>
                     <div id="addon-reg-error" class="form-error"></div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer agent-modal-footer">
+                    <div class="agent-copy-group">
+                        <button class="btn btn-secondary btn-with-icon" id="addon-copy-btn" onclick="Addons._copyAddonInstall()">
+                            ${copyIcon}
+                            <span id="addon-copy-label">Copy docker compose</span>
+                        </button>
+                    </div>
                     <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register Add-on</button>
                 </div>
             </div>
         `);
 
+        modal._addonState = { tab: 'docker', serverURL, serverPubKey, token };
         document.getElementById('addon-name')?.focus();
     },
 
@@ -337,6 +394,122 @@ const Addons = {
         }
     },
 
+    // ─── Add Add-on Deployment Helpers ─────────────────────────────────────
+
+    _switchAddonTab(tab) {
+        document.querySelectorAll('.modal .agent-tab').forEach(el => {
+            el.classList.toggle('active', el.dataset.tab === tab);
+        });
+
+        const overlay = document.querySelector('.modal-overlay');
+        if (overlay?._addonState) overlay._addonState.tab = tab;
+
+        const hint = document.getElementById('addon-tab-hint');
+        const imageGroup = document.getElementById('addon-image-group');
+        const label = document.getElementById('addon-copy-label');
+
+        if (tab === 'docker') {
+            if (hint) hint.textContent = 'Deploy the add-on with Docker, then register it below.';
+            if (imageGroup) imageGroup.style.display = '';
+            if (label) label.textContent = 'Copy docker compose';
+        } else {
+            if (hint) hint.textContent = 'Install the add-on binary, then register it below.';
+            if (imageGroup) imageGroup.style.display = 'none';
+            if (label) label.textContent = 'Copy environment variables';
+        }
+    },
+
+    _copyAddonInstall() {
+        const overlay = document.querySelector('.modal-overlay');
+        const st = overlay?._addonState;
+        if (!st) return;
+
+        const text = st.tab === 'docker'
+            ? this._generateAddonCompose()
+            : this._generateAddonEnvVars();
+
+        if (!text) return;
+        const flash = () => {
+            const label = document.getElementById('addon-copy-label');
+            if (label) {
+                const orig = label.textContent;
+                label.textContent = 'Copied!';
+                setTimeout(() => { label.textContent = orig; }, 2000);
+            }
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(flash).catch(() => {
+                this._fallbackCopy(text);
+                flash();
+            });
+        } else {
+            this._fallbackCopy(text);
+            flash();
+        }
+    },
+
+    _generateAddonCompose() {
+        const name = document.getElementById('addon-name')?.value.trim() || 'addon';
+        const image = document.getElementById('addon-image')?.value.trim();
+        const version = document.getElementById('addon-version')?.value.trim();
+        const addonURL = document.getElementById('addon-url')?.value.trim() || '';
+        const serverURL = document.getElementById('addon-server-url')?.value || '';
+        const pubKey = document.getElementById('addon-pubkey')?.value || '';
+        const token = document.getElementById('addon-token')?.value || '';
+
+        if (!image) {
+            alert('Enter a Docker image to generate the docker-compose.');
+            return '';
+        }
+
+        const tag = version || 'latest';
+        const containerName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+        // Extract port from addon URL if provided (e.g., "http://192.168.1.50:9100" → "9100")
+        let port = '';
+        if (addonURL) {
+            try {
+                const parsed = new URL(addonURL);
+                port = parsed.port || '';
+            } catch {}
+        }
+
+        let yaml = `# ${name} - docker-compose.yml
+services:
+  ${containerName}:
+    image: ${image}:${tag}
+    container_name: ${containerName}
+    restart: unless-stopped`;
+
+        if (port) {
+            yaml += `\n    ports:\n      - "${port}:${port}"`;
+        }
+
+        yaml += `\n    environment:
+      VIGIL_URL: ${serverURL}
+      VIGIL_AGENT_TOKEN: ${token}
+      VIGIL_SERVER_PUBKEY: ${pubKey}
+      TZ: \${TZ:-UTC}
+      BURNIN_HUB_DATA_DIR: "/data"
+    volumes:
+      - ${containerName}-data:/data
+
+volumes:
+  ${containerName}-data:`;
+
+        return yaml;
+    },
+
+    _generateAddonEnvVars() {
+        const serverURL = document.getElementById('addon-server-url')?.value || '';
+        const pubKey = document.getElementById('addon-pubkey')?.value || '';
+        const token = document.getElementById('addon-token')?.value || '';
+
+        return `VIGIL_URL="${serverURL}"
+VIGIL_AGENT_TOKEN="${token}"
+VIGIL_SERVER_PUBKEY="${pubKey}"`;
+    },
+
     // ─── Addon Actions ───────────────────────────────────────────────────
 
     async openAddon(id) {
@@ -357,11 +530,119 @@ const Addons = {
         this.render();
     },
 
-    async toggleEnabled(id, enabled) {
+    toggleEnabled(id, enabled) {
+        const addon = this.addons.find(a => a.id === id);
+        const name = addon ? this._escape(addon.name) : `Add-on #${id}`;
+        const action = enabled ? 'Enable' : 'Disable';
+
+        Modals.create(`
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>${action} Add-on</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-message">Enter your password to ${action.toLowerCase()} <strong>${name}</strong>.</p>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="addon-toggle-password" class="form-input" placeholder="Enter your password">
+                    </div>
+                    <div id="addon-toggle-error" class="form-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-primary" onclick="Addons.submitToggleEnabled(${id}, ${enabled})">${action}</button>
+                </div>
+            </div>
+        `);
+        document.getElementById('addon-toggle-password')?.focus();
+    },
+
+    async submitToggleEnabled(id, enabled) {
+        const password = document.getElementById('addon-toggle-password')?.value;
+        const errorEl = document.getElementById('addon-toggle-error');
+
+        if (!password) {
+            if (errorEl) errorEl.textContent = 'Password is required';
+            return;
+        }
+
         try {
-            const resp = await API.setAddonEnabled(id, enabled);
-            if (resp.ok) this.render();
-        } catch {}
+            const resp = await API.setAddonEnabled(id, enabled, password);
+            if (resp.ok) {
+                document.querySelector('.modal-overlay')?.remove();
+                this.render();
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                if (errorEl) errorEl.textContent = data.error || 'Failed to update add-on';
+            }
+        } catch {
+            if (errorEl) errorEl.textContent = 'Connection error';
+        }
+    },
+
+    confirmDeleteAddon(id) {
+        const addon = this.addons.find(a => a.id === id);
+        const name = addon ? this._escape(addon.name) : `Add-on #${id}`;
+
+        Modals.create(`
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>Delete Add-on</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-message">Enter your password to permanently delete <strong>${name}</strong>. This action cannot be undone.</p>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="addon-delete-password" class="form-input" placeholder="Enter your password">
+                    </div>
+                    <div id="addon-delete-error" class="form-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-danger" onclick="Addons.submitDeleteAddon(${id})">Delete</button>
+                </div>
+            </div>
+        `);
+        document.getElementById('addon-delete-password')?.focus();
+    },
+
+    async submitDeleteAddon(id) {
+        const password = document.getElementById('addon-delete-password')?.value;
+        const errorEl = document.getElementById('addon-delete-error');
+
+        if (!password) {
+            if (errorEl) errorEl.textContent = 'Password is required';
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/addons/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            if (resp.ok) {
+                document.querySelector('.modal-overlay')?.remove();
+                this.render();
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                if (errorEl) errorEl.textContent = data.error || 'Failed to delete add-on';
+            }
+        } catch {
+            if (errorEl) errorEl.textContent = 'Connection error';
+        }
     },
 
     async deleteToken(id) {
