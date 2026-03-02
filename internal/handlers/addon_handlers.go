@@ -677,7 +677,14 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Validate and clean the user-supplied path, then construct the target
 	// URL entirely from trusted components to break the taint chain.
-	cleanPath := stdpath.Clean(path)
+	// Split off any query string before cleaning the path component.
+	pathPart := path
+	var queryPart string
+	if idx := strings.IndexByte(path, '?'); idx != -1 {
+		pathPart = path[:idx]
+		queryPart = path[idx+1:]
+	}
+	cleanPath := stdpath.Clean(pathPart)
 	if !strings.HasPrefix(cleanPath, "/api/") {
 		JSONError(w, "path must start with /api/", http.StatusBadRequest)
 		return
@@ -686,9 +693,10 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	// Reconstruct from trusted base — only scheme, host, and base path
 	// come from the admin-registered addon URL (stored in DB).
 	proxyURL := url.URL{
-		Scheme: baseURL.Scheme,
-		Host:   baseURL.Host,
-		Path:   stdpath.Join(baseURL.Path, cleanPath),
+		Scheme:   baseURL.Scheme,
+		Host:     baseURL.Host,
+		Path:     stdpath.Join(baseURL.Path, cleanPath),
+		RawQuery: queryPart,
 	}
 
 	// Final structural validation via ParseRequestURI — ensures the

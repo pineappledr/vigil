@@ -3,25 +3,56 @@
  *
  * Scrollable, auto-tailing terminal-style log viewer with severity coloring.
  * Receives log telemetry events from SSE and appends lines.
+ *
+ * Supports two modes:
+ *   1. Live-only — receives SSE log events (default).
+ *   2. Source-backed — fetches historical logs from an addon API endpoint
+ *      on initial render. Optionally supports a time_filter dropdown that
+ *      re-fetches with a ?time_range= query parameter.
+ *
+ * Config schema:
+ *   max_lines      - Maximum retained lines (default 500)
+ *   show_source    - Show the source tag per line (default true)
+ *   show_timestamp - Show timestamps (default true)
+ *   source         - Data source identifier (e.g., "log_history")
+ *   time_filter    - { default, options: [{value, label}] }
  */
 
 const LogViewerComponent = {
-    _viewers: {},  // keyed by compId → { maxLines, autoScroll }
+    _viewers: {},  // keyed by compId → { maxLines, autoScroll, addonId, ... }
 
     /**
      * Render initial log viewer.
-     * @param {string} compId - Manifest component ID
-     * @param {Object} config - { maxLines?: number, showSource?: boolean }
+     * @param {string} compId  - Manifest component ID
+     * @param {Object} config  - Component configuration from manifest
+     * @param {number} addonId - Parent add-on ID (optional, for source fetching)
      * @returns {string} HTML
      */
-    render(compId, config) {
-        const maxLines = config.maxLines || 500;
+    render(compId, config, addonId) {
+        const maxLines = config.max_lines || config.maxLines || 500;
 
         this._viewers[compId] = {
             maxLines,
             autoScroll: true,
-            showSource: config.showSource !== false
+            showSource: config.show_source !== false && config.showSource !== false,
+            addonId: addonId || null,
+            config: config || {},
+            timeRange: config.time_filter ? (config.time_filter.default || '') : ''
         };
+
+        // Time filter dropdown (rendered only when configured)
+        const timeFilter = config.time_filter
+            ? this._renderTimeFilter(compId, config.time_filter)
+            : '';
+
+        // Fetch historical logs after DOM insertion
+        if (config.source && addonId) {
+            setTimeout(() => this._fetchSource(compId), 0);
+        }
+
+        const emptyText = (config.source && addonId)
+            ? 'Loading logs...'
+            : 'Waiting for log output...';
 
         return `
             <div class="log-viewer" id="log-viewer-${compId}">
@@ -33,6 +64,7 @@ const LogViewerComponent = {
                         <button class="log-filter-btn" data-level="info" onclick="LogViewerComponent._filterLevel('${compId}', 'info', this)">Info</button>
                     </div>
                     <div class="log-viewer-actions">
+                        ${timeFilter}
                         <label class="log-autoscroll">
                             <input type="checkbox" checked onchange="LogViewerComponent._toggleAutoScroll('${compId}', this.checked)">
                             Auto-scroll
@@ -45,11 +77,79 @@ const LogViewerComponent = {
                     </div>
                 </div>
                 <div class="log-viewer-body" id="log-body-${compId}">
-                    <div class="log-empty">Waiting for log output...</div>
+                    <div class="log-empty">${emptyText}</div>
                 </div>
             </div>
         `;
     },
+
+    // ─── Time Filter ──────────────────────────────────────────────────────
+
+    _renderTimeFilter(compId, filterConfig) {
+        const options = filterConfig.options || [];
+        const defaultVal = filterConfig.default || '';
+        return `<select class="smart-time-filter" id="log-time-filter-${compId}"
+                        onchange="LogViewerComponent._onTimeFilterChange('${compId}')">
+                    ${options.map(opt =>
+                        `<option value="${this._escape(opt.value)}"${opt.value === defaultVal ? ' selected' : ''}>${this._escape(opt.label)}</option>`
+                    ).join('')}
+                </select>`;
+    },
+
+    _onTimeFilterChange(compId) {
+        const viewer = this._viewers[compId];
+        if (!viewer) return;
+        const sel = document.getElementById(`log-time-filter-${compId}`);
+        if (!sel) return;
+        viewer.timeRange = sel.value;
+        this._fetchSource(compId);
+    },
+
+    // ─── Source Data Fetching ─────────────────────────────────────────────
+
+    async _fetchSource(compId) {
+        const viewer = this._viewers[compId];
+        if (!viewer || !viewer.config.source || !viewer.addonId) return;
+
+        const sourceMap = {
+            'log_history': '/api/logs/history'
+        };
+
+        let path = sourceMap[viewer.config.source];
+        if (!path) return;
+
+        // Append time_range query parameter if a time filter is active.
+        if (viewer.timeRange) {
+            const sep = path.includes('?') ? '&' : '?';
+            path += `${sep}time_range=${encodeURIComponent(viewer.timeRange)}`;
+        }
+
+        try {
+            const resp = await fetch(`/api/addons/${viewer.addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) return;
+
+            const logs = await resp.json();
+            if (!Array.isArray(logs)) return;
+
+            // Clear existing content and populate with historical entries.
+            const body = document.getElementById(`log-body-${compId}`);
+            if (!body) return;
+            body.innerHTML = '';
+
+            if (logs.length === 0) {
+                body.innerHTML = '<div class="log-empty">No logs in this time range</div>';
+                return;
+            }
+
+            for (const entry of logs) {
+                this._appendLine(compId, entry, viewer);
+            }
+        } catch (e) {
+            console.error(`[LogViewer] Failed to fetch source for ${compId}:`, e);
+        }
+    },
+
+    // ─── SSE Telemetry Updates ───────────────────────────────────────────
 
     /**
      * Handle an incoming log telemetry event.
@@ -73,7 +173,17 @@ const LogViewerComponent = {
         if (empty) empty.remove();
 
         const level = (payload.level || 'info').toLowerCase();
-        const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+        // Use the payload timestamp if available (historical), otherwise generate one.
+        let timestamp;
+        if (payload.timestamp) {
+            try {
+                timestamp = new Date(payload.timestamp).toLocaleTimeString('en-US', { hour12: false });
+            } catch {
+                timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+            }
+        } else {
+            timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+        }
         const source = viewer.showSource && payload.source ? payload.source : '';
 
         const line = document.createElement('div');

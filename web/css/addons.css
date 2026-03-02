@@ -741,10 +741,29 @@
     position: relative;
 }
 
+.smart-table-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.smart-time-filter {
+    background: var(--card-bg, #1e1e2e);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.smart-time-filter:hover {
+    border-color: var(--text-muted);
+}
+
 .smart-table-refresh {
-    position: absolute;
-    top: 0;
-    right: 0;
     background: none;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -754,7 +773,6 @@
     display: flex;
     align-items: center;
     transition: color 0.15s, border-color 0.15s;
-    z-index: 1;
 }
 
 .smart-table-refresh:hover {

@@ -149,7 +149,7 @@ const ManifestRenderer = {
 
             case 'log-viewer':
                 return typeof LogViewerComponent !== 'undefined'
-                    ? LogViewerComponent.render(comp.id, config)
+                    ? LogViewerComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">Log Viewer component not loaded</p>';
 
             case 'deploy-wizard':
