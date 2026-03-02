@@ -158,8 +158,13 @@ const LogViewerComponent = {
     handleUpdate(payload) {
         if (!payload?.message) return;
 
-        // Broadcast to all active log viewers
+        // Broadcast to all active log viewers (prune stale entries)
         for (const [compId, viewer] of Object.entries(this._viewers)) {
+            const body = document.getElementById(`log-body-${compId}`);
+            if (!body) {
+                delete this._viewers[compId];
+                continue;
+            }
             this._appendLine(compId, payload, viewer);
         }
     },

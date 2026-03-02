@@ -12,6 +12,7 @@ const ManifestRenderer = {
     activePage: null,
     eventSource: null,
     _chartInstances: [],
+    _lastProgressPhase: null,
 
     /**
      * Main entry point — called from Addons.openAddon().
@@ -234,6 +235,23 @@ const ManifestRenderer = {
                     const rows = this._smartDeltasToRows(payload.smart_deltas);
                     if (rows.length > 0) {
                         SmartTableComponent.handleUpdate({ component_id: 'smart-deltas', rows });
+                    }
+                }
+                // Synthesize a log line from progress frames on phase
+                // transitions so the Recent Activity viewer always has
+                // output even if direct log frames are lost during page
+                // navigation.
+                if (payload.phase && typeof LogViewerComponent !== 'undefined') {
+                    const phaseKey = payload.phase + '|' + (payload.phase_detail || payload.phaseDetail || '');
+                    if (phaseKey !== this._lastProgressPhase) {
+                        this._lastProgressPhase = phaseKey;
+                        const detail = payload.phase_detail || payload.phaseDetail || '';
+                        const parts = [payload.phase, detail].filter(Boolean);
+                        LogViewerComponent.handleUpdate({
+                            level: 'info',
+                            message: parts.join(' — '),
+                            source: payload.agent_id || ''
+                        });
                     }
                 }
                 break;
