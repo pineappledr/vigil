@@ -764,7 +764,7 @@ const FormComponent = {
 
         const formData = {};
         for (const field of meta.fields) {
-            formData[field.name] = this._getFieldValue(compId, field.name);
+            formData[field.name] = this._getTypedFieldValue(compId, field);
         }
         if (password) formData._password = password;
 
@@ -783,6 +783,10 @@ const FormComponent = {
                     errorEl.className = 'addon-form-error success';
                     setTimeout(() => { errorEl.textContent = ''; errorEl.className = 'addon-form-error'; }, 3000);
                 }
+                // Switch to the first page (Dashboard) to show job progress.
+                if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.manifest?.pages?.length > 1) {
+                    ManifestRenderer.switchPage(ManifestRenderer.manifest.pages[0].id);
+                }
             } else {
                 const data = await resp.json().catch(() => ({}));
                 if (errorEl) errorEl.textContent = data.error || 'Submission failed';
@@ -790,6 +794,19 @@ const FormComponent = {
         } catch {
             if (errorEl) errorEl.textContent = 'Connection error';
         }
+    },
+
+    /** Return a properly typed value for the field (number, boolean, or string). */
+    _getTypedFieldValue(compId, field) {
+        const raw = this._getFieldValue(compId, field.name);
+        if (field.type === 'number') {
+            const n = Number(raw);
+            return isNaN(n) ? (field.default ?? 0) : n;
+        }
+        if (field.type === 'toggle' || field.type === 'checkbox') {
+            return raw === 'true';
+        }
+        return raw;
     },
 
     // ─── Helpers ──────────────────────────────────────────────────────────
