@@ -517,6 +517,124 @@ func AddonTelemetrySSE(w http.ResponseWriter, r *http.Request) {
 // Security: The target URL is constructed from the addon's registered URL
 // (stored by an admin) combined with an allowlisted API path. Only paths
 // starting with "/api/" are permitted to prevent path traversal.
+// ─── Form Action Proxy ────────────────────────────────────────────────
+
+// ExecuteAddonAction handles POST /api/addons/{id}/action.
+// It receives form submissions from the UI and proxies them to the addon's API.
+func ExecuteAddonAction(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	// Read request body with size limit.
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1 MB
+	if err != nil {
+		JSONError(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		ComponentID string                 `json:"component_id"`
+		Action      string                 `json:"action"`
+		Data        map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		JSONError(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	if req.Action == "" {
+		JSONError(w, "action is required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate action contains only safe characters (alphanumeric, hyphens, underscores).
+	for _, c := range req.Action {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			JSONError(w, "invalid action name", http.StatusBadRequest)
+			return
+		}
+	}
+
+	addon, err := addons.Get(db.DB, id)
+	if err != nil {
+		log.Printf("❌ Action addon lookup: %v", err)
+		JSONError(w, "Failed to look up add-on", http.StatusInternalServerError)
+		return
+	}
+	if addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+	if !addon.Enabled {
+		JSONError(w, "Add-on is disabled", http.StatusForbidden)
+		return
+	}
+	if addon.URL == "" {
+		JSONError(w, "Add-on has no URL configured", http.StatusBadRequest)
+		return
+	}
+
+	// Strip internal-only fields before forwarding.
+	delete(req.Data, "_password")
+	delete(req.Data, "confirm_destructive")
+
+	// Build target URL: addon.URL + "/api/" + action
+	baseURL, err := url.Parse(addon.URL)
+	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
+		JSONError(w, "invalid addon URL", http.StatusBadRequest)
+		return
+	}
+
+	targetPath := stdpath.Join(baseURL.Path, "/api/", req.Action)
+	proxyURL := url.URL{
+		Scheme: baseURL.Scheme,
+		Host:   baseURL.Host,
+		Path:   targetPath,
+	}
+
+	validatedTarget, err := url.ParseRequestURI(proxyURL.String())
+	if err != nil {
+		JSONError(w, "invalid proxy target URL", http.StatusBadRequest)
+		return
+	}
+
+	// Marshal form data as the request body to the addon.
+	dataBody, err := json.Marshal(req.Data)
+	if err != nil {
+		JSONError(w, "failed to encode form data", http.StatusInternalServerError)
+		return
+	}
+
+	sanitizedURL := validatedTarget.String()
+	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, sanitizedURL, strings.NewReader(string(dataBody)))
+	if err != nil {
+		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
+		return
+	}
+	proxyReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(proxyReq) // #nosec G107 -- URL validated: scheme whitelisted, host from admin-registered addon
+	if err != nil {
+		log.Printf("❌ Action proxy to addon %d: %v", id, err)
+		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		JSONError(w, "Failed to read add-on response", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(respBody)
+}
+
 func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r, "id")
 	if err != nil {
@@ -844,6 +962,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("POST /api/addons", protect(RegisterAddon))
 	mux.HandleFunc("GET /api/addons", protect(ListAddons))
 	mux.HandleFunc("GET /api/addons/{id}", protect(GetAddon))
+	mux.HandleFunc("POST /api/addons/{id}/action", protect(ExecuteAddonAction))
 	mux.HandleFunc("GET /api/addons/{id}/proxy", protect(ProxyAddonRequest))
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
