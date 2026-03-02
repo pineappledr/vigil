@@ -12,14 +12,17 @@
 const ProgressComponent = {
     _jobs: {},       // keyed by job_id → job state
     _compIds: {},    // keyed by compId → true (for container lookup)
+    _addonId: null,  // parent add-on ID for proxy calls
 
     /**
      * @param {string} compId - Manifest component ID
      * @param {Object} config - Optional: { showSpeed: true }
+     * @param {number} addonId - Parent add-on ID (for cancel proxy)
      * @returns {string} HTML
      */
-    render(compId, config) {
+    render(compId, config, addonId) {
         this._compIds[compId] = true;
+        if (addonId) this._addonId = addonId;
         return `<div class="progress-container" id="progress-${compId}" data-comp="${compId}">
                     <div class="progress-empty">Waiting for job data...</div>
                 </div>`;
@@ -41,10 +44,14 @@ const ProgressComponent = {
                 phases: {},
                 phaseOrder: [],
                 currentPhase: null,
+                command: payload.command || '',
                 startTime: now,
                 lastBytesSample: 0,
                 lastSampleTime: now,
-                speedBps: 0
+                speedBps: 0,
+                speedMbps: 0,
+                tempC: 0,
+                elapsedSec: 0
             };
             this._jobs[jobId] = job;
         }
@@ -55,23 +62,38 @@ const ProgressComponent = {
         }
 
         job.currentPhase = payload.phase;
+
+        // Build message from available fields
+        const message = payload.message || payload.phase_detail || '';
+
+        // Build ETA string: prefer server string, then convert eta_sec
+        let eta = payload.eta || '';
+        if (!eta && payload.eta_sec > 0) {
+            eta = this._formatDuration(payload.eta_sec);
+        }
+
         const phaseData = {
             percent: payload.percent || 0,
-            message: payload.message || '',
-            eta: payload.eta || '',
+            message,
+            eta,
             bytesDone: payload.bytes_done || 0,
             bytesTotal: payload.bytes_total || 0,
             updatedAt: now
         };
         job.phases[payload.phase] = phaseData;
 
-        // Speed calculation — rolling sample over the delta since last update
+        // Update server-provided metrics
+        if (payload.speed_mbps !== undefined) job.speedMbps = payload.speed_mbps;
+        if (payload.temp_c !== undefined) job.tempC = payload.temp_c;
+        if (payload.elapsed_sec !== undefined) job.elapsedSec = payload.elapsed_sec;
+        if (payload.badblocks_errors !== undefined) job.badblockErrs = payload.badblocks_errors;
+
+        // Client-side speed calculation from bytes (fallback when speed_mbps not provided)
         if (phaseData.bytesDone > 0 && phaseData.bytesDone > job.lastBytesSample) {
             const dtSec = (now - job.lastSampleTime) / 1000;
-            if (dtSec > 0.5) { // avoid spikes from sub-500ms bursts
+            if (dtSec > 0.5) {
                 const dBytes = phaseData.bytesDone - job.lastBytesSample;
                 const instantSpeed = dBytes / dtSec;
-                // Exponential moving average (α = 0.3)
                 job.speedBps = job.speedBps === 0
                     ? instantSpeed
                     : job.speedBps * 0.7 + instantSpeed * 0.3;
@@ -80,12 +102,11 @@ const ProgressComponent = {
             }
         }
 
-        // Compute local ETA if server doesn't provide one
+        // Compute local ETA if not provided and we have byte-level data
         if (!phaseData.eta && phaseData.bytesTotal > 0 && job.speedBps > 0) {
             const remaining = phaseData.bytesTotal - phaseData.bytesDone;
             if (remaining > 0) {
-                const etaSec = remaining / job.speedBps;
-                phaseData.eta = this._formatDuration(etaSec);
+                phaseData.eta = this._formatDuration(remaining / job.speedBps);
             }
         }
 
@@ -113,12 +134,22 @@ const ProgressComponent = {
         const overallPct = this._overallPercent(job);
         const done = overallPct >= 100;
 
+        const cancelBtn = !done && this._addonId
+            ? `<button class="btn-cancel-job" onclick="ProgressComponent.cancelJob('${this._escape(jobId)}')" title="Cancel job">
+                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                   Cancel
+               </button>`
+            : '';
+
         card.innerHTML = `
             <div class="progress-job-header">
                 <span class="progress-job-id">${this._escape(jobId)}</span>
-                <span class="progress-job-status ${done ? 'complete' : 'running'}">
-                    ${done ? 'Complete' : 'Running'}
-                </span>
+                <div class="progress-job-header-actions">
+                    ${cancelBtn}
+                    <span class="progress-job-status ${done ? 'complete' : 'running'}">
+                        ${done ? 'Complete' : 'Running'}
+                    </span>
+                </div>
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar">
@@ -130,12 +161,35 @@ const ProgressComponent = {
             <div class="progress-meta">
                 ${this._speedDisplay(current, job)}
                 ${current.eta ? `<span class="progress-eta">ETA: ${this._escape(current.eta)}</span>` : ''}
-                <span class="progress-elapsed">${this._elapsed(job.startTime)}</span>
+                ${job.tempC > 0 ? `<span class="progress-temp">${job.tempC}°C</span>` : ''}
+                <span class="progress-elapsed">${job.elapsedSec > 0 ? this._formatDuration(job.elapsedSec) : this._elapsed(job.startTime)}</span>
             </div>
             <div class="progress-phases">
                 ${job.phaseOrder.map(name => this._phaseChip(name, job.phases[name], job.currentPhase)).join('')}
             </div>
         `;
+    },
+
+    async cancelJob(jobId) {
+        if (!confirm(`Cancel job ${jobId}? This will abort the running operation.`)) return;
+
+        try {
+            const path = `/api/jobs/${encodeURIComponent(jobId)}`;
+            const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}&method=DELETE`);
+            if (resp.ok) {
+                const job = this._jobs[jobId];
+                if (job) {
+                    job.currentPhase = 'CANCELLED';
+                    job.phases['CANCELLED'] = { percent: 100, message: 'Job cancelled by user', updatedAt: Date.now() };
+                    this._renderJob(jobId);
+                }
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                alert(data.error || 'Failed to cancel job');
+            }
+        } catch {
+            alert('Connection error while cancelling job');
+        }
     },
 
     _phaseChip(name, phase, currentPhase) {
@@ -158,12 +212,20 @@ const ProgressComponent = {
     },
 
     _speedDisplay(phase, job) {
-        if (!phase.bytesDone || !phase.bytesTotal) return '';
-        const done = this._formatBytes(phase.bytesDone);
-        const total = this._formatBytes(phase.bytesTotal);
-        const speed = job.speedBps > 0 ? `${this._formatBytes(job.speedBps)}/s` : '';
+        // Byte-level progress (bytes_done / bytes_total)
+        if (phase.bytesDone > 0 && phase.bytesTotal > 0) {
+            const done = this._formatBytes(phase.bytesDone);
+            const total = this._formatBytes(phase.bytesTotal);
+            const speed = job.speedBps > 0 ? `${this._formatBytes(job.speedBps)}/s` : '';
+            return `<span class="progress-speed">${done} / ${total}${speed ? ' · ' + speed : ''}</span>`;
+        }
 
-        return `<span class="progress-speed">${done} / ${total}${speed ? ' · ' + speed : ''}</span>`;
+        // Server-provided speed in MB/s (e.g. burn-in agent)
+        if (job.speedMbps > 0) {
+            return `<span class="progress-speed">${job.speedMbps.toFixed(1)} MB/s</span>`;
+        }
+
+        return '';
     },
 
     _elapsed(startTime) {

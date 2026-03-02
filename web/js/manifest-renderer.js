@@ -134,7 +134,7 @@ const ManifestRenderer = {
 
             case 'progress':
                 return typeof ProgressComponent !== 'undefined'
-                    ? ProgressComponent.render(comp.id, config)
+                    ? ProgressComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">Progress component not loaded</p>';
 
             case 'chart':
@@ -225,11 +225,30 @@ const ManifestRenderer = {
                 if (typeof ProgressComponent !== 'undefined') {
                     ProgressComponent.handleUpdate(payload);
                 }
+                // Extract temperature from progress frames → feed to chart
+                if (payload.temp_c > 0 && typeof ChartComponent !== 'undefined') {
+                    ChartComponent.handleUpdate({ key: 'temp_c', value: payload.temp_c });
+                }
+                // Extract SMART deltas from progress frames → feed to table
+                if (payload.smart_deltas && typeof SmartTableComponent !== 'undefined') {
+                    const rows = this._smartDeltasToRows(payload.smart_deltas);
+                    if (rows.length > 0) {
+                        SmartTableComponent.handleUpdate({ component_id: 'smart-deltas', rows });
+                    }
+                }
                 break;
 
             case 'log':
                 if (typeof LogViewerComponent !== 'undefined') {
-                    LogViewerComponent.handleUpdate(payload);
+                    // Translate hub log fields to LogViewerComponent format
+                    const logPayload = {
+                        level: payload.level || payload.severity || 'info',
+                        message: payload.message || '',
+                        source: payload.source || (payload.agent_id
+                            ? payload.agent_id + (payload.job_id ? ':' + payload.job_id : '')
+                            : '')
+                    };
+                    LogViewerComponent.handleUpdate(logPayload);
                 }
                 break;
 
@@ -251,6 +270,22 @@ const ManifestRenderer = {
                 this._showToast(payload);
                 break;
         }
+    },
+
+    /**
+     * Convert SMART deltas map from progress payload to table rows.
+     * Input: { "5": { name: "Reallocated_Sector_Ct", baseline: 0, current: 0 }, ... }
+     * Output: [{ id: "5", name: "Reallocated_Sector_Ct", baseline: 0, current: 0, delta: 0 }, ...]
+     */
+    _smartDeltasToRows(deltas) {
+        if (!deltas || typeof deltas !== 'object') return [];
+        return Object.entries(deltas).map(([id, d]) => ({
+            id,
+            name: d.name || '',
+            baseline: d.baseline ?? 0,
+            current: d.current ?? 0,
+            delta: (d.current ?? 0) - (d.baseline ?? 0)
+        }));
     },
 
     _showToast(payload) {

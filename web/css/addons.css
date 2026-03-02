@@ -580,6 +580,32 @@
     font-family: var(--font-mono);
 }
 
+.progress-job-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-cancel-job {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--danger, #ef4444);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-cancel-job:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
 .progress-job-status {
     font-size: 0.7rem;
     font-weight: 600;
@@ -648,6 +674,11 @@
 
 .progress-speed {
     font-family: var(--font-mono);
+}
+
+.progress-temp {
+    font-family: var(--font-mono);
+    color: var(--warning, #f59e0b);
 }
 
 .progress-phases {
