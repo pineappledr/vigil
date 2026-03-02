@@ -23,9 +23,31 @@ const ProgressComponent = {
     render(compId, config, addonId) {
         this._compIds[compId] = true;
         if (addonId) this._addonId = addonId;
+
+        // After DOM insertion, re-render any tracked jobs so page switches
+        // don't lose visible progress cards.
+        setTimeout(() => this._restoreJobs(compId), 0);
+
         return `<div class="progress-container" id="progress-${compId}" data-comp="${compId}">
                     <div class="progress-empty">Waiting for job data...</div>
                 </div>`;
+    },
+
+    /** Re-render all tracked jobs into the container (e.g. after a page switch). */
+    _restoreJobs(compId) {
+        const container = document.getElementById(`progress-${compId}`);
+        if (!container) return;
+
+        const jobIds = Object.keys(this._jobs);
+        if (jobIds.length === 0) return;
+
+        // Remove the "Waiting for job data..." placeholder
+        const empty = container.querySelector('.progress-empty');
+        if (empty) empty.remove();
+
+        for (const jobId of jobIds) {
+            this._renderJob(jobId);
+        }
     },
 
     /**
