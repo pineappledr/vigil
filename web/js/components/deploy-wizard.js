@@ -8,7 +8,7 @@
  * Config schema (from manifest.json):
  *   target_label   - Display label (e.g., "Agent")
  *   docker         - { image, default_tag, container_name, ports[], privileged,
- *                      volumes[], environment{}, platforms{} }
+ *                      network_mode, volumes[], environment{}, platforms{} }
  *   binary         - { install_url, platforms{} }
  *   prefill_endpoint - Path on addon to fetch pre-fill data (e.g., "/api/deploy-info")
  */
@@ -429,6 +429,7 @@ const DeployWizardComponent = {
         // Build extras
         let extras = '';
         if (docker.privileged) extras += '\n    privileged: true';
+        if (docker.network_mode) extras += `\n    network_mode: ${docker.network_mode}`;
         if (platform.pid) extras += `\n    pid: ${platform.pid}`;
 
         const platformLabel = platform.label || wiz.platform;
@@ -440,7 +441,7 @@ services:
     container_name: ${containerName}
     restart: unless-stopped${extras}`;
 
-        if (ports.length > 0) {
+        if (!docker.network_mode && ports.length > 0) {
             yaml += `\n    ports:\n${ports.join('\n')}`;
         }
 
