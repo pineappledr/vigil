@@ -110,6 +110,20 @@ const ChartComponent = {
     },
 
     /**
+     * Handle a targeted chart telemetry event routed by component_id.
+     * @param {Object} payload - { component_id, key, value, timestamp }
+     */
+    handleTargetedUpdate(payload) {
+        if (!payload?.component_id || !payload?.key) return;
+
+        const entry = this._charts[payload.component_id];
+        if (!entry) return;
+
+        this._pushMetric(payload, entry);
+        entry.chart.update('none');
+    },
+
+    /**
      * Handle an incoming metric telemetry event.
      * @param {Object} payload - { key: string, value: number, timestamp?: string }
      *   or batch: { metrics: [{ key, value, timestamp }] }
@@ -136,12 +150,14 @@ const ChartComponent = {
         }
     },
 
-    _pushMetric(metric) {
+    _pushMetric(metric, targetEntry) {
         if (!metric?.key) return;
 
         const timeLabel = this._formatTime(metric.timestamp ? new Date(metric.timestamp) : new Date());
 
-        for (const [, entry] of Object.entries(this._charts)) {
+        const entries = targetEntry ? [[null, targetEntry]] : Object.entries(this._charts);
+
+        for (const [, entry] of entries) {
             const idx = entry.datasetMap[metric.key];
             if (idx === undefined) continue;
 

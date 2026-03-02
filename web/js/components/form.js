@@ -41,6 +41,7 @@ const FormComponent = {
         };
 
         const fieldHtml = fields.map(f => this._renderField(compId, f)).join('');
+        const isInline = config.layout === 'inline';
 
         // Kick off initial visibility + calc evaluation after DOM insertion
         setTimeout(() => {
@@ -50,12 +51,13 @@ const FormComponent = {
         }, 0);
 
         const submitLabel = this._escape(config.submit_label || 'Submit');
+        const formClass = isInline ? 'addon-form addon-form-inline' : 'addon-form';
 
         return `
-            <form class="addon-form" id="form-${compId}" onsubmit="FormComponent.submit(event, '${compId}')">
+            <form class="${formClass}" id="form-${compId}" onsubmit="FormComponent.submit(event, '${compId}')">
                 ${fieldHtml}
                 <div class="addon-form-actions">
-                    <button type="submit" class="btn btn-primary">${submitLabel}</button>
+                    <button type="submit" class="btn btn-primary${isInline ? ' btn-sm' : ''}">${submitLabel}</button>
                 </div>
                 <div class="addon-form-error" id="form-error-${compId}"></div>
             </form>

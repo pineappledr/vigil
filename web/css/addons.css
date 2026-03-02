@@ -441,6 +441,32 @@
     gap: 16px;
 }
 
+.addon-form-inline {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.addon-form-inline .addon-form-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.addon-form-inline .addon-form-group label {
+    white-space: nowrap;
+    margin: 0;
+}
+
+.addon-form-inline .addon-form-actions {
+    margin-top: 0;
+}
+
+.addon-form-inline .addon-form-error {
+    width: 100%;
+}
+
 .addon-form-group {
     display: flex;
     flex-direction: column;

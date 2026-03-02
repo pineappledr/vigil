@@ -192,6 +192,10 @@ const ManifestRenderer = {
             this._handleTelemetry('metric', e);
         });
 
+        this.eventSource.addEventListener('chart', (e) => {
+            this._handleTelemetry('chart', e);
+        });
+
         // SMART attribute telemetry — routes to SmartTableComponent
         this.eventSource.addEventListener('smart', (e) => {
             this._handleTelemetry('smart', e);
@@ -260,6 +264,7 @@ const ManifestRenderer = {
                 if (typeof LogViewerComponent !== 'undefined') {
                     // Translate hub log fields to LogViewerComponent format
                     const logPayload = {
+                        component_id: payload.component_id || '',
                         level: payload.level || payload.severity || 'info',
                         message: payload.message || '',
                         source: payload.source || (payload.agent_id
@@ -267,6 +272,12 @@ const ManifestRenderer = {
                             : '')
                     };
                     LogViewerComponent.handleUpdate(logPayload);
+                }
+                break;
+
+            case 'chart':
+                if (typeof ChartComponent !== 'undefined') {
+                    ChartComponent.handleTargetedUpdate(payload);
                 }
                 break;
 

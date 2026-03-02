@@ -158,6 +158,20 @@ const LogViewerComponent = {
     handleUpdate(payload) {
         if (!payload?.message) return;
 
+        // If component_id is specified, route only to that viewer.
+        if (payload.component_id) {
+            const viewer = this._viewers[payload.component_id];
+            if (viewer) {
+                const body = document.getElementById(`log-body-${payload.component_id}`);
+                if (body) {
+                    this._appendLine(payload.component_id, payload, viewer);
+                } else {
+                    delete this._viewers[payload.component_id];
+                }
+            }
+            return;
+        }
+
         // Broadcast to all active log viewers (prune stale entries)
         for (const [compId, viewer] of Object.entries(this._viewers)) {
             const body = document.getElementById(`log-body-${compId}`);
