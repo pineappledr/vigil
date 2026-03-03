@@ -145,7 +145,7 @@ const ManifestRenderer = {
 
             case 'chart':
                 return typeof ChartComponent !== 'undefined'
-                    ? ChartComponent.render(comp.id, config)
+                    ? ChartComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">Chart component not loaded</p>';
 
             case 'smart-table':
@@ -215,6 +215,11 @@ const ManifestRenderer = {
                 case 'log-viewer':
                     if (comp.config?.source && typeof LogViewerComponent !== 'undefined') {
                         LogViewerComponent._fetchSource(comp.id);
+                    }
+                    break;
+                case 'chart':
+                    if (comp.config?.source && typeof ChartComponent !== 'undefined') {
+                        ChartComponent.refresh(comp.id);
                     }
                     break;
             }

@@ -6,10 +6,19 @@
  * requiring the Chart.js date adapter (luxon/date-fns).
  *
  * Receives metric telemetry updates via SSE and appends data points.
+ *
+ * Supports two modes:
+ *   1. Live-only — receives SSE chart/metric events (default).
+ *   2. Source-backed — fetches historical data points from an addon API
+ *      endpoint on initial render. Combines with live SSE updates.
+ *
+ * Config schema:
+ *   source      - Data source identifier (e.g., "chart_history")
+ *   time_range  - Default time range for historical fetch (e.g., "1h")
  */
 
 const ChartComponent = {
-    _charts: {},  // keyed by compId → { chart, config, datasetMap, maxPoints }
+    _charts: {},  // keyed by compId → { chart, config, datasetMap, maxPoints, addonId }
 
     /**
      * @param {string} compId - Manifest component ID
@@ -18,22 +27,25 @@ const ChartComponent = {
      *     datasets: [{ key, label, color, yAxis: 'left'|'right', fill }],
      *     maxPoints?: number,
      *     height?: number,
-     *     yAxes?: { left: { title, min, max, unit }, right: { title, min, max, unit } }
+     *     yAxes?: { left: { title, min, max, unit }, right: { title, min, max, unit } },
+     *     source?: string,
+     *     time_range?: string
      *   }
+     * @param {number} addonId - Parent add-on ID (optional, for source fetching)
      * @returns {string} HTML
      */
-    render(compId, config) {
+    render(compId, config, addonId) {
         const height = config.height || 300;
 
         // Defer Chart.js initialization to after DOM insertion
-        setTimeout(() => this._initChart(compId, config), 0);
+        setTimeout(() => this._initChart(compId, config, addonId), 0);
 
         return `<div class="chart-wrapper" style="height: ${height}px">
                     <canvas id="chart-canvas-${compId}"></canvas>
                 </div>`;
     },
 
-    _initChart(compId, config) {
+    _initChart(compId, config, addonId) {
         const canvas = document.getElementById(`chart-canvas-${compId}`);
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -102,12 +114,67 @@ const ChartComponent = {
             datasetMap[ds.key || ds.label] = i;
         });
 
-        this._charts[compId] = { chart, maxPoints, datasetMap };
+        this._charts[compId] = { chart, maxPoints, datasetMap, addonId: addonId || null, config };
 
         if (typeof ManifestRenderer !== 'undefined') {
             ManifestRenderer.registerChart(chart);
         }
+
+        // Fetch historical data if source is configured.
+        if (config.source && addonId) {
+            this._fetchSource(compId);
+        }
     },
+
+    // ─── Source Data Fetching ─────────────────────────────────────────────
+
+    async _fetchSource(compId) {
+        const entry = this._charts[compId];
+        if (!entry || !entry.config.source || !entry.addonId) return;
+
+        const sourceMap = {
+            'chart_history': '/api/chart/history'
+        };
+
+        let path = sourceMap[entry.config.source];
+        if (!path) return;
+
+        // Add component_id and time_range query parameters.
+        const params = new URLSearchParams();
+        params.set('component_id', compId);
+        if (entry.config.time_range) {
+            params.set('time_range', entry.config.time_range);
+        }
+        path += '?' + params.toString();
+
+        try {
+            const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) return;
+
+            const points = await resp.json();
+            if (!Array.isArray(points) || points.length === 0) return;
+
+            // Clear existing data and populate with historical points.
+            entry.chart.data.labels = [];
+            entry.chart.data.datasets.forEach(ds => { ds.data = []; });
+
+            for (const pt of points) {
+                this._pushMetric({ key: pt.key, value: pt.value, timestamp: pt.timestamp }, entry);
+            }
+            entry.chart.update('none');
+        } catch (e) {
+            console.error(`[ChartComponent] Failed to fetch source for ${compId}:`, e);
+        }
+    },
+
+    /**
+     * Refresh chart data from source. Called by ManifestRenderer.refreshPage().
+     */
+    refresh(compId) {
+        this._fetchSource(compId);
+    },
+
+    // ─── SSE Telemetry Updates ───────────────────────────────────────────
 
     /**
      * Handle a targeted chart telemetry event routed by component_id.
