@@ -93,6 +93,12 @@ const ProgressComponent = {
     handleUpdate(payload) {
         if (!payload?.job_id) return;
 
+        // Remove job on CANCELLED or COMPLETE phase from server.
+        if (payload.phase === 'CANCELLED') {
+            this._removeJob(payload.job_id);
+            return;
+        }
+
         const jobId = payload.job_id;
         const now = Date.now();
         let job = this._jobs[jobId];
@@ -296,18 +302,31 @@ const ProgressComponent = {
             const path = `/api/jobs/${encodeURIComponent(jobId)}`;
             const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}&method=DELETE`);
             if (resp.ok) {
-                const job = this._jobs[jobId];
-                if (job) {
-                    job.currentPhase = 'CANCELLED';
-                    job.phases['CANCELLED'] = { percent: 100, message: 'Job cancelled by user', updatedAt: Date.now() };
-                    this._renderJob(jobId);
-                }
+                this._removeJob(jobId);
             } else {
                 const data = await resp.json().catch(() => ({}));
                 alert(data.error || 'Failed to cancel job');
             }
         } catch {
             alert('Connection error while cancelling job');
+        }
+    },
+
+    /** Remove a job card from the DOM and internal state. */
+    _removeJob(jobId) {
+        delete this._jobs[jobId];
+        const card = document.getElementById(`job-${this._cssId(jobId)}`);
+        if (card) card.remove();
+
+        // If no active jobs remain, show the empty placeholder.
+        if (Object.keys(this._jobs).length === 0) {
+            const container = document.querySelector('.progress-container');
+            if (container && !container.querySelector('.progress-empty')) {
+                const empty = document.createElement('div');
+                empty.className = 'progress-empty';
+                empty.textContent = 'No active jobs';
+                container.appendChild(empty);
+            }
         }
     },
 
