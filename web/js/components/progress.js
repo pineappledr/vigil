@@ -6,13 +6,14 @@
  *  - Animated progress bar with percentage
  *  - Transfer speed calculation (bytes/sec rolling average)
  *  - ETA display (from server or locally computed)
- *  - Elapsed time counter
+ *  - Live elapsed time counter (ticks every second)
  */
 
 const ProgressComponent = {
     _jobs: {},       // keyed by job_id → job state
     _compIds: {},    // keyed by compId → true (for container lookup)
     _addonId: null,  // parent add-on ID for proxy calls
+    _tickTimer: null, // 1-second render ticker for live elapsed/ETA
 
     /**
      * @param {string} compId - Manifest component ID
@@ -108,7 +109,12 @@ const ProgressComponent = {
                 speedBps: 0,
                 speedMbps: 0,
                 tempC: 0,
-                elapsedSec: 0
+                // Elapsed: anchor to server value + timestamp for client-side ticking
+                elapsedBase: 0,
+                elapsedAnchor: now,
+                // ETA: anchor to server value + timestamp for client-side countdown
+                etaBase: 0,
+                etaAnchor: now
             };
             this._jobs[jobId] = job;
         }
@@ -123,16 +129,16 @@ const ProgressComponent = {
         // Build message from available fields
         const message = payload.message || payload.phase_detail || '';
 
-        // Build ETA string: prefer server string, then convert eta_sec
-        let eta = payload.eta || '';
-        if (!eta && payload.eta_sec > 0) {
-            eta = this._formatDuration(payload.eta_sec);
+        // Store raw eta_sec for client-side countdown
+        let etaSec = 0;
+        if (payload.eta_sec > 0) {
+            etaSec = payload.eta_sec;
         }
 
         const phaseData = {
             percent: payload.percent || 0,
             message,
-            eta,
+            etaSec,
             bytesDone: payload.bytes_done || 0,
             bytesTotal: payload.bytes_total || 0,
             updatedAt: now
@@ -142,8 +148,19 @@ const ProgressComponent = {
         // Update server-provided metrics
         if (payload.speed_mbps !== undefined) job.speedMbps = payload.speed_mbps;
         if (payload.temp_c !== undefined) job.tempC = payload.temp_c;
-        if (payload.elapsed_sec !== undefined) job.elapsedSec = payload.elapsed_sec;
         if (payload.badblocks_errors !== undefined) job.badblockErrs = payload.badblocks_errors;
+
+        // Anchor elapsed time: store the server's value and the local timestamp
+        if (payload.elapsed_sec !== undefined && payload.elapsed_sec > 0) {
+            job.elapsedBase = payload.elapsed_sec;
+            job.elapsedAnchor = now;
+        }
+
+        // Anchor ETA: store the server's value and the local timestamp for countdown
+        if (etaSec > 0) {
+            job.etaBase = etaSec;
+            job.etaAnchor = now;
+        }
 
         // Client-side speed calculation from bytes (fallback when speed_mbps not provided)
         if (phaseData.bytesDone > 0 && phaseData.bytesDone > job.lastBytesSample) {
@@ -159,15 +176,36 @@ const ProgressComponent = {
             }
         }
 
-        // Compute local ETA if not provided and we have byte-level data
-        if (!phaseData.eta && phaseData.bytesTotal > 0 && job.speedBps > 0) {
+        // Compute local ETA if server didn't provide one and we have byte-level data
+        if (etaSec === 0 && phaseData.bytesTotal > 0 && job.speedBps > 0) {
             const remaining = phaseData.bytesTotal - phaseData.bytesDone;
             if (remaining > 0) {
-                phaseData.eta = this._formatDuration(remaining / job.speedBps);
+                job.etaBase = remaining / job.speedBps;
+                job.etaAnchor = now;
             }
         }
 
         this._renderJob(jobId);
+        this._ensureTicker();
+    },
+
+    /** Compute live elapsed seconds by adding client-side delta to server anchor. */
+    _liveElapsed(job) {
+        if (job.elapsedBase > 0) {
+            const delta = (Date.now() - job.elapsedAnchor) / 1000;
+            return job.elapsedBase + delta;
+        }
+        return (Date.now() - job.startTime) / 1000;
+    },
+
+    /** Compute live ETA by counting down from server anchor. */
+    _liveETA(job) {
+        if (job.etaBase > 0) {
+            const elapsed = (Date.now() - job.etaAnchor) / 1000;
+            const remaining = job.etaBase - elapsed;
+            return remaining > 0 ? remaining : 0;
+        }
+        return 0;
     },
 
     _renderJob(jobId) {
@@ -198,6 +236,11 @@ const ProgressComponent = {
                </button>`
             : '';
 
+        // Live elapsed and ETA (tick every second via the ticker)
+        const elapsedStr = this._formatDuration(this._liveElapsed(job));
+        const liveEta = this._liveETA(job);
+        const etaStr = liveEta > 0 ? this._formatDuration(liveEta) : '';
+
         card.innerHTML = `
             <div class="progress-job-header">
                 <span class="progress-job-id">${this._escape(jobId)}</span>
@@ -217,14 +260,33 @@ const ProgressComponent = {
             ${current.message ? `<div class="progress-message">${this._escape(current.message)}</div>` : ''}
             <div class="progress-meta">
                 ${this._speedDisplay(current, job)}
-                ${current.eta ? `<span class="progress-eta">ETA: ${this._escape(current.eta)}</span>` : ''}
+                ${etaStr ? `<span class="progress-eta">ETA: ${this._escape(etaStr)}</span>` : ''}
                 ${job.tempC > 0 ? `<span class="progress-temp">${job.tempC}°C</span>` : ''}
-                <span class="progress-elapsed">${job.elapsedSec > 0 ? this._formatDuration(job.elapsedSec) : this._elapsed(job.startTime)}</span>
+                <span class="progress-elapsed">${elapsedStr}</span>
             </div>
             <div class="progress-phases">
                 ${job.phaseOrder.map(name => this._phaseChip(name, job.phases[name], job.currentPhase)).join('')}
             </div>
         `;
+    },
+
+    /** Start a 1-second ticker to keep elapsed/ETA live on screen. */
+    _ensureTicker() {
+        if (this._tickTimer) return;
+        this._tickTimer = setInterval(() => {
+            const activeJobs = Object.entries(this._jobs).filter(([_, job]) => {
+                const pct = this._overallPercent(job);
+                return pct < 100;
+            });
+            if (activeJobs.length === 0) {
+                clearInterval(this._tickTimer);
+                this._tickTimer = null;
+                return;
+            }
+            for (const [jobId] of activeJobs) {
+                this._renderJob(jobId);
+            }
+        }, 1000);
     },
 
     async cancelJob(jobId) {
@@ -285,16 +347,12 @@ const ProgressComponent = {
         return '';
     },
 
-    _elapsed(startTime) {
-        return this._formatDuration((Date.now() - startTime) / 1000);
-    },
-
     _formatDuration(totalSec) {
         const s = Math.floor(totalSec);
         const h = Math.floor(s / 3600);
         const m = Math.floor((s % 3600) / 60);
         const sec = s % 60;
-        if (h > 0) return `${h}h ${m}m`;
+        if (h > 0) return `${h}h ${m}m ${sec}s`;
         if (m > 0) return `${m}m ${sec}s`;
         return `${sec}s`;
     },

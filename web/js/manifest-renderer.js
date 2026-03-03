@@ -236,20 +236,26 @@ const ManifestRenderer = {
     },
 
     _onAutoRefreshChange(seconds) {
-        this._stopAutoRefresh();
+        this._clearAutoRefreshTimer();
         const interval = parseInt(seconds, 10);
         if (interval > 0) {
             this._autoRefreshTimer = setInterval(() => this.refreshPage(), interval * 1000);
         }
     },
 
+    /** Stop auto-refresh and reset the dropdown to "Off". */
     _stopAutoRefresh() {
+        this._clearAutoRefreshTimer();
+        const sel = document.getElementById('manifest-auto-refresh');
+        if (sel) sel.value = '0';
+    },
+
+    /** Clear the auto-refresh timer without resetting the dropdown. */
+    _clearAutoRefreshTimer() {
         if (this._autoRefreshTimer) {
             clearInterval(this._autoRefreshTimer);
             this._autoRefreshTimer = null;
         }
-        const sel = document.getElementById('manifest-auto-refresh');
-        if (sel) sel.value = '0';
     },
 
     // ─── SSE Telemetry ────────────────────────────────────────────────────
