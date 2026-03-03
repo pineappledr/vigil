@@ -24,12 +24,21 @@ const ProgressComponent = {
         this._compIds[compId] = true;
         if (addonId) this._addonId = addonId;
 
-        // After DOM insertion, re-render any tracked jobs so page switches
-        // don't lose visible progress cards.
-        setTimeout(() => this._restoreJobs(compId), 0);
+        // After DOM insertion, restore cached jobs and fetch active jobs
+        // from the hub so that page navigation doesn't lose progress cards.
+        setTimeout(() => {
+            this._restoreJobs(compId);
+            if (config?.source && addonId) {
+                this._fetchActiveJobs(compId);
+            }
+        }, 0);
+
+        const emptyText = (config?.source && addonId)
+            ? 'Loading active jobs...'
+            : 'Waiting for job data...';
 
         return `<div class="progress-container" id="progress-${compId}" data-comp="${compId}">
-                    <div class="progress-empty">Waiting for job data...</div>
+                    <div class="progress-empty">${emptyText}</div>
                 </div>`;
     },
 
@@ -48,6 +57,32 @@ const ProgressComponent = {
         for (const jobId of jobIds) {
             this._renderJob(jobId);
         }
+    },
+
+    /** Fetch active jobs from the hub API and populate the progress cards. */
+    async _fetchActiveJobs(compId) {
+        if (!this._addonId) return;
+
+        try {
+            const path = '/api/jobs/active';
+            const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) return;
+
+            const jobs = await resp.json();
+            if (!Array.isArray(jobs) || jobs.length === 0) return;
+
+            // Feed each active job payload through handleUpdate to populate cards.
+            for (const job of jobs) {
+                this.handleUpdate(job);
+            }
+        } catch (e) {
+            console.error('[Progress] Failed to fetch active jobs:', e);
+        }
+    },
+
+    /** Public refresh — re-fetches active jobs from the hub. */
+    refresh(compId) {
+        this._fetchActiveJobs(compId);
     },
 
     /**

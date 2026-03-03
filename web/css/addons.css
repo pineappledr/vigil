@@ -382,6 +382,43 @@
     color: var(--text-secondary);
 }
 
+/* Refresh toolbar — sits above components, right-aligned */
+.manifest-refresh-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.manifest-refresh-toolbar .manifest-refresh-auto {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.manifest-refresh-toolbar .manifest-refresh-auto:hover {
+    border-color: var(--accent-primary);
+}
+
+.manifest-refresh-toolbar .manifest-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}
+
+.manifest-refresh-toolbar .manifest-refresh-btn svg.spin {
+    animation: spin 0.8s linear infinite;
+}
+
 .manifest-component {
     background: var(--bg-elevated);
     border: 1px solid var(--border-color);
@@ -1137,6 +1174,13 @@
 
     .manifest-tabs {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .manifest-tab {
+        padding: 8px 14px;
+        white-space: nowrap;
+        font-size: 0.8rem;
     }
 
     .manifest-title-row {
@@ -1144,17 +1188,57 @@
         gap: 8px;
     }
 
+    /* Refresh toolbar: auto-refresh label stays compact */
+    .manifest-refresh-toolbar {
+        gap: 6px;
+    }
+
+    .manifest-refresh-toolbar .manifest-refresh-auto {
+        font-size: 0.75rem;
+        padding: 5px 8px;
+    }
+
+    .manifest-refresh-toolbar .manifest-refresh-btn {
+        font-size: 0.75rem;
+        padding: 5px 10px;
+    }
+
+    /* Progress: wrap phases, truncate long job IDs */
+    .progress-job-id {
+        font-size: 0.78rem;
+        max-width: 55%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .progress-meta {
         flex-wrap: wrap;
         gap: 8px;
     }
 
+    .progress-phases {
+        flex-wrap: wrap;
+    }
+
+    .progress-phase {
+        font-size: 0.68rem;
+        padding: 2px 6px;
+    }
+
+    /* Chart: reduce height */
+    .chart-wrapper canvas {
+        max-height: 200px;
+    }
+
+    /* Log viewer toolbar stacks vertically */
     .log-viewer-toolbar {
         flex-direction: column;
         gap: 8px;
         align-items: flex-start;
     }
 
+    /* Smart table: smaller text and cells */
     .smart-table {
         font-size: 0.75rem;
     }
@@ -1162,6 +1246,11 @@
     .smart-table th,
     .smart-table td {
         padding: 6px 8px;
+    }
+
+    .smart-table-toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
     }
 }
 
@@ -1192,10 +1281,84 @@
     }
 
     .manifest-component {
-        padding: 14px;
+        padding: 12px;
+        border-radius: 8px;
     }
 
+    .component-title {
+        font-size: 0.85rem;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+    }
+
+    /* Refresh toolbar: full-width stacked on phones */
+    .manifest-refresh-toolbar {
+        justify-content: space-between;
+    }
+
+    .manifest-refresh-toolbar .manifest-refresh-auto {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Progress: tighter layout */
+    .progress-job-card {
+        padding: 12px;
+    }
+
+    .progress-job-header {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .progress-job-id {
+        max-width: 100%;
+        font-size: 0.75rem;
+    }
+
+    .progress-job-status {
+        font-size: 0.65rem;
+    }
+
+    .btn-cancel-job {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+    }
+
+    .progress-bar-container {
+        gap: 8px;
+    }
+
+    .progress-percent {
+        font-size: 0.75rem;
+        min-width: 38px;
+    }
+
+    .progress-message {
+        font-size: 0.75rem;
+    }
+
+    /* Chart: further reduce */
+    .chart-wrapper canvas {
+        max-height: 160px;
+    }
+
+    /* Log viewer: shorter on small phones */
     .log-viewer-body {
         height: 200px;
+    }
+
+    /* Smart table: minimum viable display */
+    .smart-table {
+        font-size: 0.7rem;
+    }
+
+    .smart-table th,
+    .smart-table td {
+        padding: 4px 6px;
+    }
+
+    .smart-table-refresh {
+        padding: 3px;
     }
 }

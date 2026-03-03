@@ -222,6 +222,11 @@ const ManifestRenderer = {
                         ChartComponent.refresh(comp.id);
                     }
                     break;
+                case 'progress':
+                    if (comp.config?.source && typeof ProgressComponent !== 'undefined') {
+                        ProgressComponent.refresh(comp.id);
+                    }
+                    break;
             }
         }
 
