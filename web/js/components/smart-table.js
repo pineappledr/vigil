@@ -147,7 +147,8 @@ const SmartTableComponent = {
         const sourceMap = {
             'addon_agents': '/api/agents',
             'agent_drives': '/api/agents',   // drives come from agents
-            'job_history': '/api/jobs/history'
+            'job_history': '/api/jobs/history',
+            'smart_deltas': '/api/smart/deltas'
         };
 
         let path = sourceMap[entry.config.source];
@@ -169,7 +170,17 @@ const SmartTableComponent = {
             let data = await resp.json();
 
             // Transform source data based on source type
-            if (entry.config.source === 'agent_drives' && Array.isArray(data)) {
+            if (entry.config.source === 'smart_deltas' && data && !Array.isArray(data)) {
+                // Convert enriched deltas map to rows:
+                // { "5": { name, baseline, current }, ... } → [{ id, name, baseline, current, delta }, ...]
+                data = Object.entries(data).map(([id, d]) => ({
+                    id,
+                    name: d.name || '',
+                    baseline: d.baseline ?? 0,
+                    current: d.current ?? 0,
+                    delta: (d.current ?? 0) - (d.baseline ?? 0)
+                }));
+            } else if (entry.config.source === 'agent_drives' && Array.isArray(data)) {
                 // Flatten drives from all agents
                 const drives = [];
                 for (const agent of data) {
