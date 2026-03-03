@@ -453,6 +453,15 @@ services:
             yaml += `\n    volumes:\n${volumes.join('\n')}`;
         }
 
+        // Add top-level named volumes section if specified in the manifest.
+        const namedVolumes = docker.named_volumes || [];
+        if (namedVolumes.length > 0) {
+            yaml += `\n\nvolumes:`;
+            for (const vol of namedVolumes) {
+                yaml += `\n  ${vol}:`;
+            }
+        }
+
         return yaml;
     },
 

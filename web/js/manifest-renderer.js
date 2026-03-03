@@ -13,6 +13,7 @@ const ManifestRenderer = {
     eventSource: null,
     _chartInstances: [],
     _lastProgressPhase: null,
+    _autoRefreshTimer: null,
 
     /**
      * Main entry point — called from Addons.openAddon().
@@ -32,8 +33,9 @@ const ManifestRenderer = {
         this._connectSSE();
     },
 
-    /** Tear down SSE and chart instances, return to add-on list. */
+    /** Tear down SSE, auto-refresh, and chart instances, return to add-on list. */
     close() {
+        this._stopAutoRefresh();
         this._disconnectSSE();
         this._destroyCharts();
         Addons.closeAddon();
@@ -94,6 +96,7 @@ const ManifestRenderer = {
     // ─── Page / Component rendering ───────────────────────────────────────
 
     switchPage(pageId) {
+        this._stopAutoRefresh();
         this.activePage = pageId;
         document.querySelectorAll('.manifest-tab').forEach(el => {
             el.classList.toggle('active', el.dataset.page === pageId);
@@ -107,7 +110,9 @@ const ManifestRenderer = {
         const container = document.getElementById('manifest-page-container');
         if (!page || !container) return;
 
-        container.innerHTML = page.components.map(comp => {
+        const refreshToolbar = this._buildRefreshToolbar(page);
+
+        container.innerHTML = refreshToolbar + page.components.map(comp => {
             const title = comp.title ? `<h3 class="component-title">${this._escape(comp.title)}</h3>` : '';
             return `
                 <div class="manifest-component" id="mc-${this._escape(comp.id)}" data-type="${comp.type}" data-source="${comp.source || ''}">
@@ -161,6 +166,80 @@ const ManifestRenderer = {
             default:
                 return `<p class="component-unavailable">Unknown component type: ${this._escape(comp.type)}</p>`;
         }
+    },
+
+    // ─── Page Refresh ─────────────────────────────────────────────────────
+
+    _buildRefreshToolbar(page) {
+        const rc = page.page_config?.refresh;
+        if (!rc) return '';
+
+        const autoOptions = rc.auto_options || [];
+        const autoSelect = autoOptions.length > 0
+            ? `<select class="manifest-refresh-auto" id="manifest-auto-refresh"
+                       onchange="ManifestRenderer._onAutoRefreshChange(this.value)">
+                   <option value="0">Auto-refresh: Off</option>
+                   ${autoOptions.map(o => `<option value="${o.value}">${this._escape(o.label)}</option>`).join('')}
+               </select>`
+            : '';
+
+        const manualBtn = rc.manual
+            ? `<button class="btn btn-sm btn-secondary manifest-refresh-btn" id="manifest-refresh-btn"
+                       onclick="ManifestRenderer.refreshPage()">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                       <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                   </svg>
+                   Refresh
+               </button>`
+            : '';
+
+        return `<div class="manifest-refresh-toolbar">${autoSelect}${manualBtn}</div>`;
+    },
+
+    /** Manual refresh — re-fetches all source-backed components on the active page. */
+    refreshPage() {
+        const page = this.manifest.pages.find(p => p.id === this.activePage);
+        if (!page) return;
+
+        const btn = document.getElementById('manifest-refresh-btn');
+        if (btn) btn.querySelector('svg')?.classList.add('spin');
+
+        for (const comp of page.components) {
+            switch (comp.type) {
+                case 'smart-table':
+                    if (typeof SmartTableComponent !== 'undefined') {
+                        SmartTableComponent.refresh(comp.id);
+                    }
+                    break;
+                case 'log-viewer':
+                    if (comp.config?.source && typeof LogViewerComponent !== 'undefined') {
+                        LogViewerComponent._fetchSource(comp.id);
+                    }
+                    break;
+            }
+        }
+
+        setTimeout(() => {
+            if (btn) btn.querySelector('svg')?.classList.remove('spin');
+        }, 800);
+    },
+
+    _onAutoRefreshChange(seconds) {
+        this._stopAutoRefresh();
+        const interval = parseInt(seconds, 10);
+        if (interval > 0) {
+            this._autoRefreshTimer = setInterval(() => this.refreshPage(), interval * 1000);
+        }
+    },
+
+    _stopAutoRefresh() {
+        if (this._autoRefreshTimer) {
+            clearInterval(this._autoRefreshTimer);
+            this._autoRefreshTimer = null;
+        }
+        const sel = document.getElementById('manifest-auto-refresh');
+        if (sel) sel.value = '0';
     },
 
     // ─── SSE Telemetry ────────────────────────────────────────────────────
