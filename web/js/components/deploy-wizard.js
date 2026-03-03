@@ -346,10 +346,11 @@ const DeployWizardComponent = {
             const fieldId = `dw-ui-${compId}-${envKey}`;
             const label = envDef.label || envKey;
             const placeholder = envDef.placeholder || '';
+            const optionalTag = envDef.optional ? ' <span class="form-optional">(Optional)</span>' : '';
 
             html += `
                 <div class="form-group">
-                    <label>${this._escape(label)}</label>
+                    <label>${this._escape(label)}${optionalTag}</label>
                     <input type="text" id="${fieldId}" class="form-input"
                            placeholder="${this._escape(placeholder)}">
                     ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
@@ -414,6 +415,8 @@ const DeployWizardComponent = {
         const env = docker.environment || {};
         for (const [envKey, envDef] of Object.entries(env)) {
             const val = this._resolveEnvValue(compId, envKey, envDef);
+            // Skip optional env vars that the user left blank.
+            if (envDef.optional && !val) continue;
             envLines.push(`      ${envKey}: ${val}`);
         }
 
@@ -498,7 +501,10 @@ services:
             }
             case 'user_input': {
                 const input = document.getElementById(`dw-ui-${compId}-${envKey}`);
-                return input?.value || envDef.placeholder || '';
+                const inputVal = input?.value?.trim() || '';
+                // For optional fields, only return the actual value (no placeholder fallback).
+                if (envDef.optional) return inputVal;
+                return inputVal || envDef.placeholder || '';
             }
             case 'literal':
                 return envDef.value || '';

@@ -516,6 +516,13 @@
     color: var(--text-secondary);
 }
 
+.form-optional {
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--text-muted, #888);
+    margin-left: 4px;
+}
+
 .addon-form-actions {
     display: flex;
     gap: 12px;
