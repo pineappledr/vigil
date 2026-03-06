@@ -228,13 +228,14 @@ const FormComponent = {
             : '';
 
         const hint = field.hint
-            ? `<span class="form-hint">${this._escape(field.hint)}</span>`
+            ? `<div class="form-hint">${this._escape(field.hint)}</div>`
             : '';
 
         return `
             <div class="form-group addon-form-group" id="fg-${id}" ${hidden} ${vwAttr} ${dep} ${calc}>
-                ${field.type !== 'checkbox' ? `<label for="${id}">${this._escape(field.label || field.name)}${hint}</label>` : ''}
+                ${field.type !== 'checkbox' ? `<label for="${id}">${this._escape(field.label || field.name)}</label>` : ''}
                 ${input}
+                ${hint}
                 ${calcDisplay}
             </div>
         `;
@@ -282,6 +283,7 @@ const FormComponent = {
 
         // Static options — pre-select default if specified
         const def = field.default != null ? String(field.default) : null;
+        const hasCustom = (field.options || []).some(o => o.value === '__custom__');
         const options = (field.options || [])
             .map(o => {
                 const sel = (def !== null && String(o.value) === def) ? ' selected' : '';
@@ -294,11 +296,22 @@ const FormComponent = {
             ? `<option value="">${this._escape(field.placeholder || 'Select...')}</option>`
             : '';
 
-        return `<select id="${id}" name="${name}" class="form-input" ${required}
-                    onchange="${ev}">
+        const customEv = `FormComponent._onCustomSelect('${compId}', '${this._escapeJS(field.name)}')`;
+        const selectHtml = `<select id="${id}" name="${name}" class="form-input" ${required}
+                    onchange="${ev}; ${hasCustom ? customEv : ''}">
                     ${placeholder}
                     ${options}
                 </select>`;
+
+        if (!hasCustom) return selectHtml;
+
+        // Add a companion text input for custom values, hidden by default
+        const customPlaceholder = field.custom_placeholder || '0 3 * * * (min hour day month weekday)';
+        return `${selectHtml}
+                <input type="text" id="${id}-custom" class="form-input form-custom-input"
+                       placeholder="${this._escape(customPlaceholder)}"
+                       style="display:none; margin-top:6px"
+                       oninput="${ev}">`;
     },
 
     _checkboxInput(id, field, ev, name) {
@@ -636,10 +649,32 @@ const FormComponent = {
         return parseExpression();
     },
 
+    /** Show/hide custom text input when a select with __custom__ option changes. */
+    _onCustomSelect(compId, fieldName) {
+        const select = document.getElementById(`field-${compId}-${fieldName}`);
+        const customInput = document.getElementById(`field-${compId}-${fieldName}-custom`);
+        if (!select || !customInput) return;
+
+        if (select.value === '__custom__') {
+            customInput.style.display = '';
+            customInput.focus();
+        } else {
+            customInput.style.display = 'none';
+            customInput.value = '';
+        }
+    },
+
     _getFieldValue(compId, fieldName) {
         const el = document.getElementById(`field-${compId}-${fieldName}`);
         if (!el) return '';
         if (el.type === 'checkbox') return el.checked ? 'true' : 'false';
+
+        // If select has __custom__ selected, return the custom input value
+        if (el.tagName === 'SELECT' && el.value === '__custom__') {
+            const customInput = document.getElementById(`field-${compId}-${fieldName}-custom`);
+            return customInput ? customInput.value : '';
+        }
+
         return el.value;
     },
 

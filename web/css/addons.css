@@ -532,6 +532,11 @@
     line-height: 1.3;
 }
 
+.form-custom-input {
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 0.85rem;
+}
+
 .addon-form-actions {
     display: flex;
     gap: 12px;
