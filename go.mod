@@ -1,6 +1,6 @@
 module vigil
 
-go 1.25.8
+go 1.26.1
 
 require (
 	github.com/containrrr/shoutrrr v0.8.0
