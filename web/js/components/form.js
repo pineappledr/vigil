@@ -227,9 +227,13 @@ const FormComponent = {
             ? `<span class="form-calc-result" id="calc-${id}"></span>`
             : '';
 
+        const hint = field.hint
+            ? `<span class="form-hint">${this._escape(field.hint)}</span>`
+            : '';
+
         return `
             <div class="form-group addon-form-group" id="fg-${id}" ${hidden} ${vwAttr} ${dep} ${calc}>
-                ${field.type !== 'checkbox' ? `<label for="${id}">${this._escape(field.label || field.name)}</label>` : ''}
+                ${field.type !== 'checkbox' ? `<label for="${id}">${this._escape(field.label || field.name)}${hint}</label>` : ''}
                 ${input}
                 ${calcDisplay}
             </div>

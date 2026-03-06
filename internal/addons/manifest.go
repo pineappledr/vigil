@@ -14,6 +14,7 @@ type Manifest struct {
 	Version     string         `json:"version"`
 	Description string         `json:"description,omitempty"`
 	Author      string         `json:"author,omitempty"`
+	DockerImage string         `json:"docker_image,omitempty"` // hub image for update checks
 	Pages       []ManifestPage `json:"pages"`
 }
 
@@ -46,6 +47,7 @@ type FormField struct {
 	Default         json.RawMessage `json:"default,omitempty"`
 	Min             *float64        `json:"min,omitempty"`
 	Max             *float64        `json:"max,omitempty"`
+	Hint            string          `json:"hint,omitempty"`
 	DependsOn       string          `json:"depends_on,omitempty"`
 	VisibleWhen     json.RawMessage `json:"visible_when,omitempty"`
 	LiveCalculation string          `json:"live_calculation,omitempty"`

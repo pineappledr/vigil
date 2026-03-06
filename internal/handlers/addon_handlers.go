@@ -796,13 +796,24 @@ func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
 }
 
 // extractDockerImage parses the manifest JSON and returns the Docker image
-// and default tag from the first deploy-wizard component found.
+// and current tag. It checks the top-level docker_image field first (the hub's
+// own image), then falls back to the first deploy-wizard component (agent image).
 func extractDockerImage(manifestJSON string) (image, tag string) {
 	var m addons.Manifest
 	if err := json.Unmarshal([]byte(manifestJSON), &m); err != nil {
 		return "", ""
 	}
 
+	// Prefer the manifest-level docker_image (the hub's own image).
+	if m.DockerImage != "" {
+		img, t := parseImageAndTag(m.DockerImage)
+		if t == "" {
+			t = "latest"
+		}
+		return img, t
+	}
+
+	// Fall back to the first deploy-wizard component's Docker image.
 	for _, page := range m.Pages {
 		for _, comp := range page.Components {
 			if comp.Type != "deploy-wizard" || len(comp.Config) == 0 {
@@ -822,6 +833,21 @@ func extractDockerImage(manifestJSON string) (image, tag string) {
 		}
 	}
 	return "", ""
+}
+
+// parseImageAndTag splits "image:tag" into image and tag components.
+func parseImageAndTag(ref string) (image, tag string) {
+	// Find last colon that's not part of a port/registry
+	idx := strings.LastIndex(ref, ":")
+	if idx < 0 {
+		return ref, ""
+	}
+	// If the part after the colon contains a slash, it's a port not a tag
+	after := ref[idx+1:]
+	if strings.Contains(after, "/") {
+		return ref, ""
+	}
+	return ref[:idx], after
 }
 
 // queryRegistryTags fetches available tags from a container registry.

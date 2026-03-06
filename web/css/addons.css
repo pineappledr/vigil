@@ -523,6 +523,15 @@
     margin-left: 4px;
 }
 
+.form-hint {
+    display: block;
+    font-weight: 400;
+    font-size: 0.72rem;
+    color: var(--text-muted, #888);
+    margin-top: 2px;
+    line-height: 1.3;
+}
+
 .addon-form-actions {
     display: flex;
     gap: 12px;
