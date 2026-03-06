@@ -36,6 +36,7 @@ const FormComponent = {
             fields, addonId,
             action: config.action || '',
             submitLabel: config.submit_label || 'Submit',
+            resetLabel: config.reset_label || '',
             gateStep: 0,  // 0=idle, 1=password, 2=path confirm, 3=done
             sourceData: {} // cached source data keyed by source name
         };
@@ -51,12 +52,17 @@ const FormComponent = {
         }, 0);
 
         const submitLabel = this._escape(config.submit_label || 'Submit');
+        const resetLabel = config.reset_label ? this._escape(config.reset_label) : '';
         const formClass = isInline ? 'addon-form addon-form-inline' : 'addon-form';
+        const resetBtn = resetLabel
+            ? `<button type="button" class="btn btn-secondary${isInline ? ' btn-sm' : ''}" onclick="FormComponent.resetToDefaults('${compId}')">${resetLabel}</button>`
+            : '';
 
         return `
             <form class="${formClass}" id="form-${compId}" onsubmit="FormComponent.submit(event, '${compId}')">
                 ${fieldHtml}
                 <div class="addon-form-actions">
+                    ${resetBtn}
                     <button type="submit" class="btn btn-primary${isInline ? ' btn-sm' : ''}">${submitLabel}</button>
                 </div>
                 <div class="addon-form-error" id="form-error-${compId}"></div>
@@ -676,6 +682,44 @@ const FormComponent = {
         }
 
         return el.value;
+    },
+
+    // ─── Reset to Defaults ─────────────────────────────────────────────
+
+    resetToDefaults(compId) {
+        const meta = this._forms[compId];
+        if (!meta) return;
+
+        for (const field of meta.fields) {
+            const el = document.getElementById(`field-${compId}-${field.name}`);
+            if (!el) continue;
+
+            if (field.type === 'toggle' || field.type === 'checkbox') {
+                el.checked = field.default === true;
+            } else if (field.type === 'range' || field.type === 'number') {
+                el.value = field.default ?? (field.type === 'range' ? (field.min ?? 0) : '');
+            } else if (field.type === 'select' && !field.source) {
+                el.value = field.default != null ? String(field.default) : '';
+                // Hide custom input if visible
+                const customInput = document.getElementById(`field-${compId}-${field.name}-custom`);
+                if (customInput) {
+                    customInput.style.display = 'none';
+                    customInput.value = '';
+                }
+            } else if (field.type !== 'select') {
+                el.value = field.default ?? '';
+            }
+        }
+
+        this._evaluateVisibility(compId);
+        this._evaluateCalculations(compId);
+
+        // Update range displays
+        for (const field of meta.fields) {
+            if (field.type === 'range') {
+                this._updateRangeDisplay(`field-${compId}-${field.name}`, field.unit || '');
+            }
+        }
     },
 
     // ─── Submission & Security Gate ───────────────────────────────────────
