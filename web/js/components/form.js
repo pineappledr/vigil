@@ -247,7 +247,7 @@ const FormComponent = {
 
         switch (field.type) {
             case 'select':
-                return this._selectInput(id, field, required, ev, name);
+                return this._selectInput(id, field, required, ev, name, compId);
             case 'checkbox':
                 return this._checkboxInput(id, field, ev, name);
             case 'toggle':
@@ -269,7 +269,7 @@ const FormComponent = {
         }
     },
 
-    _selectInput(id, field, required, ev, name) {
+    _selectInput(id, field, required, ev, name, compId) {
         // Source-backed selects start with "Loading..." placeholder
         if (field.source && this._sourceMap[field.source]) {
             const placeholder = field.depends_on
