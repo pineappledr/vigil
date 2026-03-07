@@ -312,7 +312,7 @@ const DeployWizardComponent = {
             if (envDef.source !== 'prefill') continue;
             const fieldId = `dw-pf-${compId}-${envKey}`;
             const label = envDef.label || envKey;
-            const isSecret = envDef.secret === true || envKey.includes('PSK') || envKey.includes('SECRET') || envKey.includes('KEY');
+            const isSecret = envDef.secret === true || envKey.includes('PSK') || envKey.includes('SECRET') || envKey.includes('KEY') || envKey.includes('TOKEN');
 
             html += `
                 <div class="form-group">
