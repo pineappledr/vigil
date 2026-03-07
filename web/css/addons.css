@@ -1382,4 +1382,80 @@
     .smart-table-refresh {
         padding: 3px;
     }
+
+    .config-card-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ============================================
+   CONFIG CARD COMPONENT
+   ============================================ */
+
+.config-card-container {
+    position: relative;
+}
+
+.config-card-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+}
+
+.config-card-edit-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    padding: 5px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.config-card-edit-btn:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.config-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.config-card-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.config-card-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.config-card-value {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.config-card-loading {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    padding: 8px 0;
+}
+
+.config-card-error {
+    color: var(--danger, #ef4444);
 }

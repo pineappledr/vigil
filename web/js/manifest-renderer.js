@@ -163,6 +163,11 @@ const ManifestRenderer = {
                     ? DeployWizardComponent.render(comp.id, config, this.addon.id, this.addon.url)
                     : '<p class="component-unavailable">Deploy Wizard component not loaded</p>';
 
+            case 'config-card':
+                return typeof ConfigCardComponent !== 'undefined'
+                    ? ConfigCardComponent.render(comp.id, config, this.addon.id)
+                    : '<p class="component-unavailable">Config Card component not loaded</p>';
+
             default:
                 return `<p class="component-unavailable">Unknown component type: ${this._escape(comp.type)}</p>`;
         }
@@ -225,6 +230,11 @@ const ManifestRenderer = {
                 case 'progress':
                     if (comp.config?.source && typeof ProgressComponent !== 'undefined') {
                         ProgressComponent.refresh(comp.id);
+                    }
+                    break;
+                case 'config-card':
+                    if (typeof ConfigCardComponent !== 'undefined') {
+                        ConfigCardComponent.refresh(comp.id);
                     }
                     break;
             }
