@@ -407,6 +407,22 @@
     border-color: var(--accent-primary);
 }
 
+.manifest-refresh-toolbar .manifest-agent-select {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-right: auto;
+    transition: border-color var(--transition-fast);
+}
+
+.manifest-refresh-toolbar .manifest-agent-select:hover {
+    border-color: var(--accent-primary);
+}
+
 .manifest-refresh-toolbar .manifest-refresh-btn {
     display: inline-flex;
     align-items: center;

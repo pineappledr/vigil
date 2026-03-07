@@ -65,12 +65,24 @@ const ProgressComponent = {
         if (!this._addonId) return;
 
         try {
-            const path = '/api/jobs/active';
+            let path = '/api/jobs/active';
+            if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+                const agentId = ManifestRenderer.getSelectedAgentId();
+                if (agentId) path += `?agent_id=${encodeURIComponent(agentId)}`;
+            }
             const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}`);
             if (!resp.ok) return;
 
             const jobs = await resp.json();
-            if (!Array.isArray(jobs) || jobs.length === 0) return;
+            if (!Array.isArray(jobs) || jobs.length === 0) {
+                // Replace "Loading active jobs..." with "No active jobs"
+                const container = document.getElementById(`progress-${compId}`);
+                if (container) {
+                    const empty = container.querySelector('.progress-empty');
+                    if (empty) empty.textContent = 'No active jobs';
+                }
+                return;
+            }
 
             // Feed each active job payload through handleUpdate to populate cards.
             for (const job of jobs) {

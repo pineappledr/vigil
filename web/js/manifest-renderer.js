@@ -179,6 +179,14 @@ const ManifestRenderer = {
         const rc = page.page_config?.refresh;
         if (!rc) return '';
 
+        // Agent selector dropdown (populated async after render)
+        const agentSelector = page.page_config?.agent_selector
+            ? `<select class="manifest-agent-select" id="manifest-agent-select"
+                       onchange="ManifestRenderer._onAgentChange(this.value)">
+                   <option value="">All Agents</option>
+               </select>`
+            : '';
+
         const autoOptions = rc.auto_options || [];
         const autoSelect = autoOptions.length > 0
             ? `<select class="manifest-refresh-auto" id="manifest-auto-refresh"
@@ -199,7 +207,53 @@ const ManifestRenderer = {
                </button>`
             : '';
 
-        return `<div class="manifest-refresh-toolbar">${autoSelect}${manualBtn}</div>`;
+        // Fetch agent list after DOM render
+        if (page.page_config?.agent_selector && this.addon?.id) {
+            setTimeout(() => this._populateAgentSelector(), 0);
+        }
+
+        return `<div class="manifest-refresh-toolbar">${agentSelector}${autoSelect}${manualBtn}</div>`;
+    },
+
+    /** Fetch agents and populate the agent selector dropdown. */
+    async _populateAgentSelector() {
+        if (!this.addon?.id) return;
+        try {
+            const resp = await fetch(`/api/addons/${this.addon.id}/proxy?path=${encodeURIComponent('/api/agents')}`);
+            if (!resp.ok) return;
+            const agents = await resp.json();
+            const sel = document.getElementById('manifest-agent-select');
+            if (!sel || !Array.isArray(agents)) return;
+
+            for (const a of agents) {
+                const id = a.agent_id || a.id || a.ID;
+                const label = a.hostname || id;
+                const status = a.status || '';
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = `${label}${status ? ' (' + status + ')' : ''}`;
+                sel.appendChild(opt);
+            }
+
+            // Auto-select if only one agent
+            if (agents.length === 1) {
+                sel.value = agents[0].agent_id || agents[0].id || agents[0].ID;
+                this._selectedAgentId = sel.value;
+            }
+        } catch (e) {
+            console.error('[ManifestRenderer] Failed to fetch agents:', e);
+        }
+    },
+
+    /** Called when the agent dropdown changes. */
+    _onAgentChange(agentId) {
+        this._selectedAgentId = agentId || '';
+        this.refreshPage();
+    },
+
+    /** Returns the currently selected agent_id, or empty string for all. */
+    getSelectedAgentId() {
+        return this._selectedAgentId || '';
     },
 
     /** Manual refresh — re-fetches all source-backed components on the active page. */

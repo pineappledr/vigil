@@ -157,6 +157,15 @@ const SmartTableComponent = {
         let path = sourceMap[entry.config.source];
         if (!path) return;
 
+        // Append agent_id from the page-level agent selector (if available).
+        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+            const agentId = ManifestRenderer.getSelectedAgentId();
+            if (agentId) {
+                const sep = path.includes('?') ? '&' : '?';
+                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
+            }
+        }
+
         // Append time_range query parameter if a time filter is active.
         if (entry.timeRange) {
             const sep = path.includes('?') ? '&' : '?';
