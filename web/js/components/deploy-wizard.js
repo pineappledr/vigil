@@ -314,13 +314,24 @@ const DeployWizardComponent = {
             const label = envDef.label || envKey;
             const isSecret = envDef.secret === true || envKey.includes('PSK') || envKey.includes('SECRET') || envKey.includes('KEY') || envKey.includes('TOKEN');
 
+            const hasRotate = !!envDef.rotate_action;
+            const rotateBtn = hasRotate
+                ? `<button class="btn-copy" onclick="DeployWizardComponent._rotateToken('${compId}', '${this._escapeJS(envDef.rotate_action)}', '${fieldId}')" title="Rotate token">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                    </svg>
+                </button>`
+                : '';
+            const actionCount = (isSecret ? 1 : 0) + 1 + (hasRotate ? 1 : 0);
+            const padRight = actionCount * 34 + 4;
+
             html += `
                 <div class="form-group">
                     <label>${this._escape(label)}</label>
                     <div class="form-input-with-copy">
                         <input type="${isSecret ? 'password' : 'text'}" id="${fieldId}" class="form-input form-input-mono"
                                value="" readonly placeholder="Loading..."
-                               style="padding-right: ${isSecret ? '68px' : '38px'}">
+                               style="padding-right: ${padRight}px">
                         <div class="form-input-actions">
                             ${isSecret ? `<button class="btn-copy" onclick="DeployWizardComponent._toggleSecret('${fieldId}')" title="Show/Hide" id="dw-eye-${fieldId}">
                                 ${eyeIcon}
@@ -328,6 +339,7 @@ const DeployWizardComponent = {
                             <button class="btn-copy" onclick="DeployWizardComponent._copyField('${fieldId}')" title="Copy">
                                 ${copyIcon}
                             </button>
+                            ${rotateBtn}
                         </div>
                     </div>
                     ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
@@ -531,6 +543,41 @@ services:
                 <line x1="1" y1="1" x2="23" y2="23"/>
             </svg>`;
             btn.innerHTML = isHidden ? eyeOffIcon : eyeIcon;
+        }
+    },
+
+    async _rotateToken(compId, action, fieldId) {
+        if (!confirm('Are you sure you want to rotate this token? Existing agents will need to be updated with the new token.')) {
+            return;
+        }
+
+        const wiz = this._wizards[compId];
+        if (!wiz) return;
+
+        try {
+            const resp = await fetch(`/api/addons/${wiz.addonId}/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: action,
+                    data: { confirm: 'ROTATE' }
+                })
+            });
+
+            const data = await resp.json();
+            if (resp.ok && data.hub_token) {
+                const input = document.getElementById(fieldId);
+                if (input) {
+                    input.value = data.hub_token;
+                    input.type = 'text';  // reveal the new token
+                }
+                wiz.prefill.hub_token = data.hub_token;
+            } else {
+                alert(data.error || 'Failed to rotate token');
+            }
+        } catch (e) {
+            console.error('[DeployWizard] Token rotation failed:', e);
+            alert('Connection error — could not rotate token');
         }
     },
 
