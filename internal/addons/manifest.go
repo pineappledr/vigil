@@ -78,6 +78,7 @@ var validComponentTypes = map[string]bool{
 	"smart-table":    true,
 	"log-viewer":     true,
 	"deploy-wizard":  true,
+	"config-card":    true,
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
