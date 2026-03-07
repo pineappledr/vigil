@@ -116,6 +116,99 @@ const FormComponent = {
         }
     },
 
+    // ─── Config Pre-population ─────────────────────────────────────────
+
+    /**
+     * When an agent is selected on a "config" action form, fetch the agent's
+     * current config and pre-populate all form fields so the user can see
+     * what's active before making changes.
+     */
+    async _loadAgentConfig(compId) {
+        const meta = this._forms[compId];
+        if (!meta || meta.action !== 'config') return;
+
+        const agentId = this._getFieldValue(compId, 'agent_id');
+        if (!agentId) return;
+
+        try {
+            const path = `/api/config?agent_id=${encodeURIComponent(agentId)}`;
+            const resp = await fetch(`/api/addons/${meta.addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) return;
+
+            const config = await resp.json();
+            if (!config || typeof config !== 'object') return;
+
+            this._populateFormFromConfig(compId, config);
+        } catch (e) {
+            console.warn(`[Form] Failed to load agent config for ${agentId}:`, e);
+        }
+    },
+
+    /**
+     * Pre-populate form fields from a config map { key: value }.
+     * Handles selects (including __custom__), toggles, numbers, and text.
+     */
+    _populateFormFromConfig(compId, config) {
+        const meta = this._forms[compId];
+        if (!meta) return;
+
+        for (const field of meta.fields) {
+            if (field.name === 'agent_id') continue; // skip agent selector
+            const val = config[field.name];
+            if (val === undefined) continue;
+
+            const el = document.getElementById(`field-${compId}-${field.name}`);
+            if (!el) continue;
+
+            if (field.type === 'toggle' || field.type === 'checkbox') {
+                el.checked = val === 'true' || val === true;
+            } else if (field.type === 'select' && !field.source) {
+                // Check if the value matches any existing option
+                const hasOption = Array.from(el.options).some(o => o.value === String(val));
+                const hasCustom = Array.from(el.options).some(o => o.value === '__custom__');
+
+                if (hasOption) {
+                    el.value = String(val);
+                    // Hide custom input if it was visible
+                    const customInput = document.getElementById(`field-${compId}-${field.name}-custom`);
+                    if (customInput) {
+                        customInput.style.display = 'none';
+                        customInput.value = '';
+                    }
+                } else if (hasCustom && val !== '') {
+                    // Value doesn't match any option — use custom input
+                    el.value = '__custom__';
+                    const customInput = document.getElementById(`field-${compId}-${field.name}-custom`);
+                    if (customInput) {
+                        customInput.style.display = '';
+                        customInput.value = String(val);
+                    }
+                }
+            } else {
+                el.value = String(val);
+            }
+        }
+
+        // Re-evaluate visibility and calculations with new values
+        this._evaluateVisibility(compId);
+        this._evaluateCalculations(compId);
+
+        // Update range displays
+        for (const field of meta.fields) {
+            if (field.type === 'range') {
+                this._updateRangeDisplay(`field-${compId}-${field.name}`, field.unit || '');
+            }
+        }
+
+        // Show brief confirmation
+        const errorEl = document.getElementById(`form-error-${compId}`);
+        if (errorEl) {
+            errorEl.textContent = 'Active configuration loaded';
+            errorEl.className = 'addon-form-error success';
+            setTimeout(() => { errorEl.textContent = ''; errorEl.className = 'addon-form-error'; }, 3000);
+        }
+    },
+
     /** Populate select elements that use a given source. */
     _populateSourceSelects(compId, source, data) {
         const meta = this._forms[compId];
@@ -368,6 +461,11 @@ const FormComponent = {
         this._evaluateVisibility(compId);
         this._evaluateCalculations(compId);
         this._evaluateDependsOn(compId, fieldName);
+
+        // When agent_id changes on a config form, load the agent's active config
+        if (fieldName === 'agent_id') {
+            this._loadAgentConfig(compId);
+        }
     },
 
     /** Show/hide fields based on visible_when expressions. */
