@@ -727,7 +727,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
