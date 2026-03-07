@@ -283,7 +283,7 @@ const SmartTableComponent = {
         if (!tbody) return;
 
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty">No data</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty">No data yet — agent is collecting, try refreshing in a moment</td></tr>`;
             return;
         }
 
