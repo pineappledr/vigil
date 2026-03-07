@@ -148,7 +148,10 @@ const SmartTableComponent = {
             'addon_agents': '/api/agents',
             'agent_drives': '/api/agents',   // drives come from agents
             'job_history': '/api/jobs/history',
-            'smart_deltas': '/api/smart/deltas'
+            'smart_deltas': '/api/smart/deltas',
+            'disk_status': '/api/disk_status',
+            'smart_status': '/api/smart_status',
+            'active_job': '/api/active_job'
         };
 
         let path = sourceMap[entry.config.source];
