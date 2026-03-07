@@ -1030,6 +1030,7 @@
     display: flex;
     gap: 8px;
     padding: 1px 12px;
+    flex-wrap: wrap;
 }
 
 .log-line:hover {
@@ -1067,6 +1068,22 @@
 .log-msg {
     color: var(--text-secondary);
     word-break: break-word;
+}
+
+.log-msg-pre {
+    margin: 4px 0 0 0;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 4px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.82em;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    width: 100%;
+    color: var(--text-secondary);
 }
 
 .log-line.log-error .log-msg {

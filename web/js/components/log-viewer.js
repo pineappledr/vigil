@@ -209,12 +209,24 @@ const LogViewerComponent = {
         line.className = `log-line log-${level}`;
         line.dataset.level = level;
 
-        line.innerHTML = `
-            <span class="log-time">${timestamp}</span>
-            <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
-            ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
-            <span class="log-msg">${this._escape(payload.message)}</span>
-        `;
+        // Detect multi-line output (e.g. full snapraid command reports).
+        const isMultiLine = payload.message && payload.message.includes('\n');
+
+        if (isMultiLine) {
+            line.innerHTML = `
+                <span class="log-time">${timestamp}</span>
+                <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
+                ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
+                <pre class="log-msg log-msg-pre">${this._escape(payload.message)}</pre>
+            `;
+        } else {
+            line.innerHTML = `
+                <span class="log-time">${timestamp}</span>
+                <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
+                ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
+                <span class="log-msg">${this._escape(payload.message)}</span>
+            `;
+        }
 
         body.appendChild(line);
 
