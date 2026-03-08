@@ -148,6 +148,11 @@ const ManifestRenderer = {
                     ? ChartComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">Chart component not loaded</p>';
 
+            case 'disk-storage':
+                return typeof DiskStorageComponent !== 'undefined'
+                    ? DiskStorageComponent.render(comp.id, config, this.addon.id)
+                    : '<p class="component-unavailable">Disk Storage component not loaded</p>';
+
             case 'smart-table':
                 return typeof SmartTableComponent !== 'undefined'
                     ? SmartTableComponent.render(comp.id, config, this.addon.id)
@@ -266,6 +271,11 @@ const ManifestRenderer = {
 
         for (const comp of page.components) {
             switch (comp.type) {
+                case 'disk-storage':
+                    if (typeof DiskStorageComponent !== 'undefined') {
+                        DiskStorageComponent.refresh(comp.id);
+                    }
+                    break;
                 case 'smart-table':
                     if (typeof SmartTableComponent !== 'undefined') {
                         SmartTableComponent.refresh(comp.id);

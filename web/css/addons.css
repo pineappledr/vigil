@@ -1492,3 +1492,238 @@
 .config-card-error {
     color: var(--danger, #ef4444);
 }
+
+/* ============================================
+   DISK STORAGE COMPONENT
+   ============================================ */
+
+.disk-storage-container {
+    position: relative;
+}
+
+.disk-storage-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.disk-storage-loading {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 20px 0;
+    text-align: center;
+}
+
+.disk-storage-error {
+    color: var(--warning, #f59e0b) !important;
+    font-style: italic;
+}
+
+/* Summary bar */
+.disk-storage-summary {
+    padding: 14px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 14px;
+}
+
+.disk-storage-summary-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.disk-storage-summary-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.disk-storage-summary-usage {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+.disk-storage-summary-free {
+    color: var(--text-muted);
+}
+
+.disk-storage-summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Shared bar track */
+.disk-storage-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.disk-storage-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+
+.disk-storage-bar-fill.ds-ok {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.disk-storage-bar-fill.ds-warning {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.disk-storage-bar-fill.ds-danger {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.disk-storage-pct {
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    min-width: 48px;
+    text-align: right;
+}
+
+.disk-storage-pct.ds-ok,
+.disk-storage-card-pct.ds-ok { color: var(--success); }
+
+.disk-storage-pct.ds-warning,
+.disk-storage-card-pct.ds-warning { color: var(--warning); }
+
+.disk-storage-pct.ds-danger,
+.disk-storage-card-pct.ds-danger { color: var(--danger); }
+
+/* Cards grid */
+.disk-storage-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+}
+
+.disk-storage-card {
+    padding: 14px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    transition: border-color var(--transition-fast);
+}
+
+.disk-storage-card:hover {
+    border-color: var(--border-hover);
+}
+
+.disk-storage-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.disk-storage-card-name {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.disk-storage-disk-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.disk-storage-disk-id {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.disk-storage-card-pct {
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.disk-storage-card .disk-storage-bar-track {
+    height: 6px;
+    margin-bottom: 12px;
+}
+
+.disk-storage-card-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+}
+
+.disk-storage-detail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.disk-storage-detail-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+.disk-storage-detail-value {
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+
+.disk-storage-detail-mount {
+    width: 100%;
+}
+
+.disk-storage-mount-path {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .disk-storage-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .disk-storage-summary-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    .disk-storage-card {
+        padding: 10px 12px;
+    }
+
+    .disk-storage-card-details {
+        gap: 4px 12px;
+    }
+
+    .disk-storage-summary {
+        padding: 10px 12px;
+    }
+}
