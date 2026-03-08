@@ -3,9 +3,20 @@
 #
 # For TrueNAS, use docker-compose.truenas.yml instead
 #
-# ZFS Requirements:
-#   - Host must have zfsutils-linux installed
-#   - /dev/zfs must exist (ZFS kernel module loaded)
+# Requirements:
+#   - Linux OS (64-bit recommended)
+#   - smartmontools installed on the host (apt install smartmontools)
+#   - Docker and Docker Compose
+#
+# Optional:
+#   - zfsutils-linux and /dev/zfs for ZFS pool monitoring
+#   - nvme-cli for enhanced NVMe drive support
+#
+# Setup:
+#   1. Set VIGIL_TOKEN in your environment or .env file
+#   2. docker compose up -d
+#   3. Access the dashboard at http://localhost:9080
+#   4. Default login: admin / (check logs: docker logs vigil-server 2>&1 | grep "Admin password")
 
 services:
   vigil-server:

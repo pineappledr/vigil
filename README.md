@@ -739,7 +739,9 @@ The manifest is a JSON document that describes your add-on's UI. It contains pag
 | `progress` | Per-job progress cards with phase tracking, speed, and ETA |
 | `chart` | Chart.js time-series with optional dual Y-axes |
 | `smart-table` | SMART attribute table with delta highlighting |
+| `disk-storage` | Visual disk storage cards with progress bars, color-coded usage, and inline alias editing |
 | `log-viewer` | Auto-tailing log terminal with severity filtering |
+| `deploy-wizard` | Docker/binary deployment generator with prefill support and copy-to-clipboard |
 
 #### Step 2: Register the Add-on
 
@@ -835,6 +837,8 @@ Forms support advanced behaviors defined in the manifest:
 | `PUT` | `/api/addons/{id}/enabled` | Enable/disable add-on |
 | `GET` | `/api/addons/{id}/telemetry` | SSE stream (browser) |
 | `GET` | `/api/addons/ws?addon_id=X` | WebSocket (add-on process) |
+| `GET` | `/api/addons/{id}/proxy?path=...` | Proxy GET request to add-on backend |
+| `POST` | `/api/addons/{id}/proxy?path=...&method=POST` | Proxy POST/PUT/PATCH request to add-on backend |
 | `POST` | `/api/addons/register` | Register add-on from UI wizard |
 | `POST` | `/api/addons/tokens` | Create add-on registration token |
 | `GET` | `/api/addons/tokens` | List add-on registration tokens |
