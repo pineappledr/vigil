@@ -1701,6 +1701,102 @@
     color: var(--text-muted);
 }
 
+/* Name row with edit button */
+.disk-storage-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.ds-edit-alias-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.disk-storage-card:hover .ds-edit-alias-btn {
+    opacity: 1;
+}
+
+.ds-edit-alias-btn:hover {
+    color: var(--accent-primary);
+}
+
+/* Alias inline editor */
+.ds-alias-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ds-alias-input {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 6px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.ds-alias-input:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.ds-alias-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.ds-alias-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 3px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: all 0.15s;
+}
+
+.ds-alias-save {
+    color: var(--success);
+    border-color: var(--success);
+}
+
+.ds-alias-save:hover {
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.ds-alias-cancel {
+    color: var(--text-muted);
+}
+
+.ds-alias-cancel:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.ds-alias-remove {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+.ds-alias-remove:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .disk-storage-cards {

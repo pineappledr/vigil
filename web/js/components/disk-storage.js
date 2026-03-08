@@ -107,9 +107,7 @@ const DiskStorageComponent = {
                 try {
                     const configData = await configResp.json();
                     const aliasStr = configData.disk_aliases || '';
-                    if (aliasStr) {
-                        entry.config.aliases = this._parseAliases(aliasStr);
-                    }
+                    entry.config.aliases = aliasStr ? this._parseAliases(aliasStr) : {};
                 } catch { /* ignore config parse errors */ }
             }
 
@@ -149,6 +147,140 @@ const DiskStorageComponent = {
         return aliases;
     },
 
+    /**
+     * Serialize aliases object back to "d1=Movies, d2=TV Shows" string.
+     */
+    _serializeAliases(aliases) {
+        return Object.entries(aliases)
+            .filter(([, v]) => v)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ');
+    },
+
+    // ─── Alias Editing ────────────────────────────────────────────────────
+
+    /** Called when the edit button on a card is clicked. */
+    _startEditAlias(compId, diskName) {
+        const entry = this._instances[compId];
+        if (!entry) return;
+
+        const aliases = entry.config.aliases || {};
+        const currentAlias = aliases[diskName] || '';
+
+        const nameEl = document.getElementById(`ds-name-${compId}-${diskName}`);
+        if (!nameEl) return;
+
+        nameEl.innerHTML = `
+            <div class="ds-alias-edit">
+                <input type="text" class="ds-alias-input" id="ds-alias-input-${compId}-${diskName}"
+                       value="${this._escapeAttr(currentAlias)}"
+                       placeholder="${this._escapeAttr(diskName)}"
+                       maxlength="40" />
+                <div class="ds-alias-actions">
+                    <button class="ds-alias-btn ds-alias-save" title="Save"
+                            onclick="DiskStorageComponent._saveAlias('${this._escapeJS(compId)}','${this._escapeJS(diskName)}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </button>
+                    <button class="ds-alias-btn ds-alias-cancel" title="Cancel"
+                            onclick="DiskStorageComponent._cancelEditAlias('${this._escapeJS(compId)}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                    ${currentAlias ? `<button class="ds-alias-btn ds-alias-remove" title="Remove alias"
+                            onclick="DiskStorageComponent._removeAlias('${this._escapeJS(compId)}','${this._escapeJS(diskName)}')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6"/><path d="M14 11v6"/>
+                        </svg>
+                    </button>` : ''}
+                </div>
+            </div>
+        `;
+
+        const input = document.getElementById(`ds-alias-input-${compId}-${diskName}`);
+        if (input) {
+            input.focus();
+            input.select();
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this._saveAlias(compId, diskName);
+                if (e.key === 'Escape') this._cancelEditAlias(compId);
+            });
+        }
+    },
+
+    /** Save the alias and persist to agent config. */
+    async _saveAlias(compId, diskName) {
+        const entry = this._instances[compId];
+        if (!entry) return;
+
+        const input = document.getElementById(`ds-alias-input-${compId}-${diskName}`);
+        if (!input) return;
+
+        const newAlias = input.value.trim();
+        const aliases = entry.config.aliases || {};
+
+        if (newAlias) {
+            aliases[diskName] = newAlias;
+        } else {
+            delete aliases[diskName];
+        }
+        entry.config.aliases = aliases;
+
+        await this._persistAliases(compId, entry);
+        this._renderDisks(compId, entry, entry.rows);
+    },
+
+    /** Remove the alias for a disk. */
+    async _removeAlias(compId, diskName) {
+        const entry = this._instances[compId];
+        if (!entry) return;
+
+        const aliases = entry.config.aliases || {};
+        delete aliases[diskName];
+        entry.config.aliases = aliases;
+
+        await this._persistAliases(compId, entry);
+        this._renderDisks(compId, entry, entry.rows);
+    },
+
+    /** Cancel editing and re-render. */
+    _cancelEditAlias(compId) {
+        const entry = this._instances[compId];
+        if (!entry) return;
+        this._renderDisks(compId, entry, entry.rows);
+    },
+
+    /** Persist aliases to the agent config via POST /api/config. */
+    async _persistAliases(compId, entry) {
+        if (!entry.addonId) return;
+
+        const aliasStr = this._serializeAliases(entry.config.aliases || {});
+
+        const body = { values: { disk_aliases: aliasStr } };
+
+        // Include agent_id if selected
+        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+            const agentId = ManifestRenderer.getSelectedAgentId();
+            if (agentId) body.agent_id = agentId;
+        }
+
+        try {
+            const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent('/api/config')}&method=POST`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) {
+                console.error(`[DiskStorage] Failed to save aliases: HTTP ${resp.status}`);
+            }
+        } catch (e) {
+            console.error('[DiskStorage] Failed to save aliases:', e);
+        }
+    },
+
     // ─── Rendering ────────────────────────────────────────────────────────
 
     _renderDisks(compId, entry, rows) {
@@ -176,7 +308,7 @@ const DiskStorageComponent = {
         grid.innerHTML =
             this._renderSummaryBar(totalBytes, usedBytes, totalPct, rows.length, thresholds) +
             '<div class="disk-storage-cards">' +
-            rows.map(disk => this._renderDiskCard(disk, aliases, thresholds)).join('') +
+            rows.map(disk => this._renderDiskCard(compId, disk, aliases, thresholds)).join('') +
             '</div>';
     },
 
@@ -202,7 +334,7 @@ const DiskStorageComponent = {
         `;
     },
 
-    _renderDiskCard(disk, aliases, thresholds) {
+    _renderDiskCard(compId, disk, aliases, thresholds) {
         const name = disk.name || '';
         const alias = aliases[name] || '';
         const pct = disk.used_pct || 0;
@@ -217,8 +349,17 @@ const DiskStorageComponent = {
         return `
             <div class="disk-storage-card">
                 <div class="disk-storage-card-header">
-                    <div class="disk-storage-card-name">
-                        <span class="disk-storage-disk-name">${this._escape(displayName)}</span>
+                    <div class="disk-storage-card-name" id="ds-name-${this._escapeAttr(compId)}-${this._escapeAttr(name)}">
+                        <div class="disk-storage-name-row">
+                            <span class="disk-storage-disk-name">${this._escape(displayName)}</span>
+                            <button class="ds-edit-alias-btn" title="Edit alias"
+                                    onclick="DiskStorageComponent._startEditAlias('${this._escapeJS(compId)}','${this._escapeJS(name)}')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                                    <path d="m15 5 4 4"/>
+                                </svg>
+                            </button>
+                        </div>
                         ${subtitle ? `<span class="disk-storage-disk-id">${this._escape(subtitle)}</span>` : ''}
                     </div>
                     <span class="disk-storage-card-pct ${colorClass}">${pct.toFixed(1)}%</span>
