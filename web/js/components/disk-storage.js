@@ -259,7 +259,8 @@ const DiskStorageComponent = {
 
         const aliasStr = this._serializeAliases(entry.config.aliases || {});
 
-        const body = { values: { disk_aliases: aliasStr } };
+        // Hub expects flat: { agent_id, key1: val1, ... }
+        const body = { disk_aliases: aliasStr };
 
         // Include agent_id if selected
         if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
