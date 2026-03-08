@@ -79,6 +79,7 @@ var validComponentTypes = map[string]bool{
 	"log-viewer":     true,
 	"deploy-wizard":  true,
 	"config-card":    true,
+	"disk-storage":   true,
 }
 
 // ── Validation ──────────────────────────────────────────────────────────
