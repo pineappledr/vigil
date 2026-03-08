@@ -151,6 +151,7 @@ const SmartTableComponent = {
             'smart_deltas': '/api/smart/deltas',
             'disk_status': '/api/disk_status',
             'smart_status': '/api/smart_status',
+            'disk_storage': '/api/disk_storage',
             'active_job': '/api/active_job'
         };
 
