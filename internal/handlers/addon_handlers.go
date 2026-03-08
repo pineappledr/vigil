@@ -721,10 +721,20 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	// validatedTarget is constructed from the admin-registered addon URL
 	// (DB-stored, not user-controlled) with scheme strictly whitelisted.
 	sanitizedURL := validatedTarget.String()
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, nil)
+
+	// Forward request body for methods that carry a payload.
+	var bodyReader io.Reader
+	if r.Body != nil && (upstreamMethod == http.MethodPost || upstreamMethod == http.MethodPut || upstreamMethod == http.MethodPatch) {
+		bodyReader = io.LimitReader(r.Body, 64*1024) // 64 KiB limit
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, bodyReader)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
+	}
+	if bodyReader != nil {
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -998,6 +1008,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("GET /api/addons/{id}", protect(GetAddon))
 	mux.HandleFunc("POST /api/addons/{id}/action", protect(ExecuteAddonAction))
 	mux.HandleFunc("GET /api/addons/{id}/proxy", protect(ProxyAddonRequest))
+	mux.HandleFunc("POST /api/addons/{id}/proxy", protect(ProxyAddonRequest))
 	mux.HandleFunc("DELETE /api/addons/{id}", protect(DeregisterAddon))
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
