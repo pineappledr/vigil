@@ -84,9 +84,19 @@ const ProgressComponent = {
                 return;
             }
 
-            // Feed each active job payload through handleUpdate to populate cards.
+            // Map ActiveJob telemetry fields to the ProgressPayload format
+            // expected by handleUpdate.
             for (const job of jobs) {
-                this.handleUpdate(job);
+                const elapsedSec = job.started_at
+                    ? Math.floor((Date.now() - new Date(job.started_at).getTime()) / 1000)
+                    : 0;
+                this.handleUpdate({
+                    job_id: job.type + '_' + (job.started_at || Date.now()),
+                    phase: job.current_phase || job.type,
+                    command: job.type,
+                    percent: job.progress_percent || 0,
+                    elapsed_sec: elapsedSec,
+                });
             }
         } catch (e) {
             console.error('[Progress] Failed to fetch active jobs:', e);

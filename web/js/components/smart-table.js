@@ -311,6 +311,8 @@ const SmartTableComponent = {
         switch (format) {
             case 'bytes':
                 return this._formatBytes(val);
+            case 'percent':
+                return typeof val === 'number' ? val.toFixed(1) + '%' : this._escape(String(val));
             case 'duration':
                 return this._formatDuration(val);
             case 'datetime':
