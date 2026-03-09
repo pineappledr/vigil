@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	stdpath "path"
 	"strings"
 	"time"
@@ -796,8 +797,15 @@ func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
 	// Find the latest semver tag.
 	latestTag := findLatestTag(tags)
 
+	// Compare against the addon's manifest version rather than the Docker
+	// tag, since most manifests reference ":latest" which would always
+	// differ from a semver tag.
+	currentVersion := strings.TrimPrefix(addon.Version, "v")
+	latestVersion := strings.TrimPrefix(latestTag, "v")
+	updateAvailable := latestTag != "" && latestVersion != currentVersion
+
 	JSONResponse(w, map[string]interface{}{
-		"update_available": latestTag != "" && latestTag != currentTag,
+		"update_available": updateAvailable,
 		"current_tag":      currentTag,
 		"latest_tag":       latestTag,
 		"image":            image,
@@ -886,8 +894,14 @@ func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	// For ghcr.io public images, anonymous access works with this Accept header.
 	req.Header.Set("Accept", "application/json")
+
+	// For ghcr.io private packages, use a GitHub token if available.
+	if strings.Contains(registry, "ghcr.io") {
+		if token := os.Getenv("GHCR_TOKEN"); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
 
 	// For Docker Hub, we may need a token. Try anonymous first.
 	if strings.Contains(registry, "docker.io") || registry == "" {

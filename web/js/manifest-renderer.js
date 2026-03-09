@@ -531,7 +531,7 @@ const ManifestRenderer = {
             if (data.update_available && badge) {
                 badge.style.display = '';
                 badge.textContent = `Update: ${data.latest_tag}`;
-                badge.title = `Current: ${data.current_tag} → Latest: ${data.latest_tag} (${data.image})`;
+                badge.title = `Current: v${data.current_version} → Latest: ${data.latest_tag} (${data.image})`;
             } else if (badge) {
                 badge.style.display = 'none';
                 this._showToast({ message: 'No updates available', severity: 'info' });
