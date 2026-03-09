@@ -13,6 +13,7 @@ const NotificationSettings = {
     quietHours: null,
     digest: null,
     providerDefs: null,
+    eventTypeMeta: null,
 
     async render() {
         const container = document.getElementById('notifications-view');
@@ -23,7 +24,8 @@ const NotificationSettings = {
         try {
             const [svcResp] = await Promise.all([
                 API.getNotificationServices(),
-                this._ensureProviderDefs()
+                this._ensureProviderDefs(),
+                this._ensureEventTypeMeta()
             ]);
             if (svcResp.ok) {
                 this.services = await svcResp.json();
@@ -44,6 +46,16 @@ const NotificationSettings = {
             if (resp.ok) this.providerDefs = await resp.json();
         } catch (e) {
             console.error('Failed to load provider definitions:', e);
+        }
+    },
+
+    async _ensureEventTypeMeta() {
+        if (this.eventTypeMeta) return;
+        try {
+            const resp = await API.getEventTypes();
+            if (resp.ok) this.eventTypeMeta = await resp.json();
+        } catch (e) {
+            console.error('Failed to load event type metadata:', e);
         }
     },
 
@@ -215,34 +227,97 @@ const NotificationSettings = {
             return '<p class="notif-hint">No event rules configured. All events will use the default severity filters above.</p>';
         }
 
+        // Build a lookup from event_type → meta for labels and categories.
+        const metaMap = {};
+        if (this.eventTypeMeta) {
+            for (const m of this.eventTypeMeta) metaMap[m.type] = m;
+        }
+
+        // Group rules by category (using meta if available, else "Other").
+        const groups = {};
+        this.eventRules.forEach((rule, i) => {
+            const meta = metaMap[rule.event_type];
+            const cat = meta ? meta.category : 'Other';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push({ rule, idx: i, label: meta ? meta.label : rule.event_type });
+        });
+
+        // Render order: match the category order from metadata.
+        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'System', 'Other'];
+        const sortedCategories = categoryOrder.filter(c => groups[c]);
+
+        const severityLabel = (meta) => {
+            if (!meta) return '';
+            const labels = { 0: 'info', 1: 'warning', 2: 'critical' };
+            return labels[meta.default_severity] || '';
+        };
+
         return `
-            <table class="notif-rules-table">
-                <thead>
-                    <tr>
-                        <th>Event Type</th>
-                        <th>Enabled</th>
-                        <th>Cooldown</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${this.eventRules.map((rule, i) => `
-                        <tr>
-                            <td>${this._escape(rule.event_type)}</td>
-                            <td>
-                                <input type="checkbox" ${rule.enabled ? 'checked' : ''}
-                                    onchange="NotificationSettings._updateRuleEnabled(${i}, this.checked)">
-                            </td>
-                            <td>
-                                <input type="number" class="form-input form-input-sm" value="${rule.cooldown_secs || 0}"
-                                    min="0" step="60" onchange="NotificationSettings._updateRuleCooldown(${i}, this.value)">
-                                <span class="form-hint">seconds</span>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+            ${sortedCategories.map(cat => `
+                <div class="notif-rules-category">
+                    <div class="notif-rules-category-header">
+                        <h5>${this._escape(cat)}</h5>
+                        <label class="addon-checkbox notif-category-toggle">
+                            <input type="checkbox"
+                                ${groups[cat].every(g => g.rule.enabled) ? 'checked' : ''}
+                                onchange="NotificationSettings._toggleCategory('${this._escape(cat)}', this.checked)">
+                            All
+                        </label>
+                    </div>
+                    <table class="notif-rules-table">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>Severity</th>
+                                <th>Enabled</th>
+                                <th>Cooldown</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${groups[cat].map(({ rule, idx, label }) => {
+                                const meta = metaMap[rule.event_type];
+                                const sev = severityLabel(meta);
+                                const sevClass = sev ? `notif-severity-${sev}` : '';
+                                return `
+                                <tr>
+                                    <td>${this._escape(label)}</td>
+                                    <td><span class="notif-severity-badge ${sevClass}">${sev || '--'}</span></td>
+                                    <td>
+                                        <input type="checkbox" data-rule-category="${this._escape(cat)}" ${rule.enabled ? 'checked' : ''}
+                                            onchange="NotificationSettings._updateRuleEnabled(${idx}, this.checked)">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-input form-input-sm" value="${rule.cooldown_secs || 0}"
+                                            min="0" step="60" onchange="NotificationSettings._updateRuleCooldown(${idx}, this.value)">
+                                        <span class="form-hint">sec</span>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `).join('')}
             <button class="btn btn-secondary btn-sm" onclick="NotificationSettings.saveEventRules()">Save Rules</button>
         `;
+    },
+
+    _toggleCategory(category, enabled) {
+        const metaMap = {};
+        if (this.eventTypeMeta) {
+            for (const m of this.eventTypeMeta) metaMap[m.type] = m;
+        }
+
+        this.eventRules.forEach((rule, i) => {
+            const meta = metaMap[rule.event_type];
+            const cat = meta ? meta.category : 'Other';
+            if (cat === category) {
+                rule.enabled = enabled;
+            }
+        });
+
+        // Re-render the rules section
+        const content = document.getElementById('notif-content');
+        if (content) content.innerHTML = this._serviceDetail();
     },
 
     _quietHoursForm(serviceId) {

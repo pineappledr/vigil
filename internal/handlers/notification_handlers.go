@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"vigil/internal/db"
+	"vigil/internal/events"
 	"vigil/internal/notify"
 )
 
@@ -20,6 +21,12 @@ var NotifySender notify.Sender
 // GET /api/notifications/providers
 func GetNotificationProviders(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, notify.GetProviderDefs())
+}
+
+// GetEventTypes returns all known event types with category metadata.
+// GET /api/notifications/event-types
+func GetEventTypes(w http.ResponseWriter, r *http.Request) {
+	JSONResponse(w, events.AllEventTypeMeta)
 }
 
 // ─── Service CRUD ────────────────────────────────────────────────────────
@@ -137,6 +144,21 @@ func CreateNotificationService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svc.ID = id
+
+	// Auto-populate event rules with sensible defaults so users can
+	// immediately toggle individual event types on/off.
+	for _, meta := range events.AllEventTypeMeta {
+		rule := &notify.EventRule{
+			ServiceID: id,
+			EventType: string(meta.Type),
+			Enabled:   meta.DefaultEnabled,
+			Cooldown:  meta.DefaultCooldown,
+		}
+		if err := notify.UpsertEventRule(db.DB, rule); err != nil {
+			log.Printf("notify: seed rule %s for service %d: %v", meta.Type, id, err)
+		}
+	}
+
 	log.Printf("🔔 Notification service created: %s (%s)", svc.Name, svc.ServiceType)
 	w.WriteHeader(http.StatusCreated)
 	JSONResponse(w, svc)
@@ -456,6 +478,7 @@ func GetNotificationHistory(w http.ResponseWriter, r *http.Request) {
 func RegisterNotificationRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http.HandlerFunc) {
 	// Provider definitions (for dynamic form wizard)
 	mux.HandleFunc("GET /api/notifications/providers", protect(GetNotificationProviders))
+	mux.HandleFunc("GET /api/notifications/event-types", protect(GetEventTypes))
 
 	mux.HandleFunc("GET /api/notifications/services", protect(ListNotificationServices))
 	mux.HandleFunc("GET /api/notifications/services/{id}", protect(GetNotificationService))
