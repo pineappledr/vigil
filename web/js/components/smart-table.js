@@ -307,6 +307,10 @@ const SmartTableComponent = {
             return this._formatActions(row, col);
         }
 
+        if (format === 'warning_badge') {
+            return this._formatWarningBadge(val);
+        }
+
         if (val === undefined || val === null) return '';
 
         switch (format) {
@@ -321,6 +325,7 @@ const SmartTableComponent = {
             case 'relative_time':
                 return this._formatRelativeTime(val);
             default:
+                if (Array.isArray(val)) return this._escape(val.join(', '));
                 return this._escape(String(val));
         }
     },
@@ -335,6 +340,11 @@ const SmartTableComponent = {
         return `<span class="status-dot-wrap" title="${info.label}">` +
                `<span class="status-dot" style="background:${info.color}"></span> ` +
                `<span class="status-dot-label">${info.label}</span></span>`;
+    },
+
+    _formatWarningBadge(val) {
+        if (!val) return '';
+        return `<span class="warning-badge" style="background:var(--danger,#ef4444);color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600">OS</span>`;
     },
 
     _formatActions(row, col) {
