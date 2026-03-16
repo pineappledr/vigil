@@ -33,11 +33,14 @@ const ManifestRenderer = {
         this._connectSSE();
     },
 
-    /** Tear down SSE, auto-refresh, and chart instances, return to add-on list. */
+    /** Tear down SSE, auto-refresh, chart instances, and component state, return to add-on list. */
     close() {
         this._stopAutoRefresh();
         this._disconnectSSE();
         this._destroyCharts();
+        if (typeof ProgressComponent !== 'undefined') {
+            ProgressComponent.clearAllJobs();
+        }
         Addons.closeAddon();
     },
 

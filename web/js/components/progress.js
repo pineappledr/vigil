@@ -43,6 +43,17 @@ const ProgressComponent = {
                 </div>`;
     },
 
+    /** Reset all state when switching addons to prevent cross-addon job leaking. */
+    clearAllJobs() {
+        this._jobs = {};
+        this._compIds = {};
+        this._addonId = null;
+        if (this._tickTimer) {
+            clearInterval(this._tickTimer);
+            this._tickTimer = null;
+        }
+    },
+
     /** Re-render all tracked jobs into the container (e.g. after a page switch). */
     _restoreJobs(compId) {
         const container = document.getElementById(`progress-${compId}`);
