@@ -95,19 +95,11 @@ const ProgressComponent = {
                 return;
             }
 
-            // Map ActiveJob telemetry fields to the ProgressPayload format
-            // expected by handleUpdate.
+            // The active jobs API returns ProgressPayload objects with the
+            // same shape that handleUpdate expects (job_id, command, phase,
+            // percent, elapsed_sec, etc.) — pass them through directly.
             for (const job of jobs) {
-                const elapsedSec = job.started_at
-                    ? Math.floor((Date.now() - new Date(job.started_at).getTime()) / 1000)
-                    : 0;
-                this.handleUpdate({
-                    job_id: job.type + '_' + (job.started_at || Date.now()),
-                    phase: job.current_phase || job.type,
-                    command: job.type,
-                    percent: job.progress_percent || 0,
-                    elapsed_sec: elapsedSec,
-                });
+                this.handleUpdate(job);
             }
         } catch (e) {
             console.error('[Progress] Failed to fetch active jobs:', e);
@@ -334,7 +326,9 @@ const ProgressComponent = {
         try {
             const path = `/api/jobs/${encodeURIComponent(jobId)}`;
             const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}&method=DELETE`);
-            if (resp.ok) {
+            if (resp.ok || resp.status === 404) {
+                // Remove locally — 404 means the job doesn't exist on the
+                // hub (stale/ghost entry), so just clean up the UI.
                 this._removeJob(jobId);
             } else {
                 const data = await resp.json().catch(() => ({}));
