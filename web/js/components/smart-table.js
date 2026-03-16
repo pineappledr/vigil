@@ -176,7 +176,12 @@ const SmartTableComponent = {
         try {
             const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`);
             if (!resp.ok) {
-                this._showTableError(compId, entry, `Failed to load data (HTTP ${resp.status})`);
+                let msg = `Failed to load data (HTTP ${resp.status})`;
+                try {
+                    const err = await resp.json();
+                    if (err?.error) msg = err.error;
+                } catch {}
+                this._showTableError(compId, entry, msg);
                 return;
             }
 
@@ -217,7 +222,10 @@ const SmartTableComponent = {
             }
         } catch (e) {
             console.error(`[SmartTable] Failed to fetch source for ${compId}:`, e);
-            this._showTableError(compId, entry, 'Could not reach add-on — check that the add-on URL is reachable from the Vigil server');
+            const msg = e instanceof SyntaxError
+                ? 'Invalid response from add-on (not JSON)'
+                : 'Could not reach add-on — check that the add-on URL is reachable from the Vigil server';
+            this._showTableError(compId, entry, msg);
         }
     },
 
