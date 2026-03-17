@@ -45,7 +45,9 @@ const SmartTableComponent = {
             isStructured,
             addonId,
             sort: sortState,
-            timeRange: config.time_filter ? (config.time_filter.default || '') : ''
+            timeRange: config.time_filter ? (config.time_filter.default || '') : '',
+            pageSize: config.page_size || 0,  // 0 = show all (no pagination)
+            currentPage: 1
         };
 
         const headers = isStructured
@@ -84,9 +86,15 @@ const SmartTableComponent = {
         // Time filter dropdown
         const timeFilter = config.time_filter ? this._renderTimeFilter(compId, config.time_filter) : '';
 
+        // Page size selector (only when page_size is configured)
+        const pageSizeSelector = config.page_size
+            ? this._renderPageSizeSelector(compId, config.page_size)
+            : '';
+
         return `
             <div class="smart-table-container" id="smart-table-${compId}">
                 <div class="smart-table-toolbar">
+                    ${pageSizeSelector}
                     ${timeFilter}
                     ${refreshBtn}
                 </div>
@@ -98,6 +106,7 @@ const SmartTableComponent = {
                         <tr><td colspan="${colCount}" class="smart-table-empty">${emptyText}</td></tr>
                     </tbody>
                 </table>
+                <div class="smart-table-pagination" id="smart-pagination-${compId}"></div>
             </div>
         `;
     },
@@ -135,6 +144,94 @@ const SmartTableComponent = {
         if (!sel) return;
         entry.timeRange = sel.value;
         this._fetchSource(compId);
+    },
+
+    // ─── Pagination ──────────────────────────────────────────────────────
+
+    _renderPageSizeSelector(compId, defaultSize) {
+        const options = [10, 25, 50, 100];
+        return `<select class="smart-time-filter" id="smart-pagesize-${compId}"
+                        onchange="SmartTableComponent._onPageSizeChange('${this._escapeJS(compId)}')">
+                    ${options.map(n =>
+                        `<option value="${n}"${n === defaultSize ? ' selected' : ''}>${n} per page</option>`
+                    ).join('')}
+                    <option value="0"${!options.includes(defaultSize) && defaultSize === 0 ? ' selected' : ''}>Show all</option>
+                </select>`;
+    },
+
+    _onPageSizeChange(compId) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const sel = document.getElementById(`smart-pagesize-${compId}`);
+        if (!sel) return;
+        entry.pageSize = parseInt(sel.value, 10) || 0;
+        entry.currentPage = 1;
+        if (entry.rows.length > 0) {
+            this._updateStructuredTable(compId, entry, entry.rows);
+        }
+    },
+
+    _goToPage(compId, page) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        entry.currentPage = page;
+        if (entry.rows.length > 0) {
+            this._updateStructuredTable(compId, entry, entry.rows);
+        }
+    },
+
+    _renderPagination(compId, totalRows, pageSize, currentPage) {
+        const container = document.getElementById(`smart-pagination-${compId}`);
+        if (!container) return;
+
+        if (!pageSize || pageSize <= 0 || totalRows <= pageSize) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const totalPages = Math.ceil(totalRows / pageSize);
+        const start = (currentPage - 1) * pageSize + 1;
+        const end = Math.min(currentPage * pageSize, totalRows);
+
+        let buttons = '';
+
+        // Previous button
+        buttons += `<button class="smart-page-btn" ${currentPage <= 1 ? 'disabled' : ''}
+                        onclick="SmartTableComponent._goToPage('${this._escapeJS(compId)}', ${currentPage - 1})">
+                        &laquo; Prev</button>`;
+
+        // Page numbers (show at most 5 pages around current)
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
+
+        if (startPage > 1) {
+            buttons += `<button class="smart-page-btn" onclick="SmartTableComponent._goToPage('${this._escapeJS(compId)}', 1)">1</button>`;
+            if (startPage > 2) buttons += `<span class="smart-page-ellipsis">&hellip;</span>`;
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            buttons += `<button class="smart-page-btn${i === currentPage ? ' smart-page-active' : ''}"
+                            onclick="SmartTableComponent._goToPage('${this._escapeJS(compId)}', ${i})">${i}</button>`;
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) buttons += `<span class="smart-page-ellipsis">&hellip;</span>`;
+            buttons += `<button class="smart-page-btn" onclick="SmartTableComponent._goToPage('${this._escapeJS(compId)}', ${totalPages})">${totalPages}</button>`;
+        }
+
+        // Next button
+        buttons += `<button class="smart-page-btn" ${currentPage >= totalPages ? 'disabled' : ''}
+                        onclick="SmartTableComponent._goToPage('${this._escapeJS(compId)}', ${currentPage + 1})">
+                        Next &raquo;</button>`;
+
+        container.innerHTML = `
+            <div class="smart-pagination-info">Showing ${start}–${end} of ${totalRows}</div>
+            <div class="smart-pagination-buttons">${buttons}</div>
+        `;
     },
 
     // ─── Source Data Fetching ─────────────────────────────────────────────
@@ -293,11 +390,22 @@ const SmartTableComponent = {
 
         if (!rows || rows.length === 0) {
             tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty">No data yet — agent is collecting, try refreshing in a moment</td></tr>`;
+            this._renderPagination(compId, 0, entry.pageSize, 1);
             return;
         }
 
         entry.rows = rows;
-        const displayRows = this._sortRows(rows, entry.sort);
+        const sorted = this._sortRows(rows, entry.sort);
+
+        // Apply pagination if configured.
+        let displayRows = sorted;
+        if (entry.pageSize > 0) {
+            const totalPages = Math.ceil(sorted.length / entry.pageSize);
+            if (entry.currentPage > totalPages) entry.currentPage = totalPages;
+            if (entry.currentPage < 1) entry.currentPage = 1;
+            const start = (entry.currentPage - 1) * entry.pageSize;
+            displayRows = sorted.slice(start, start + entry.pageSize);
+        }
 
         tbody.innerHTML = displayRows.map(row => {
             return `<tr>${entry.columns.map(col => {
@@ -305,6 +413,9 @@ const SmartTableComponent = {
                 return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
         }).join('');
+
+        // Render pagination controls.
+        this._renderPagination(compId, sorted.length, entry.pageSize, entry.currentPage);
     },
 
     _formatValue(val, format, row, col) {
