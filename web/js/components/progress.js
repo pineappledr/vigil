@@ -85,12 +85,24 @@ const ProgressComponent = {
             if (!resp.ok) return;
 
             const jobs = await resp.json();
-            if (!Array.isArray(jobs) || jobs.length === 0) {
-                // Replace "Loading active jobs..." with "No active jobs"
+            if (!Array.isArray(jobs)) return;
+
+            // Reconcile: remove tracked jobs that are no longer active on the hub.
+            const activeIds = new Set(jobs.map(j => j.job_id).filter(Boolean));
+            for (const trackedId of Object.keys(this._jobs)) {
+                if (!activeIds.has(trackedId)) {
+                    this._removeJob(trackedId);
+                }
+            }
+
+            if (jobs.length === 0) {
+                // Show empty placeholder if nothing is running
                 const container = document.getElementById(`progress-${compId}`);
-                if (container) {
-                    const empty = container.querySelector('.progress-empty');
-                    if (empty) empty.textContent = 'No active jobs';
+                if (container && !container.querySelector('.progress-empty')) {
+                    const empty = document.createElement('div');
+                    empty.className = 'progress-empty';
+                    empty.textContent = 'No active jobs';
+                    container.appendChild(empty);
                 }
                 return;
             }

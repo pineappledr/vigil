@@ -749,7 +749,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, io.LimitReader(resp.Body, 64*1024)) // 64 KiB limit
+	io.Copy(w, io.LimitReader(resp.Body, 2*1024*1024)) // 2 MiB limit
 }
 
 // ─── Update Check ────────────────────────────────────────────────────────

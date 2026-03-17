@@ -25,6 +25,12 @@ const (
 	JobComplete   EventType = "job_complete"
 	JobFailed     EventType = "job_failed"
 
+	// Trigger-specific job events (manual vs scheduled)
+	ManualJobStarted    EventType = "manual_job_started"
+	ManualJobComplete   EventType = "manual_job_complete"
+	ScheduledJobStarted EventType = "scheduled_job_started"
+	ScheduledJobComplete EventType = "scheduled_job_complete"
+
 	// SnapRAID-specific add-on events
 	GateFailed          EventType = "gate_failed"
 	MaintenanceStarted  EventType = "maintenance_started"
@@ -65,6 +71,7 @@ var AllEventTypes = []EventType{
 	DriveAppeared, DriveDisappeared, ReallocatedSectors,
 	// Add-on / job
 	JobStarted, PhaseComplete, BurninPassed, JobComplete, JobFailed,
+	ManualJobStarted, ManualJobComplete, ScheduledJobStarted, ScheduledJobComplete,
 	// SnapRAID
 	GateFailed, MaintenanceStarted, MaintenanceComplete, AutoFix,
 	// System
@@ -90,6 +97,10 @@ var AllEventTypeMeta = []EventTypeMeta{
 	{BurninPassed, CategoryAddonJob, "Burn-in Passed", SeverityInfo, 0, true},
 	{JobComplete, CategoryAddonJob, "Job Complete", SeverityInfo, 0, true},
 	{JobFailed, CategoryAddonJob, "Job Failed", SeverityCritical, 0, true},
+	{ManualJobStarted, CategoryAddonJob, "Manual Job Started", SeverityInfo, 0, false},
+	{ManualJobComplete, CategoryAddonJob, "Manual Job Complete", SeverityInfo, 0, false},
+	{ScheduledJobStarted, CategoryAddonJob, "Scheduled Job Started", SeverityInfo, 0, false},
+	{ScheduledJobComplete, CategoryAddonJob, "Scheduled Job Complete", SeverityInfo, 0, true},
 	// SnapRAID
 	{GateFailed, CategorySnapRAID, "Gate Failed", SeverityWarning, 300, true},
 	{MaintenanceStarted, CategorySnapRAID, "Maintenance Started", SeverityInfo, 0, true},

@@ -1102,6 +1102,66 @@
     color: var(--text-secondary);
 }
 
+/* ─── Collapsible multi-line logs ─────────────────────────── */
+.log-msg-pre.log-collapsed {
+    display: none;
+}
+
+.log-collapsible {
+    width: 100%;
+}
+
+.log-collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 0;
+    font-family: inherit;
+    font-size: inherit;
+    width: 100%;
+    text-align: left;
+}
+
+.log-collapse-toggle:hover {
+    color: var(--text-primary);
+}
+
+.log-chevron {
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+    opacity: 0.6;
+}
+
+.log-msg-summary {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.log-line-count {
+    flex-shrink: 0;
+    font-size: 0.75em;
+    opacity: 0.5;
+    margin-left: auto;
+    padding-left: 8px;
+}
+
+.log-line-multiline {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.log-line-multiline .log-line-header {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
 .log-line.log-error .log-msg {
     color: #ffa0a0;
 }
