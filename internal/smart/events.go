@@ -85,7 +85,7 @@ func publishSmartHealthEvents(bus *events.Bus, driveData *agentsmart.DriveSmartD
 			Severity:     events.SeverityCritical,
 			Hostname:     driveData.Hostname,
 			SerialNumber: driveData.SerialNumber,
-			Message: fmt.Sprintf("SMART critical: %d issue(s) on %s (%s)",
+			Message: fmt.Sprintf("🔴 SMART critical: %d issue(s) on %s (%s)",
 				analysis.CriticalCount, driveData.SerialNumber, driveData.ModelName),
 			Metadata: map[string]string{
 				"model":          driveData.ModelName,
@@ -101,7 +101,7 @@ func publishSmartHealthEvents(bus *events.Bus, driveData *agentsmart.DriveSmartD
 			Severity:     events.SeverityWarning,
 			Hostname:     driveData.Hostname,
 			SerialNumber: driveData.SerialNumber,
-			Message: fmt.Sprintf("SMART warning: %d issue(s) on %s (%s)",
+			Message: fmt.Sprintf("⚠️ SMART warning: %d issue(s) on %s (%s)",
 				analysis.WarningCount, driveData.SerialNumber, driveData.ModelName),
 			Metadata: map[string]string{
 				"model":         driveData.ModelName,

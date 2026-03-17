@@ -398,16 +398,16 @@ func CheckTemperatureAndAlert(db *sql.DB, hostname, serial string, temperature i
 	if temperature >= criticalThreshold {
 		alertType = AlertTypeCritical
 		threshold = criticalThreshold
-		message = fmt.Sprintf("Temperature %d°C exceeds critical threshold (%d°C)", temperature, criticalThreshold)
+		message = fmt.Sprintf("🔴 Temperature %d°C exceeds critical threshold (%d°C)", temperature, criticalThreshold)
 	} else if temperature >= warningThreshold {
 		alertType = AlertTypeWarning
 		threshold = warningThreshold
-		message = fmt.Sprintf("Temperature %d°C exceeds warning threshold (%d°C)", temperature, warningThreshold)
+		message = fmt.Sprintf("⚠️ Temperature %d°C exceeds warning threshold (%d°C)", temperature, warningThreshold)
 	} else if state.InAlertState && recoveryEnabled {
 		// Temperature returned to normal - generate recovery alert
 		alertType = AlertTypeRecovery
 		threshold = warningThreshold
-		message = fmt.Sprintf("Temperature recovered to %d°C (below warning threshold %d°C)", temperature, warningThreshold)
+		message = fmt.Sprintf("✅ Temperature recovered to %d°C (below warning threshold %d°C)", temperature, warningThreshold)
 		state.InAlertState = false
 	} else {
 		// Normal temperature, no alert needed
