@@ -99,6 +99,9 @@ func main() {
 	}
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
+	if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
+		log.Printf("⚠️  Notification history purge: %v", err)
+	}
 
 	// Periodic session cleanup
 	go func() {
@@ -106,6 +109,9 @@ func main() {
 		for range ticker.C {
 			auth.CleanupExpiredSessions()
 			agents.CleanupExpiredAgentSessions(db.DB)
+			if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
+				log.Printf("⚠️  Notification history purge: %v", err)
+			}
 		}
 	}()
 

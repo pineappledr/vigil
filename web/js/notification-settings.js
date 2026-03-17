@@ -37,6 +37,7 @@ const NotificationSettings = {
         }
 
         container.innerHTML = this._buildView();
+        this.loadHistory();
     },
 
     async _ensureProviderDefs() {
@@ -84,7 +85,7 @@ const NotificationSettings = {
             <div class="notif-history-section">
                 <h3>Recent Notifications</h3>
                 <div id="notif-history">
-                    <button class="btn btn-secondary" onclick="NotificationSettings.loadHistory()">Load History</button>
+                    <div class="loading-spinner"><div class="spinner"></div></div>
                 </div>
             </div>
         `;
@@ -307,7 +308,7 @@ const NotificationSettings = {
             for (const m of this.eventTypeMeta) metaMap[m.type] = m;
         }
 
-        this.eventRules.forEach((rule, i) => {
+        this.eventRules.forEach((rule) => {
             const meta = metaMap[rule.event_type];
             const cat = meta ? meta.category : 'Other';
             if (cat === category) {
@@ -865,7 +866,9 @@ const NotificationSettings = {
         if (!dateStr) return '--';
         const d = new Date(dateStr);
         if (isNaN(d)) return '--';
-        return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+        const opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
+        if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+        return d.toLocaleString('en-US', opts);
     },
 
     _escape(str) {
