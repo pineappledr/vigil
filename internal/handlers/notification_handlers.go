@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"vigil/internal/db"
 	"vigil/internal/events"
@@ -381,6 +382,14 @@ func TestFireNotification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔔 Test fire sent via %s", svc.Name)
+	now := time.Now()
+	notify.RecordNotification(db.DB, &notify.NotificationRecord{ //nolint:errcheck
+		SettingID: svc.ID,
+		EventType: "test",
+		Message:   msg,
+		Status:    "sent",
+		SentAt:    now,
+	})
 	JSONResponse(w, map[string]interface{}{
 		"success": true,
 		"message": "Test notification sent",
