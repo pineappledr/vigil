@@ -865,7 +865,7 @@ const NotificationSettings = {
     _formatTime(dateStr) {
         if (!dateStr) return '--';
         const d = new Date(dateStr);
-        if (isNaN(d)) return '--';
+        if (isNaN(d) || d.getFullYear() < 2000) return '--';
         const opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
         if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
         return d.toLocaleString('en-US', opts);

@@ -255,7 +255,7 @@ func RecordNotification(db *sql.DB, rec *NotificationRecord) (int64, error) {
 
 // PurgeOldHistory deletes notification_history records older than the given number of days.
 func PurgeOldHistory(db *sql.DB, days int) error {
-	_, err := db.Exec(`DELETE FROM notification_history WHERE created_at < datetime('now', ?)`,
+	_, err := db.Exec(`DELETE FROM notification_history WHERE created_at < datetime('now', ?) OR created_at IS NULL`,
 		fmt.Sprintf("-%d days", days))
 	if err != nil {
 		return fmt.Errorf("purge notification history: %w", err)
@@ -271,6 +271,7 @@ func RecentHistory(db *sql.DB, limit int) ([]NotificationRecord, error) {
 		       message, status, COALESCE(error_message,''),
 		       COALESCE(sent_at,''), created_at
 		FROM notification_history
+		WHERE created_at IS NOT NULL
 		ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("recent history: %w", err)
