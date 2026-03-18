@@ -506,10 +506,6 @@ func RegisterNotificationRoutes(mux *http.ServeMux, protect func(http.HandlerFun
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
-func parseID(r *http.Request, name string) (int64, error) {
-	return strconv.ParseInt(r.PathValue(name), 10, 64)
-}
-
 // buildConfigJSON validates fields, builds the Shoutrrr URL, and returns
 // the combined JSON string for config_json storage.
 func buildConfigJSON(serviceType string, fields map[string]string) (string, error) {

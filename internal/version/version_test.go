@@ -81,9 +81,9 @@ func TestIsNewerVersion(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := IsNewerVersion(tt.current, tt.latest)
+		result := CompareVersions(tt.current, tt.latest) < 0
 		if result != tt.expected {
-			t.Errorf("IsNewerVersion(%q, %q) = %v, want %v", tt.current, tt.latest, result, tt.expected)
+			t.Errorf("CompareVersions(%q, %q) < 0 = %v, want %v", tt.current, tt.latest, result, tt.expected)
 		}
 	}
 }
@@ -111,7 +111,7 @@ func TestChecker_Check(t *testing.T) {
 	// Override the URL for testing (we'll need to modify the package for this)
 	// For now, we test the version comparison logic
 	t.Run("version comparison logic", func(t *testing.T) {
-		if !IsNewerVersion("1.0.0", "1.2.0") {
+		if CompareVersions("1.0.0", "1.2.0") >= 0 {
 			t.Error("Expected 1.2.0 to be newer than 1.0.0")
 		}
 	})
