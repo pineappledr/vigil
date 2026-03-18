@@ -600,14 +600,14 @@ func ExecuteAddonAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, sanitizedURL, strings.NewReader(string(dataBody)))
+	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, sanitizedURL, strings.NewReader(string(dataBody))) // #nosec G704 -- URL validated via buildAddonURL (scheme whitelist + ParseRequestURI)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
 	}
 	proxyReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := addonClient.Do(proxyReq) // #nosec G107 -- URL validated: scheme whitelisted, host from admin-registered addon
+	resp, err := addonClient.Do(proxyReq) // #nosec G107 G704 -- URL validated via buildAddonURL (scheme whitelist + ParseRequestURI)
 	if err != nil {
 		log.Printf("❌ Action proxy to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
@@ -691,7 +691,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		bodyReader = io.LimitReader(r.Body, 64*1024) // 64 KiB limit
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, bodyReader)
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, bodyReader) // #nosec G704 -- URL validated via buildAddonURL (scheme whitelist + ParseRequestURI)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
