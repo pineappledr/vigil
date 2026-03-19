@@ -227,6 +227,21 @@ const FormComponent = {
             select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
                 options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
             select.disabled = false;
+
+            // Auto-select: carry forward the page-level agent selection, or
+            // pick the only available agent so the user doesn't have to.
+            if (field.name === 'agent_id' && !select.value) {
+                const pageAgent = typeof ManifestRenderer !== 'undefined'
+                    ? ManifestRenderer.getSelectedAgentId() : '';
+                if (pageAgent && Array.from(select.options).some(o => o.value === pageAgent)) {
+                    select.value = pageAgent;
+                } else if (options.length === 1) {
+                    select.value = options[0].value;
+                }
+                if (select.value) {
+                    this._onInput(compId, 'agent_id');
+                }
+            }
         }
     },
 
