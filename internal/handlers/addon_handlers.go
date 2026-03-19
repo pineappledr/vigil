@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	stdpath "path"
 	"strings"
 	"time"
@@ -22,6 +23,12 @@ var TelemetryBroker *addons.TelemetryBroker
 
 // WebSocketHub is set from main.go during startup.
 var WebSocketHub *addons.WebSocketHub
+
+// addonClient is a shared HTTP client for outbound requests to add-ons.
+var addonClient = &http.Client{Timeout: 30 * time.Second}
+
+// registryClient is a shared HTTP client for container registry lookups.
+var registryClient = &http.Client{Timeout: 10 * time.Second}
 
 // ─── Add-on CRUD ─────────────────────────────────────────────────────────
 
@@ -580,23 +587,9 @@ func ExecuteAddonAction(w http.ResponseWriter, r *http.Request) {
 	delete(req.Data, "_password")
 	delete(req.Data, "confirm_destructive")
 
-	// Build target URL: addon.URL + "/api/" + action
-	baseURL, err := url.Parse(addon.URL)
-	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
-		JSONError(w, "invalid addon URL", http.StatusBadRequest)
-		return
-	}
-
-	targetPath := stdpath.Join(baseURL.Path, "/api/", req.Action)
-	proxyURL := url.URL{
-		Scheme: baseURL.Scheme,
-		Host:   baseURL.Host,
-		Path:   targetPath,
-	}
-
-	validatedTarget, err := url.ParseRequestURI(proxyURL.String())
+	sanitizedURL, err := buildAddonURL(addon.URL, "/api/"+req.Action, "")
 	if err != nil {
-		JSONError(w, "invalid proxy target URL", http.StatusBadRequest)
+		JSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -607,16 +600,14 @@ func ExecuteAddonAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sanitizedURL := validatedTarget.String()
-	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, sanitizedURL, strings.NewReader(string(dataBody)))
+	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, sanitizedURL, strings.NewReader(string(dataBody))) // #nosec G704 -- URL validated via buildAddonURL (scheme whitelist + ParseRequestURI)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
 	}
 	proxyReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(proxyReq) // #nosec G107 -- URL validated: scheme whitelisted, host from admin-registered addon
+	resp, err := addonClient.Do(proxyReq) // #nosec G107 G704 -- URL validated via buildAddonURL (scheme whitelist + ParseRequestURI)
 	if err != nil {
 		log.Printf("❌ Action proxy to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
@@ -668,16 +659,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the admin-registered addon base URL (trusted, not user-controlled).
-	baseURL, err := url.Parse(addon.URL)
-	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
-		JSONError(w, "invalid addon URL", http.StatusBadRequest)
-		return
-	}
-
-	// Validate and clean the user-supplied path, then construct the target
-	// URL entirely from trusted components to break the taint chain.
-	// Split off any query string before cleaning the path component.
+	// Validate and clean the user-supplied path, splitting off any query string.
 	pathPart := path
 	var queryPart string
 	if idx := strings.IndexByte(path, '?'); idx != -1 {
@@ -690,24 +672,9 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reconstruct from trusted base — only scheme, host, and base path
-	// come from the admin-registered addon URL (stored in DB).
-	proxyURL := url.URL{
-		Scheme:   baseURL.Scheme,
-		Host:     baseURL.Host,
-		Path:     stdpath.Join(baseURL.Path, cleanPath),
-		RawQuery: queryPart,
-	}
-
-	// Final structural validation via ParseRequestURI — ensures the
-	// assembled URL is well-formed and breaks the gosec taint chain.
-	validatedTarget, err := url.ParseRequestURI(proxyURL.String())
+	sanitizedURL, err := buildAddonURL(addon.URL, cleanPath, queryPart)
 	if err != nil {
-		JSONError(w, "invalid proxy target URL", http.StatusBadRequest)
-		return
-	}
-	if validatedTarget.Scheme != "http" && validatedTarget.Scheme != "https" {
-		JSONError(w, "proxy target must use http or https scheme", http.StatusBadRequest)
+		JSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -718,17 +685,13 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	// validatedTarget is constructed from the admin-registered addon URL
-	// (DB-stored, not user-controlled) with scheme strictly whitelisted.
-	sanitizedURL := validatedTarget.String()
-
 	// Forward request body for methods that carry a payload.
 	var bodyReader io.Reader
 	if r.Body != nil && (upstreamMethod == http.MethodPost || upstreamMethod == http.MethodPut || upstreamMethod == http.MethodPatch) {
 		bodyReader = io.LimitReader(r.Body, 64*1024) // 64 KiB limit
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, bodyReader)
+	req, err := http.NewRequestWithContext(r.Context(), upstreamMethod, sanitizedURL, bodyReader) // #nosec G704 -- URL validated via buildAddonURL (scheme whitelist + ParseRequestURI)
 	if err != nil {
 		JSONError(w, "failed to create proxy request", http.StatusInternalServerError)
 		return
@@ -737,8 +700,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
+	resp, err := addonClient.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
 		JSONError(w, "Failed to reach add-on", http.StatusBadGateway)
@@ -748,7 +710,7 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, io.LimitReader(resp.Body, 64*1024)) // 64 KiB limit
+	io.Copy(w, io.LimitReader(resp.Body, 2*1024*1024)) // 2 MiB limit
 }
 
 // ─── Update Check ────────────────────────────────────────────────────────
@@ -796,8 +758,15 @@ func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
 	// Find the latest semver tag.
 	latestTag := findLatestTag(tags)
 
+	// Compare against the addon's manifest version rather than the Docker
+	// tag, since most manifests reference ":latest" which would always
+	// differ from a semver tag.
+	currentVersion := strings.TrimPrefix(addon.Version, "v")
+	latestVersion := strings.TrimPrefix(latestTag, "v")
+	updateAvailable := latestTag != "" && latestVersion != currentVersion
+
 	JSONResponse(w, map[string]interface{}{
-		"update_available": latestTag != "" && latestTag != currentTag,
+		"update_available": updateAvailable,
 		"current_tag":      currentTag,
 		"latest_tag":       latestTag,
 		"image":            image,
@@ -880,21 +849,26 @@ func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
 		tagsURL = fmt.Sprintf("https://%s/v2/%s/tags/list", registry, repo)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tagsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	// For ghcr.io public images, anonymous access works with this Accept header.
 	req.Header.Set("Accept", "application/json")
+
+	// For ghcr.io private packages, use a GitHub token if available.
+	if strings.Contains(registry, "ghcr.io") {
+		if token := os.Getenv("GHCR_TOKEN"); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+	}
 
 	// For Docker Hub, we may need a token. Try anonymous first.
 	if strings.Contains(registry, "docker.io") || registry == "" {
 		// Get anonymous token for Docker Hub
 		tokenURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", repo)
 		tokenReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
-		tokenResp, err := client.Do(tokenReq)
+		tokenResp, err := registryClient.Do(tokenReq)
 		if err == nil {
 			defer tokenResp.Body.Close()
 			var tokenData struct {
@@ -906,7 +880,7 @@ func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
 		}
 	}
 
-	resp, err := client.Do(req)
+	resp, err := registryClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetching tags: %w", err)
 	}
@@ -1029,4 +1003,30 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	if WebSocketHub != nil {
 		mux.HandleFunc("GET /api/addons/ws", WebSocketHub.HandleConnection)
 	}
+}
+
+// buildAddonURL constructs a validated proxy URL from the addon's registered
+// base URL and the given API path. Returns an error if the base URL is
+// malformed or uses an unsupported scheme.
+func buildAddonURL(addonURL, apiPath, rawQuery string) (string, error) {
+	baseURL, err := url.Parse(addonURL)
+	if err != nil || (baseURL.Scheme != "http" && baseURL.Scheme != "https") {
+		return "", fmt.Errorf("invalid addon URL")
+	}
+
+	proxyURL := url.URL{
+		Scheme:   baseURL.Scheme,
+		Host:     baseURL.Host,
+		Path:     stdpath.Join(baseURL.Path, apiPath),
+		RawQuery: rawQuery,
+	}
+
+	validated, err := url.ParseRequestURI(proxyURL.String())
+	if err != nil {
+		return "", fmt.Errorf("invalid proxy target URL")
+	}
+	if validated.Scheme != "http" && validated.Scheme != "https" {
+		return "", fmt.Errorf("proxy target must use http or https scheme")
+	}
+	return validated.String(), nil
 }

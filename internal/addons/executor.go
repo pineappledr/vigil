@@ -155,7 +155,7 @@ func (e *Executor) validateActionInManifest(addon *Addon, action string) error {
 
 // ── Step 5: Parameter validation ─────────────────────────────────────────
 
-func (e *Executor) validateParams(action string, params json.RawMessage) error {
+func (e *Executor) validateParams(_ string, params json.RawMessage) error {
 	// Params are optional for some actions, but if provided must be valid JSON.
 	if len(params) == 0 || string(params) == "null" {
 		return nil

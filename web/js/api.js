@@ -211,6 +211,10 @@ const API = {
         return this.get('/api/notifications/providers');
     },
 
+    async getEventTypes() {
+        return this.get('/api/notifications/event-types');
+    },
+
     async getNotificationServices() {
         return this.get('/api/notifications/services');
     },
@@ -232,7 +236,7 @@ const API = {
     },
 
     async updateEventRules(serviceId, rules) {
-        return this.put(`/api/notifications/services/${serviceId}/rules`, { rules });
+        return this.put(`/api/notifications/services/${serviceId}/rules`, rules);
     },
 
     async updateQuietHours(serviceId, quietHours) {

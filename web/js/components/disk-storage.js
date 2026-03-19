@@ -122,7 +122,10 @@ const DiskStorageComponent = {
             }
         } catch (e) {
             console.error(`[DiskStorage] Failed to fetch for ${compId}:`, e);
-            this._showError(compId, 'Could not reach add-on — check that the add-on URL is reachable');
+            const msg = e instanceof SyntaxError
+                ? 'Invalid response from add-on (not JSON)'
+                : 'Could not reach add-on — check that the add-on URL is reachable';
+            this._showError(compId, msg);
         }
     },
 

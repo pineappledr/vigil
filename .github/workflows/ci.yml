@@ -306,7 +306,7 @@ jobs:
           build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.meta.outputs.branch }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.meta.outputs.branch }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${{ steps.meta.outputs.branch }}-${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -319,7 +319,7 @@ jobs:
           build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -332,7 +332,7 @@ jobs:
           build-args: VERSION=${{ steps.meta.outputs.version }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-debian
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-debian-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:dev-${{ steps.meta.outputs.branch }}-debian-${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -379,7 +379,7 @@ jobs:
           build-args: VERSION=latest-${{ steps.meta.outputs.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -394,7 +394,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:alpine
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:sha-${{ steps.meta.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -409,7 +409,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:debian
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:latest-debian
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:${{ github.sha }}-debian
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent:sha-${{ steps.meta.outputs.sha }}-debian
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -6,6 +6,7 @@ const Addons = {
     addons: [],
     tokens: [],
     activeAddonId: null,
+    _updateCache: {},  // keyed by addon ID → { update_available, latest_tag, checked_at }
 
     // ─── Data Fetching & Render ──────────────────────────────────────────
 
@@ -50,6 +51,11 @@ const Addons = {
                     : this._buildView();
             } catch (e) {
                 container.innerHTML = this._emptyState();
+            }
+
+            // Auto-check for updates on all online addons
+            if (!fetchError && this.addons.length > 0) {
+                this._checkAllUpdates();
             }
         }
     },
@@ -136,13 +142,14 @@ const Addons = {
         const online = this.addons.filter(a => a.status === 'online').length;
         const degraded = this.addons.filter(a => a.status === 'degraded').length;
         const offline = this.addons.filter(a => a.status === 'offline').length;
+        const updatesAvailable = Object.values(this._updateCache).filter(u => u.update_available).length;
 
         return `
             <div class="summary-grid">
                 ${Components.summaryCard({ icon: this._icons.addon, iconClass: 'blue', value: total, label: 'Total Add-ons' })}
                 ${Components.summaryCard({ icon: this._icons.check, iconClass: 'green', value: online, label: 'Online' })}
                 ${Components.summaryCard({ icon: this._icons.warning, iconClass: 'yellow', value: degraded, label: 'Degraded' })}
-                ${Components.summaryCard({ icon: this._icons.offline, iconClass: 'red', value: offline, label: 'Offline' })}
+                ${Components.summaryCard({ icon: this._icons.update, iconClass: updatesAvailable > 0 ? 'blue' : '', value: updatesAvailable, label: 'Updates', id: 'summary-updates' })}
             </div>
         `;
     },
@@ -154,6 +161,13 @@ const Addons = {
         const enabledLabel = addon.enabled ? 'Enabled' : 'Disabled';
         const enabledClass = addon.enabled ? 'enabled' : 'disabled';
         const urlMeta = addon.url ? `<span class="dot"></span><span>${this._escape(addon.url)}</span>` : '';
+
+        const cached = this._updateCache[addon.id];
+        const updateBadge = cached?.update_available
+            ? `<span class="addon-update-badge" title="Current: v${this._escape(addon.version)} → Latest: ${this._escape(cached.latest_tag)}">
+                   ${this._icons.updateArrow} ${this._escape(cached.latest_tag)} available
+               </span>`
+            : '';
 
         const token = this.tokens.find(t => t.used_by_addon_id === addon.id);
         const tokenRow = token ? `
@@ -182,6 +196,7 @@ const Addons = {
                             <h4>${this._escape(addon.name)}</h4>
                             <div class="addon-info-meta">
                                 <span>v${this._escape(addon.version)}</span>
+                                ${updateBadge}
                                 <span class="dot"></span>
                                 <span>Last seen ${lastSeen}</span>
                                 ${urlMeta}
@@ -652,6 +667,75 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         } catch {}
     },
 
+    // ─── Update Checking ────────────────────────────────────────────────
+
+    async _checkAllUpdates() {
+        const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+        const now = Date.now();
+
+        const toCheck = this.addons.filter(a => {
+            const cached = this._updateCache[a.id];
+            if (cached && (now - cached.checked_at) < CACHE_TTL) return false;
+            return true;
+        });
+
+        if (toCheck.length === 0) return;
+
+        const results = await Promise.allSettled(
+            toCheck.map(async (addon) => {
+                try {
+                    const resp = await this._fetch(`/api/addons/${addon.id}/check-updates`);
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    this._updateCache[addon.id] = {
+                        update_available: !!data.update_available,
+                        latest_tag: data.latest_tag || '',
+                        current_version: data.current_version || addon.version,
+                        image: data.image || '',
+                        checked_at: Date.now()
+                    };
+                } catch {
+                    // Silently skip failed checks
+                }
+            })
+        );
+
+        // Re-render cards to show update badges if we're still on the addons view
+        if (State.activeView !== 'addons') return;
+
+        // Update individual addon cards in-place
+        for (const addon of toCheck) {
+            const cached = this._updateCache[addon.id];
+            if (!cached?.update_available) continue;
+
+            const card = document.querySelector(`.addon-card[onclick*="openAddon(${addon.id})"]`);
+            if (!card) continue;
+
+            const meta = card.querySelector('.addon-info-meta');
+            if (meta && !meta.querySelector('.addon-update-badge')) {
+                const versionSpan = meta.querySelector('span');
+                if (versionSpan) {
+                    const badge = document.createElement('span');
+                    badge.className = 'addon-update-badge';
+                    badge.title = `Current: v${addon.version} → Latest: ${cached.latest_tag}`;
+                    badge.innerHTML = `${this._icons.updateArrow} ${this._escape(cached.latest_tag)} available`;
+                    versionSpan.after(badge);
+                }
+            }
+        }
+
+        // Update summary card count
+        const updatesCount = Object.values(this._updateCache).filter(u => u.update_available).length;
+        const summaryEl = document.getElementById('summary-updates');
+        if (summaryEl) {
+            const valueEl = summaryEl.querySelector('.summary-card-value');
+            if (valueEl) valueEl.textContent = updatesCount;
+            if (updatesCount > 0) {
+                summaryEl.closest('.summary-card')?.classList.add('blue');
+            }
+        }
+    },
+
     // ─── Clipboard (single implementation) ───────────────────────────────
 
     _copyInput(inputId) {
@@ -745,6 +829,8 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         toggleOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="8" cy="12" r="3"/></svg>`,
         copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
         eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
-        eyeOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+        eyeOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
+        update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+        updateArrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`
     }
 };

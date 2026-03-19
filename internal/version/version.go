@@ -56,6 +56,12 @@ const (
 	GitHubAPIURL       = "https://api.github.com/repos/%s/%s/releases/latest"
 )
 
+// Pre-compiled regexes for version parsing.
+var (
+	reDigits      = regexp.MustCompile(`(\d+)`)
+	reLeadDigits  = regexp.MustCompile(`^\d+`)
+)
+
 // NewChecker creates a new version checker
 func NewChecker(currentVersion, owner, repo string) *Checker {
 	return &Checker{
@@ -258,8 +264,7 @@ func parseVersion(v string) [4]int {
 		v = v[:idx]
 
 		// Extract prerelease number (e.g., "alpha.2" -> 2, "rc3" -> 3)
-		re := regexp.MustCompile(`(\d+)`)
-		if matches := re.FindStringSubmatch(prePart); len(matches) > 1 {
+		if matches := reDigits.FindStringSubmatch(prePart); len(matches) > 1 {
 			prerelease, _ = strconv.Atoi(matches[1])
 		}
 
@@ -282,7 +287,7 @@ func parseVersion(v string) [4]int {
 	parts := strings.Split(v, ".")
 	for i := 0; i < len(parts) && i < 3; i++ {
 		// Strip any non-numeric suffix
-		numStr := regexp.MustCompile(`^\d+`).FindString(parts[i])
+		numStr := reLeadDigits.FindString(parts[i])
 		if num, err := strconv.Atoi(numStr); err == nil {
 			result[i] = num
 		}
@@ -291,7 +296,3 @@ func parseVersion(v string) [4]int {
 	return result
 }
 
-// IsNewerVersion is a convenience function to check if latest is newer than current
-func IsNewerVersion(current, latest string) bool {
-	return CompareVersions(current, latest) < 0
-}

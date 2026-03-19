@@ -213,12 +213,30 @@ const LogViewerComponent = {
         const isMultiLine = payload.message && payload.message.includes('\n');
 
         if (isMultiLine) {
+            const lines = payload.message.split('\n');
+            const firstLine = lines[0] || '(output)';
+            const lineCount = lines.length;
+            const collapseId = `log-collapse-${compId}-${body.children.length}`;
+
             line.innerHTML = `
-                <span class="log-time">${timestamp}</span>
-                <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
-                ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
-                <pre class="log-msg log-msg-pre">${this._escape(payload.message)}</pre>
+                <div class="log-line-header">
+                    <span class="log-time">${timestamp}</span>
+                    <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
+                    ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
+                </div>
+                <div class="log-collapsible">
+                    <button class="log-collapse-toggle" onclick="LogViewerComponent._toggleCollapse('${collapseId}', this)"
+                            title="Click to expand/collapse">
+                        <svg class="log-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                        <span class="log-msg log-msg-summary">${this._escape(firstLine)}</span>
+                        <span class="log-line-count">${lineCount} lines</span>
+                    </button>
+                    <pre class="log-msg log-msg-pre log-collapsed" id="${collapseId}">${this._escape(payload.message)}</pre>
+                </div>
             `;
+            line.classList.add('log-line-multiline');
         } else {
             line.innerHTML = `
                 <span class="log-time">${timestamp}</span>
@@ -238,6 +256,16 @@ const LogViewerComponent = {
         // Auto-scroll
         if (viewer.autoScroll) {
             body.scrollTop = body.scrollHeight;
+        }
+    },
+
+    _toggleCollapse(id, btn) {
+        const pre = document.getElementById(id);
+        if (!pre) return;
+        const isCollapsed = pre.classList.toggle('log-collapsed');
+        const chevron = btn.querySelector('.log-chevron');
+        if (chevron) {
+            chevron.style.transform = isCollapsed ? '' : 'rotate(90deg)';
         }
     },
 

@@ -10,15 +10,16 @@ const Components = {
         hdd: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon hdd"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="3"/><line x1="14" y1="9" x2="18" y2="9"/><line x1="14" y1="12" x2="18" y2="12"/><line x1="14" y1="15" x2="18" y2="15"/></svg>`
     },
 
-    summaryCard({ icon, iconClass, value, label, onClick, active = false, title = '' }) {
+    summaryCard({ icon, iconClass, value, label, onClick, active = false, title = '', id = '' }) {
         const clickable = onClick ? 'clickable' : '';
         const activeClass = active ? 'active' : '';
         const onClickAttr = onClick ? `onclick="${onClick}"` : '';
-        
+        const idAttr = id ? `id="${id}"` : '';
+
         return `
-            <div class="summary-card ${clickable} ${activeClass}" ${onClickAttr} title="${title}">
+            <div class="summary-card ${clickable} ${activeClass}" ${onClickAttr} ${idAttr} title="${title}">
                 <div class="icon ${iconClass}">${icon}</div>
-                <div class="value">${value}</div>
+                <div class="summary-card-value value">${value}</div>
                 <div class="label">${label}</div>
             </div>
         `;

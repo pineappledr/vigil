@@ -750,6 +750,23 @@
     background: var(--success);
 }
 
+.progress-bar-fill.indeterminate {
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--accent-primary, #6366f1) 30%,
+        var(--accent-primary, #6366f1) 70%,
+        transparent 100%
+    );
+    background-size: 40% 100%;
+    animation: progress-indeterminate 1.8s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+    0%   { background-position: -40% 0; }
+    100% { background-position: 140% 0; }
+}
+
 .progress-percent {
     font-size: 0.8rem;
     font-weight: 600;
@@ -943,6 +960,65 @@
     font-weight: 600;
 }
 
+/* ── Pagination ─────────────────────────────── */
+
+.smart-table-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    gap: 12px;
+}
+
+.smart-table-pagination:empty {
+    display: none;
+}
+
+.smart-pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.smart-page-btn {
+    background: var(--bg-secondary, #161b22);
+    color: var(--text-secondary, #c9d1d9);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-family: var(--font-sans);
+}
+
+.smart-page-btn:hover:not(:disabled) {
+    background: var(--bg-hover, #1c2128);
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-page-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.smart-page-active {
+    background: var(--accent-primary, #58a6ff);
+    color: #fff;
+    border-color: var(--accent-primary, #58a6ff);
+}
+
+.smart-page-ellipsis {
+    padding: 0 4px;
+    color: var(--text-muted);
+}
+
+.smart-pagination-info {
+    white-space: nowrap;
+}
+
 /* ============================================
    LOG VIEWER COMPONENT
    ============================================ */
@@ -1026,7 +1102,7 @@
 }
 
 .log-viewer-body {
-    height: 300px;
+    height: 500px;
     overflow-y: auto;
     background: #0d1117;
     font-family: var(--font-mono);
@@ -1100,6 +1176,66 @@
     overflow-y: auto;
     width: 100%;
     color: var(--text-secondary);
+}
+
+/* ─── Collapsible multi-line logs ─────────────────────────── */
+.log-msg-pre.log-collapsed {
+    display: none;
+}
+
+.log-collapsible {
+    width: 100%;
+}
+
+.log-collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 0;
+    font-family: inherit;
+    font-size: inherit;
+    width: 100%;
+    text-align: left;
+}
+
+.log-collapse-toggle:hover {
+    color: var(--text-primary);
+}
+
+.log-chevron {
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+    opacity: 0.6;
+}
+
+.log-msg-summary {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.log-line-count {
+    flex-shrink: 0;
+    font-size: 0.75em;
+    opacity: 0.5;
+    margin-left: auto;
+    padding-left: 8px;
+}
+
+.log-line-multiline {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.log-line-multiline .log-line-header {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
 }
 
 .log-line.log-error .log-msg {

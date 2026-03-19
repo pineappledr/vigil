@@ -2,14 +2,6 @@ package models
 
 import "time"
 
-// DriveReport represents a report from an agent
-type DriveReport struct {
-	Hostname  string                   `json:"hostname"`
-	Timestamp time.Time                `json:"timestamp"`
-	Version   string                   `json:"agent_version"`
-	Drives    []map[string]interface{} `json:"drives"`
-}
-
 // ScanResult represents smartctl scan output
 type ScanResult struct {
 	Devices []Device `json:"devices"`

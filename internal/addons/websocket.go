@@ -45,6 +45,8 @@ type NotificationPayload struct {
 	EventType string `json:"event_type"` // maps to events.EventType
 	Severity  string `json:"severity"`   // info, warning, critical
 	Message   string `json:"message"`
+	Host      string `json:"host"`                    // hostname/agent ID from the addon
+	Timestamp string `json:"time"`                    // RFC3339 timestamp from the addon
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
@@ -328,6 +330,7 @@ func (h *WebSocketHub) handleNotification(addonID int64, raw json.RawMessage) {
 	h.bus.Publish(events.Event{
 		Type:     evtType,
 		Severity: severity,
+		Hostname: n.Host,
 		Message:  n.Message,
 		Metadata: metadata,
 	})

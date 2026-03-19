@@ -14,6 +14,8 @@ const ProgressComponent = {
     _compIds: {},    // keyed by compId → true (for container lookup)
     _addonId: null,  // parent add-on ID for proxy calls
     _tickTimer: null, // 1-second render ticker for live elapsed/ETA
+    _pollTimer: null, // periodic poll for active job updates
+    _pollCompId: null, // compId used for polling
 
     /**
      * @param {string} compId - Manifest component ID
@@ -41,6 +43,22 @@ const ProgressComponent = {
         return `<div class="progress-container" id="progress-${compId}" data-comp="${compId}">
                     <div class="progress-empty">${emptyText}</div>
                 </div>`;
+    },
+
+    /** Reset all state when switching addons to prevent cross-addon job leaking. */
+    clearAllJobs() {
+        this._jobs = {};
+        this._compIds = {};
+        this._addonId = null;
+        if (this._tickTimer) {
+            clearInterval(this._tickTimer);
+            this._tickTimer = null;
+        }
+        if (this._pollTimer) {
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this._pollCompId = null;
     },
 
     /** Re-render all tracked jobs into the container (e.g. after a page switch). */
@@ -74,33 +92,56 @@ const ProgressComponent = {
             if (!resp.ok) return;
 
             const jobs = await resp.json();
-            if (!Array.isArray(jobs) || jobs.length === 0) {
-                // Replace "Loading active jobs..." with "No active jobs"
+            if (!Array.isArray(jobs)) return;
+
+            // Reconcile: remove tracked jobs that are no longer active on the hub.
+            const activeIds = new Set(jobs.map(j => j.job_id).filter(Boolean));
+            for (const trackedId of Object.keys(this._jobs)) {
+                if (!activeIds.has(trackedId)) {
+                    this._removeJob(trackedId);
+                }
+            }
+
+            if (jobs.length === 0) {
+                // Show empty placeholder if nothing is running
                 const container = document.getElementById(`progress-${compId}`);
-                if (container) {
-                    const empty = container.querySelector('.progress-empty');
-                    if (empty) empty.textContent = 'No active jobs';
+                if (container && !container.querySelector('.progress-empty')) {
+                    const empty = document.createElement('div');
+                    empty.className = 'progress-empty';
+                    empty.textContent = 'No active jobs';
+                    container.appendChild(empty);
                 }
                 return;
             }
 
-            // Map ActiveJob telemetry fields to the ProgressPayload format
-            // expected by handleUpdate.
+            // The active jobs API returns ProgressPayload objects with the
+            // same shape that handleUpdate expects (job_id, command, phase,
+            // percent, elapsed_sec, etc.) — pass them through directly.
             for (const job of jobs) {
-                const elapsedSec = job.started_at
-                    ? Math.floor((Date.now() - new Date(job.started_at).getTime()) / 1000)
-                    : 0;
-                this.handleUpdate({
-                    job_id: job.type + '_' + (job.started_at || Date.now()),
-                    phase: job.current_phase || job.type,
-                    command: job.type,
-                    percent: job.progress_percent || 0,
-                    elapsed_sec: elapsedSec,
-                });
+                this.handleUpdate(job);
             }
+
+            // Start polling while jobs are active so progress updates even
+            // when the addon doesn't push SSE progress frames.
+            this._ensurePoll(compId);
         } catch (e) {
             console.error('[Progress] Failed to fetch active jobs:', e);
         }
+    },
+
+    /** Poll for active job updates every 3 seconds while jobs exist. */
+    _ensurePoll(compId) {
+        if (this._pollTimer) return;
+        this._pollCompId = compId;
+        this._pollTimer = setInterval(() => {
+            if (Object.keys(this._jobs).length === 0) {
+                clearInterval(this._pollTimer);
+                this._pollTimer = null;
+                this._pollCompId = null;
+                return;
+            }
+            this._fetchActiveJobs(this._pollCompId);
+        }, 3000);
     },
 
     /** Public refresh — re-fetches active jobs from the hub. */
@@ -131,6 +172,7 @@ const ProgressComponent = {
                 phaseOrder: [],
                 currentPhase: null,
                 command: payload.command || '',
+                indeterminate: !!payload.indeterminate,
                 startTime: now,
                 lastBytesSample: 0,
                 lastSampleTime: now,
@@ -145,6 +187,11 @@ const ProgressComponent = {
                 etaAnchor: now
             };
             this._jobs[jobId] = job;
+        }
+
+        // Update indeterminate flag (may change if server starts reporting progress)
+        if (payload.indeterminate !== undefined) {
+            job.indeterminate = !!payload.indeterminate;
         }
 
         // Track phase ordering
@@ -256,6 +303,7 @@ const ProgressComponent = {
         const current = job.phases[job.currentPhase] || {};
         const overallPct = this._overallPercent(job);
         const done = overallPct >= 100;
+        const isIndeterminate = job.indeterminate && !done;
 
         const cancelBtn = !done && this._addonId
             ? `<button class="btn-cancel-job" onclick="ProgressComponent.cancelJob('${this._escape(jobId)}')" title="Cancel job">
@@ -269,6 +317,11 @@ const ProgressComponent = {
         const liveEta = this._liveETA(job);
         const etaStr = liveEta > 0 ? this._formatDuration(liveEta) : '';
 
+        // Indeterminate jobs show a pulsing bar with "Running..." instead of 0.0%
+        const barFillClass = done ? 'complete' : (isIndeterminate ? 'indeterminate' : '');
+        const pctDisplay = isIndeterminate ? 'Running...' : `${overallPct.toFixed(1)}%`;
+        const barWidth = isIndeterminate ? '100' : String(overallPct);
+
         card.innerHTML = `
             <div class="progress-job-header">
                 <span class="progress-job-id">${this._escape(jobId)}</span>
@@ -281,9 +334,9 @@ const ProgressComponent = {
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar">
-                    <div class="progress-bar-fill ${done ? 'complete' : ''}" style="width: ${overallPct}%"></div>
+                    <div class="progress-bar-fill ${barFillClass}" style="width: ${barWidth}%"></div>
                 </div>
-                <span class="progress-percent">${overallPct.toFixed(1)}%</span>
+                <span class="progress-percent">${pctDisplay}</span>
             </div>
             ${current.message ? `<div class="progress-message">${this._escape(current.message)}</div>` : ''}
             <div class="progress-meta">
@@ -293,7 +346,7 @@ const ProgressComponent = {
                 <span class="progress-elapsed">${elapsedStr}</span>
             </div>
             <div class="progress-phases">
-                ${job.phaseOrder.map(name => this._phaseChip(name, job.phases[name], job.currentPhase)).join('')}
+                ${job.phaseOrder.map(name => this._phaseChip(name, job.phases[name], job.currentPhase, isIndeterminate)).join('')}
             </div>
         `;
     },
@@ -323,7 +376,9 @@ const ProgressComponent = {
         try {
             const path = `/api/jobs/${encodeURIComponent(jobId)}`;
             const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}&method=DELETE`);
-            if (resp.ok) {
+            if (resp.ok || resp.status === 404) {
+                // Remove locally — 404 means the job doesn't exist on the
+                // hub (stale/ghost entry), so just clean up the UI.
                 this._removeJob(jobId);
             } else {
                 const data = await resp.json().catch(() => ({}));
@@ -352,15 +407,18 @@ const ProgressComponent = {
         }
     },
 
-    _phaseChip(name, phase, currentPhase) {
+    _phaseChip(name, phase, currentPhase, indeterminate) {
         let status = 'pending';
         if (phase.percent >= 100) status = 'complete';
         else if (name === currentPhase) status = 'active';
 
+        const pctLabel = (indeterminate && phase.percent === 0 && name === currentPhase)
+            ? '' : `${phase.percent.toFixed(0)}%`;
+
         return `<div class="progress-phase ${status}">
                     <span class="progress-phase-dot"></span>
                     <span class="progress-phase-name">${this._escape(name)}</span>
-                    <span class="progress-phase-pct">${phase.percent.toFixed(0)}%</span>
+                    <span class="progress-phase-pct">${pctLabel}</span>
                 </div>`;
     },
 

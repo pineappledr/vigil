@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"vigil/internal/auth"
 	"vigil/internal/events"
@@ -34,4 +35,9 @@ func GetSessionFromContext(r *http.Request) *models.Session {
 		return session
 	}
 	return nil
+}
+
+// parseID extracts a numeric path parameter by name.
+func parseID(r *http.Request, name string) (int64, error) {
+	return strconv.ParseInt(r.PathValue(name), 10, 64)
 }
