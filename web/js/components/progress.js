@@ -14,6 +14,8 @@ const ProgressComponent = {
     _compIds: {},    // keyed by compId → true (for container lookup)
     _addonId: null,  // parent add-on ID for proxy calls
     _tickTimer: null, // 1-second render ticker for live elapsed/ETA
+    _pollTimer: null, // periodic poll for active job updates
+    _pollCompId: null, // compId used for polling
 
     /**
      * @param {string} compId - Manifest component ID
@@ -52,6 +54,11 @@ const ProgressComponent = {
             clearInterval(this._tickTimer);
             this._tickTimer = null;
         }
+        if (this._pollTimer) {
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this._pollCompId = null;
     },
 
     /** Re-render all tracked jobs into the container (e.g. after a page switch). */
@@ -113,9 +120,28 @@ const ProgressComponent = {
             for (const job of jobs) {
                 this.handleUpdate(job);
             }
+
+            // Start polling while jobs are active so progress updates even
+            // when the addon doesn't push SSE progress frames.
+            this._ensurePoll(compId);
         } catch (e) {
             console.error('[Progress] Failed to fetch active jobs:', e);
         }
+    },
+
+    /** Poll for active job updates every 3 seconds while jobs exist. */
+    _ensurePoll(compId) {
+        if (this._pollTimer) return;
+        this._pollCompId = compId;
+        this._pollTimer = setInterval(() => {
+            if (Object.keys(this._jobs).length === 0) {
+                clearInterval(this._pollTimer);
+                this._pollTimer = null;
+                this._pollCompId = null;
+                return;
+            }
+            this._fetchActiveJobs(this._pollCompId);
+        }, 3000);
     },
 
     /** Public refresh — re-fetches active jobs from the hub. */
