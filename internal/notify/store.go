@@ -342,8 +342,20 @@ func scanServiceRow(s scannable) (NotificationService, error) {
 }
 
 func parseTime(s string) time.Time {
-	t, _ := time.Parse(timeFormat, s)
-	return t
+	if s == "" {
+		return time.Time{}
+	}
+	for _, fmt := range []string{
+		timeFormat,              // "2006-01-02 15:04:05"
+		time.RFC3339,            // "2006-01-02T15:04:05Z07:00"
+		"2006-01-02T15:04:05Z",  // strict UTC variant
+		"2006-01-02 15:04:05-07:00",
+	} {
+		if t, err := time.Parse(fmt, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }
 
 func boolInt(b bool) int {
