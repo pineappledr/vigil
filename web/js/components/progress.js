@@ -172,6 +172,7 @@ const ProgressComponent = {
                 phaseOrder: [],
                 currentPhase: null,
                 command: payload.command || '',
+                indeterminate: !!payload.indeterminate,
                 startTime: now,
                 lastBytesSample: 0,
                 lastSampleTime: now,
@@ -186,6 +187,11 @@ const ProgressComponent = {
                 etaAnchor: now
             };
             this._jobs[jobId] = job;
+        }
+
+        // Update indeterminate flag (may change if server starts reporting progress)
+        if (payload.indeterminate !== undefined) {
+            job.indeterminate = !!payload.indeterminate;
         }
 
         // Track phase ordering
@@ -297,6 +303,7 @@ const ProgressComponent = {
         const current = job.phases[job.currentPhase] || {};
         const overallPct = this._overallPercent(job);
         const done = overallPct >= 100;
+        const isIndeterminate = job.indeterminate && !done;
 
         const cancelBtn = !done && this._addonId
             ? `<button class="btn-cancel-job" onclick="ProgressComponent.cancelJob('${this._escape(jobId)}')" title="Cancel job">
@@ -310,6 +317,11 @@ const ProgressComponent = {
         const liveEta = this._liveETA(job);
         const etaStr = liveEta > 0 ? this._formatDuration(liveEta) : '';
 
+        // Indeterminate jobs show a pulsing bar with "Running..." instead of 0.0%
+        const barFillClass = done ? 'complete' : (isIndeterminate ? 'indeterminate' : '');
+        const pctDisplay = isIndeterminate ? 'Running...' : `${overallPct.toFixed(1)}%`;
+        const barWidth = isIndeterminate ? '100' : String(overallPct);
+
         card.innerHTML = `
             <div class="progress-job-header">
                 <span class="progress-job-id">${this._escape(jobId)}</span>
@@ -322,9 +334,9 @@ const ProgressComponent = {
             </div>
             <div class="progress-bar-container">
                 <div class="progress-bar">
-                    <div class="progress-bar-fill ${done ? 'complete' : ''}" style="width: ${overallPct}%"></div>
+                    <div class="progress-bar-fill ${barFillClass}" style="width: ${barWidth}%"></div>
                 </div>
-                <span class="progress-percent">${overallPct.toFixed(1)}%</span>
+                <span class="progress-percent">${pctDisplay}</span>
             </div>
             ${current.message ? `<div class="progress-message">${this._escape(current.message)}</div>` : ''}
             <div class="progress-meta">
@@ -334,7 +346,7 @@ const ProgressComponent = {
                 <span class="progress-elapsed">${elapsedStr}</span>
             </div>
             <div class="progress-phases">
-                ${job.phaseOrder.map(name => this._phaseChip(name, job.phases[name], job.currentPhase)).join('')}
+                ${job.phaseOrder.map(name => this._phaseChip(name, job.phases[name], job.currentPhase, isIndeterminate)).join('')}
             </div>
         `;
     },
@@ -395,15 +407,18 @@ const ProgressComponent = {
         }
     },
 
-    _phaseChip(name, phase, currentPhase) {
+    _phaseChip(name, phase, currentPhase, indeterminate) {
         let status = 'pending';
         if (phase.percent >= 100) status = 'complete';
         else if (name === currentPhase) status = 'active';
 
+        const pctLabel = (indeterminate && phase.percent === 0 && name === currentPhase)
+            ? '' : `${phase.percent.toFixed(0)}%`;
+
         return `<div class="progress-phase ${status}">
                     <span class="progress-phase-dot"></span>
                     <span class="progress-phase-name">${this._escape(name)}</span>
-                    <span class="progress-phase-pct">${phase.percent.toFixed(0)}%</span>
+                    <span class="progress-phase-pct">${pctLabel}</span>
                 </div>`;
     },
 

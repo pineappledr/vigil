@@ -750,6 +750,23 @@
     background: var(--success);
 }
 
+.progress-bar-fill.indeterminate {
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--accent-primary, #6366f1) 30%,
+        var(--accent-primary, #6366f1) 70%,
+        transparent 100%
+    );
+    background-size: 40% 100%;
+    animation: progress-indeterminate 1.8s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+    0%   { background-position: -40% 0; }
+    100% { background-position: 140% 0; }
+}
+
 .progress-percent {
     font-size: 0.8rem;
     font-weight: 600;
