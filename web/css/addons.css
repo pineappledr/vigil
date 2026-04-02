@@ -1959,3 +1959,12 @@
         padding: 10px 12px;
     }
 }
+
+.smart-row-clickable {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.smart-row-clickable:hover {
+    background: var(--bg-hover);
+}

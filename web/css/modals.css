@@ -585,3 +585,67 @@
 .zfs-state-badge.online { background: rgba(0, 200, 100, 0.2); color: #00c864; }
 .zfs-state-badge.degraded { background: rgba(255, 200, 0, 0.2); color: #ffc800; }
 .zfs-state-badge.faulted { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
+/* ─── Job Detail Modal ───────────────────────────────────────────────────── */
+
+.modal-job-detail {
+    width: 700px;
+    max-width: 95vw;
+}
+
+.job-detail-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    margin-bottom: 20px;
+}
+
+.job-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.job-detail-row span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.job-detail-row strong {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.status-success { color: var(--success); }
+.status-error, .status-failed { color: var(--danger, #ef4444); }
+.status-warn, .status-warning { color: var(--warning); }
+
+.job-detail-output-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.job-detail-output-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.job-detail-output {
+    background: var(--bg-base, #0d0d0d);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 420px;
+    overflow-y: auto;
+    margin: 0;
+}
