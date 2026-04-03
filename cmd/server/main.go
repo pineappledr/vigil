@@ -260,6 +260,10 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// ─── Notification Endpoints ──────────────────────────────────────────
 	handlers.RegisterNotificationRoutes(mux, protect)
 
+	// ─── Health & Reports Endpoints ──────────────────────────────────────
+	mux.HandleFunc("GET /api/health/score", protect(handlers.GetHealthScore))
+	mux.HandleFunc("GET /api/reports/health", protect(handlers.GetHealthReport))
+
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))
 

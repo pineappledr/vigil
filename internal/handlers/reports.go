@@ -65,7 +65,7 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Process SMART-based wearout calculations
-	wearout.ProcessWearoutFromReport(db.DB, hostname, payload)
+	wearout.ProcessWearoutFromReport(db.DB, EventBus, hostname, payload)
 
 	// Process SMART health analysis with event publishing
 	smart.ProcessReportWithEvents(db.DB, EventBus, hostname, payload)

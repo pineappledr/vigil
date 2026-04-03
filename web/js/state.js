@@ -14,6 +14,7 @@ const State = {
     zfsPools: [],
     zfsDriveMap: {},
     wearoutMap: {},
+    healthScore: null,
     activeView: 'drives',
     serverSortOrder: 'asc',
 
