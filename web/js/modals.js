@@ -582,6 +582,65 @@ volumes:
         if (typeof Agents !== 'undefined' && Agents.render) Agents.render();
     },
 
+    async showJobDetail(addonId, jobId) {
+        const modal = this.create(`
+            <div class="modal modal-job-detail">
+                <div class="modal-header">
+                    <h3>Job Detail</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="job-detail-content"><p class="modal-message">Loading...</p></div>
+                </div>
+            </div>
+        `);
+
+        try {
+            const path = `/api/jobs/${jobId}`;
+            const resp = await fetch(`/api/addons/${addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) {
+                document.getElementById('job-detail-content').innerHTML = `<p class="form-error">Failed to load job (HTTP ${resp.status})</p>`;
+                return;
+            }
+            const job = await resp.json();
+
+            const started = job.started_at ? new Date(job.started_at).toLocaleString() : '—';
+            const finished = job.finished_at ? new Date(job.finished_at).toLocaleString() : '—';
+            const duration = (job.started_at && job.finished_at)
+                ? Math.round((new Date(job.finished_at) - new Date(job.started_at)) / 1000) + 's'
+                : '—';
+            const exitCode = job.exit_code != null ? job.exit_code : '—';
+            const statusClass = job.status === 'success' ? 'success' : (job.status === 'error' || job.status === 'failed' ? 'error' : 'warn');
+            const output = job.output_log
+                ? `<pre class="job-detail-output">${Utils.escapeHtml(job.output_log)}</pre>`
+                : `<p class="form-hint">No output recorded.</p>`;
+
+            document.getElementById('job-detail-content').innerHTML = `
+                <div class="job-detail-meta">
+                    <div class="job-detail-row"><span>Type</span><strong>${Utils.escapeHtml(job.job_type)}</strong></div>
+                    <div class="job-detail-row"><span>Trigger</span><strong>${Utils.escapeHtml(job.trigger)}</strong></div>
+                    <div class="job-detail-row"><span>Status</span><strong class="status-${statusClass}">${Utils.escapeHtml(job.status)}</strong></div>
+                    <div class="job-detail-row"><span>Exit Code</span><strong>${exitCode}</strong></div>
+                    <div class="job-detail-row"><span>Started</span><strong>${started}</strong></div>
+                    <div class="job-detail-row"><span>Finished</span><strong>${finished}</strong></div>
+                    <div class="job-detail-row"><span>Duration</span><strong>${duration}</strong></div>
+                </div>
+                <div class="job-detail-output-section">
+                    <div class="job-detail-output-label">Output</div>
+                    ${output}
+                </div>
+            `;
+        } catch (e) {
+            const el = document.getElementById('job-detail-content');
+            if (el) el.innerHTML = `<p class="form-error">Could not load job detail.</p>`;
+        }
+    },
+
     validatePassword(newPassword, confirmPassword, currentPassword = null) {
         if (newPassword !== confirmPassword) {
             return 'New passwords do not match';

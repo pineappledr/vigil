@@ -249,6 +249,45 @@ func TestDispatcherRecordsFailure(t *testing.T) {
 	}
 }
 
+func TestDispatcherExplicitRuleBypassesSeverityFilter(t *testing.T) {
+	db, bus, sender, d := setupDispatcherTest(t)
+
+	// Service only notifies on critical/warning, NOT healthy (info).
+	// But an explicit enabled rule for maintenance_complete should bypass this.
+	svcID, _ := CreateService(db, &NotificationService{
+		Name:             "explicit-rule-test",
+		ServiceType:      "generic",
+		ConfigJSON:       `{"shoutrrr_url":"generic://example.com"}`,
+		Enabled:          true,
+		NotifyOnCritical: true,
+		NotifyOnWarning:  true,
+		NotifyOnHealthy:  false,
+	})
+
+	UpsertEventRule(db, &EventRule{
+		ServiceID: svcID,
+		EventType: "maintenance_complete",
+		Enabled:   true,
+		Cooldown:  0,
+	})
+
+	d.Start()
+	defer d.Stop()
+
+	bus.Publish(events.Event{
+		Type:     events.MaintenanceComplete,
+		Severity: events.SeverityInfo,
+		Hostname: "jarvis",
+		Message:  "✅ Maintenance pipeline completed successfully",
+	})
+
+	time.Sleep(100 * time.Millisecond)
+
+	if sender.callCount() != 1 {
+		t.Errorf("expected 1 send (explicit rule bypasses severity filter), got %d", sender.callCount())
+	}
+}
+
 func TestFormatMessage(t *testing.T) {
 	tests := []struct {
 		name string

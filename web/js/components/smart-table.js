@@ -407,8 +407,12 @@ const SmartTableComponent = {
             displayRows = sorted.slice(start, start + entry.pageSize);
         }
 
+        const isJobHistory = entry.config.source === 'job_history';
         tbody.innerHTML = displayRows.map(row => {
-            return `<tr>${entry.columns.map(col => {
+            const clickAttr = isJobHistory && row.id
+                ? ` class="smart-row-clickable" onclick="Modals.showJobDetail(${entry.addonId}, ${row.id})"`
+                : '';
+            return `<tr${clickAttr}>${entry.columns.map(col => {
                 const val = row[col.key];
                 return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
