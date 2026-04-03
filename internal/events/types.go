@@ -85,18 +85,18 @@ var AllEventTypes = []EventType{
 // AllEventTypeMeta provides enriched metadata for every known event type.
 var AllEventTypeMeta = []EventTypeMeta{
 	// Monitoring
-	{SmartWarning, CategoryMonitoring, "SMART Warning", SeverityWarning, 300, true},
-	{SmartCritical, CategoryMonitoring, "SMART Critical", SeverityCritical, 0, true},
+	{SmartWarning, CategoryMonitoring, "SMART Warning", SeverityWarning, 86400, true},
+	{SmartCritical, CategoryMonitoring, "SMART Critical", SeverityCritical, 86400, true},
 	{TempAlert, CategoryMonitoring, "Temperature Alert", SeverityWarning, 600, true},
-	{TempCritical, CategoryMonitoring, "Temperature Critical", SeverityCritical, 0, true},
-	{ZFSPoolDegraded, CategoryMonitoring, "ZFS Pool Degraded", SeverityWarning, 300, true},
-	{ZFSPoolFaulted, CategoryMonitoring, "ZFS Pool Faulted", SeverityCritical, 0, true},
-	{ZFSDeviceFailed, CategoryMonitoring, "ZFS Device Failed", SeverityCritical, 0, true},
+	{TempCritical, CategoryMonitoring, "Temperature Critical", SeverityCritical, 3600, true},
+	{ZFSPoolDegraded, CategoryMonitoring, "ZFS Pool Degraded", SeverityWarning, 86400, true},
+	{ZFSPoolFaulted, CategoryMonitoring, "ZFS Pool Faulted", SeverityCritical, 86400, true},
+	{ZFSDeviceFailed, CategoryMonitoring, "ZFS Device Failed", SeverityCritical, 86400, true},
 	{DriveAppeared, CategoryMonitoring, "Drive Appeared", SeverityInfo, 0, true},
 	{DriveDisappeared, CategoryMonitoring, "Drive Disappeared", SeverityWarning, 0, true},
-	{ReallocatedSectors, CategoryMonitoring, "Reallocated Sectors", SeverityWarning, 300, true},
+	{ReallocatedSectors, CategoryMonitoring, "Reallocated Sectors", SeverityWarning, 86400, true},
 	{WearoutWarning, CategoryMonitoring, "Wearout Warning", SeverityWarning, 86400, true},
-	{WearoutCritical, CategoryMonitoring, "Wearout Critical", SeverityCritical, 0, true},
+	{WearoutCritical, CategoryMonitoring, "Wearout Critical", SeverityCritical, 86400, true},
 	{WearoutPredicted, CategoryMonitoring, "Failure Predicted", SeverityWarning, 604800, true},
 	// Add-on / Job
 	{JobStarted, CategoryAddonJob, "Job Started", SeverityInfo, 0, true},

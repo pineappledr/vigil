@@ -58,6 +58,33 @@ func Migrate(db *sql.DB) error {
 		log.Printf("  ✓ %s", s.label)
 	}
 
+	// Fix existing rules that have cooldown=0 for monitoring events that
+	// should have a non-zero cooldown. Without this, previously-created
+	// services keep spamming because the cooldown was never set.
+	cooldownFixes := map[string]int{
+		"smart_warning":      86400,
+		"smart_critical":     86400,
+		"temp_critical":      3600,
+		"zfs_pool_degraded":  86400,
+		"zfs_pool_faulted":   86400,
+		"zfs_device_failed":  86400,
+		"reallocated_sectors": 86400,
+		"wearout_warning":    86400,
+		"wearout_critical":   86400,
+		"wearout_predicted":  604800,
+	}
+	for eventType, cooldown := range cooldownFixes {
+		_, err := db.Exec(`
+			UPDATE notification_event_rules
+			SET cooldown_secs = ?
+			WHERE event_type = ? AND cooldown_secs = 0`,
+			cooldown, eventType)
+		if err != nil {
+			log.Printf("  ⚠️  fix cooldown for %s: %v", eventType, err)
+		}
+	}
+	log.Printf("  ✓ monitoring cooldowns backfilled")
+
 	log.Println("🔔 Migration completed: Notification extensions ready")
 	return nil
 }
