@@ -109,11 +109,14 @@ func (d *Dispatcher) handle(e events.Event) {
 	}
 
 	for _, svc := range services {
-		if !d.severityAllowed(svc, e.Severity) {
+		allowed, explicit := d.eventRuleAllowed(svc.ID, e)
+		if !allowed {
 			continue
 		}
 
-		if !d.eventRuleAllowed(svc.ID, e) {
+		// An explicitly enabled event rule bypasses the service-level severity
+		// filter. If no explicit rule exists, apply the severity filter.
+		if !explicit && !d.severityAllowed(svc, e.Severity) {
 			continue
 		}
 
@@ -140,16 +143,20 @@ func (d *Dispatcher) severityAllowed(svc NotificationService, sev events.Severit
 }
 
 // eventRuleAllowed checks per-event-type rules and enforces cooldowns.
-func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) bool {
+// Returns (allowed, explicit) where explicit is true when a DB rule for this
+// event type exists and is enabled. An explicit rule bypasses the service-level
+// severity filter in handle(), allowing specific event types to fire regardless
+// of the global Critical/Warning/Healthy threshold.
+func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed bool, explicit bool) {
 	rules, err := GetEventRules(d.db, serviceID)
 	if err != nil {
 		log.Printf("notify: get rules for service %d: %v", serviceID, err)
-		return true // fail open — if rules can't load, allow
+		return true, false // fail open — if rules can't load, allow
 	}
 
-	// If no rules are configured, allow all events.
+	// If no rules are configured, allow all events (severity filter still applies).
 	if len(rules) == 0 {
-		return true
+		return true, false
 	}
 
 	for _, r := range rules {
@@ -157,7 +164,7 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) bool {
 			continue
 		}
 		if !r.Enabled {
-			return false
+			return false, true
 		}
 
 		// Cooldown check
@@ -168,17 +175,17 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) bool {
 			now := time.Now()
 			if ok && now.Sub(last) < time.Duration(r.Cooldown)*time.Second {
 				d.mu.Unlock()
-				return false
+				return false, true
 			}
 			d.cooldowns[key] = now
 			d.mu.Unlock()
 		}
 
-		return true
+		return true, true
 	}
 
-	// Event type not in rules list — allow by default.
-	return true
+	// Event type not in rules list — allow by default, not explicit.
+	return true, false
 }
 
 // inQuietHours returns true if the event should be suppressed.
