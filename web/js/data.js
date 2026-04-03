@@ -7,17 +7,21 @@ const Data = {
         let dataLoaded = false;
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthScoreResponse] = await Promise.all([
-                API.getHistory(),
+                API.getHistory().catch(() => null),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
                 API.get('/api/health/score').catch(() => null)
             ]);
 
-            if (!historyResponse.ok) {
-                throw new Error(`HTTP ${historyResponse.status}`);
+            // History is the critical path — parse with its own guard so a
+            // truncated response or network blip doesn't nuke the whole cycle.
+            if (historyResponse && historyResponse.ok) {
+                try {
+                    State.data = await historyResponse.json() || [];
+                } catch (e) {
+                    console.error('[Data] History parse error:', e);
+                }
             }
-
-            State.data = await historyResponse.json() || [];
             State.resolveActiveServer();
 
             if (zfsResponse && zfsResponse.ok) {

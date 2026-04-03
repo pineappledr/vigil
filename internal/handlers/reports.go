@@ -49,34 +49,16 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update agent status: by ID (fast path) and by hostname (authoritative sync).
-	// The hostname-based update covers edge cases where the session's agent_id
-	// doesn't match the current agent_registry row (e.g., after re-registration).
-	if err := agents.UpdateAgentLastSeen(db.DB, session.AgentID); err != nil {
-		log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", session.AgentID, err)
-	}
-	if err := agents.UpdateAgentLastSeenByHostname(db.DB, hostname); err != nil {
-		log.Printf("⚠️  Failed to update agent status by hostname %s: %v", hostname, err)
-	}
-
+	// Count drives and pools for logging before responding.
 	driveCount := 0
 	if drives, ok := payload["drives"].([]interface{}); ok {
 		driveCount = len(drives)
 	}
-
-	// Process SMART-based wearout calculations
-	wearout.ProcessWearoutFromReport(db.DB, EventBus, hostname, payload)
-
-	// Process SMART health analysis with event publishing
-	smart.ProcessReportWithEvents(db.DB, EventBus, hostname, payload)
-
-	// Process ZFS data if present
 	poolCount := 0
 	if zfsData, ok := payload["zfs"].(map[string]interface{}); ok {
 		if pools, ok := zfsData["pools"].([]interface{}); ok {
 			poolCount = len(pools)
 		}
-		ProcessZFSFromReport(hostname, payload)
 	}
 
 	if poolCount > 0 {
@@ -84,7 +66,35 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("💾 Report: %s (%d drives)", hostname, driveCount)
 	}
+
+	// Respond immediately — heavy DB processing runs in the background so
+	// the report handler doesn't hold SQLite write locks for 10-30 s and
+	// starve the dashboard's read queries (/api/history, /api/health/score).
 	JSONResponse(w, map[string]string{"status": "ok"})
+
+	// Background: agent status, SMART, wearout, ZFS processing.
+	agentID := session.AgentID
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("⚠️  Report background processing panic for %s: %v", hostname, r)
+			}
+		}()
+
+		if err := agents.UpdateAgentLastSeen(db.DB, agentID); err != nil {
+			log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", agentID, err)
+		}
+		if err := agents.UpdateAgentLastSeenByHostname(db.DB, hostname); err != nil {
+			log.Printf("⚠️  Failed to update agent status by hostname %s: %v", hostname, err)
+		}
+
+		wearout.ProcessWearoutFromReport(db.DB, EventBus, hostname, payload)
+		smart.ProcessReportWithEvents(db.DB, EventBus, hostname, payload)
+
+		if _, ok := payload["zfs"].(map[string]interface{}); ok {
+			ProcessZFSFromReport(hostname, payload)
+		}
+	}()
 }
 
 // History returns latest reports for all hosts with aliases
