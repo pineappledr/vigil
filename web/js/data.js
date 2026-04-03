@@ -4,85 +4,52 @@
 
 const Data = {
     async fetch() {
-        let historyOk = false;
-
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthScoreResponse] = await Promise.all([
-                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); return null; }),
+                API.getHistory(),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
                 API.get('/api/health/score').catch(() => null)
             ]);
 
-            // ── History (critical path) ──────────────────────────────────
-            if (historyResponse && historyResponse.ok) {
-                try {
-                    const parsed = await historyResponse.json();
-                    if (Array.isArray(parsed)) {
-                        State.data = parsed;
-                        historyOk = true;
-                    } else {
-                        console.warn('[Data] History response is not an array:', typeof parsed);
-                    }
-                } catch (e) {
-                    console.error('[Data] History parse error:', e);
-                }
-            } else if (historyResponse) {
-                console.warn('[Data] History HTTP', historyResponse.status);
+            if (!historyResponse.ok) {
+                throw new Error(`HTTP ${historyResponse.status}`);
             }
+
+            State.data = await historyResponse.json() || [];
             State.resolveActiveServer();
 
-            // ── ZFS ──────────────────────────────────────────────────────
             if (zfsResponse && zfsResponse.ok) {
-                try {
-                    State.zfsPools = await zfsResponse.json() || [];
-                    State.buildZFSDriveMap();
-                } catch (e) {
-                    console.error('[Data] ZFS parse error:', e);
-                    State.zfsPools = [];
-                    State.zfsDriveMap = {};
-                }
+                State.zfsPools = await zfsResponse.json() || [];
+                State.buildZFSDriveMap();
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
             }
 
-            // ── Wearout ──────────────────────────────────────────────────
             if (wearoutResponse && wearoutResponse.ok) {
-                try {
-                    const wData = await wearoutResponse.json();
-                    State.buildWearoutMap(wData?.drives);
-                } catch (e) {
-                    console.error('[Data] Wearout parse error:', e);
-                    State.wearoutMap = {};
-                }
+                const wData = await wearoutResponse.json();
+                State.buildWearoutMap(wData?.drives);
             } else {
                 State.wearoutMap = {};
             }
 
-            // ── Health Score ─────────────────────────────────────────────
             if (healthScoreResponse && healthScoreResponse.ok) {
-                try {
-                    State.healthScore = await healthScoreResponse.json();
-                } catch (e) {
-                    console.error('[Data] Health score parse error:', e);
-                    State.healthScore = null;
-                }
+                State.healthScore = await healthScoreResponse.json();
             } else {
                 State.healthScore = null;
             }
-        } catch (error) {
-            // Should never reach here — every await is individually guarded.
-            console.error('[Data] Unexpected fetch error:', error);
-        }
 
-        // Online = we got a valid history response with data.
-        // If history failed but we have stale data, still render it.
-        this.setOnlineStatus(historyOk || State.data.length > 0);
-        this.updateLastRefresh();
-        try { this.updateCurrentView(); } catch (e) { console.error('[Data] updateCurrentView error:', e); }
-        try { this.updateSidebar(); } catch (e) { console.error('[Data] updateSidebar error:', e); }
-        try { this.updateStats(); } catch (e) { console.error('[Data] updateStats error:', e); }
+            this.updateCurrentView();
+            this.updateSidebar();
+            this.updateStats();
+            this.setOnlineStatus(true);
+            this.updateLastRefresh();
+
+        } catch (error) {
+            console.error('Fetch error:', error);
+            this.setOnlineStatus(false);
+        }
     },
 
     updateCurrentView() {

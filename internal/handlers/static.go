@@ -34,9 +34,6 @@ func StaticFiles(config models.Config) http.HandlerFunc {
 	// Extensions that don't require auth
 	publicExtensions := []string{".css", ".js", ".ico", ".png", ".svg"}
 
-	// Build a version-based ETag so browsers bust cache on every deploy.
-	versionETag := `"vigil-` + Version + `"`
-
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
@@ -44,13 +41,6 @@ func StaticFiles(config models.Config) http.HandlerFunc {
 		// new deployments without requiring a hard refresh.
 		if strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".css") {
 			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-			w.Header().Set("ETag", versionETag)
-
-			// If the browser already has this exact version, 304.
-			if match := r.Header.Get("If-None-Match"); match == versionETag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
 		}
 
 		// Always allow login page and static assets
