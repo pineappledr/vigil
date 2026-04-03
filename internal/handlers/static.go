@@ -35,8 +35,16 @@ func StaticFiles(config models.Config) http.HandlerFunc {
 	publicExtensions := []string{".css", ".js", ".ico", ".png", ".svg"}
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Force revalidation for JS and CSS so browsers always pick up
+		// new deployments without requiring a hard refresh.
+		if strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".css") {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		}
+
 		// Always allow login page and static assets
-		if r.URL.Path == "/login.html" || hasPublicExtension(r.URL.Path, publicExtensions) {
+		if path == "/login.html" || hasPublicExtension(path, publicExtensions) {
 			fs.ServeHTTP(w, r)
 			return
 		}
