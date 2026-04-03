@@ -13,6 +13,50 @@ import (
 	"vigil/internal/wearout"
 )
 
+// reportWork is a unit of background processing enqueued after the HTTP
+// response has been sent. Processing is serialised through a single worker
+// goroutine so concurrent SMART / wearout / ZFS writes never compete for
+// the SQLite write lock and cannot starve dashboard reads.
+type reportWork struct {
+	hostname string
+	agentID  int64
+	payload  map[string]interface{}
+}
+
+// reportQueue buffers pending background work. The buffer is generous so
+// the HTTP handler never blocks; if it fills up we drop the oldest work.
+var reportQueue = make(chan reportWork, 64)
+
+func init() {
+	go reportWorker()
+}
+
+func reportWorker() {
+	for w := range reportQueue {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("⚠️  Report background processing panic for %s: %v", w.hostname, r)
+				}
+			}()
+
+			if err := agents.UpdateAgentLastSeen(db.DB, w.agentID); err != nil {
+				log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", w.agentID, err)
+			}
+			if err := agents.UpdateAgentLastSeenByHostname(db.DB, w.hostname); err != nil {
+				log.Printf("⚠️  Failed to update agent status by hostname %s: %v", w.hostname, err)
+			}
+
+			wearout.ProcessWearoutFromReport(db.DB, EventBus, w.hostname, w.payload)
+			smart.ProcessReportWithEvents(db.DB, EventBus, w.hostname, w.payload)
+
+			if _, ok := w.payload["zfs"].(map[string]interface{}); ok {
+				ProcessZFSFromReport(w.hostname, w.payload)
+			}
+		}()
+	}
+}
+
 // Report handles incoming agent reports.
 // Requires a valid agent session token: Authorization: Bearer <token>
 func Report(w http.ResponseWriter, r *http.Request) {
@@ -67,34 +111,17 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		log.Printf("💾 Report: %s (%d drives)", hostname, driveCount)
 	}
 
-	// Respond immediately — heavy DB processing runs in the background so
-	// the report handler doesn't hold SQLite write locks for 10-30 s and
-	// starve the dashboard's read queries (/api/history, /api/health/score).
+	// Respond immediately — heavy DB processing is serialised through a
+	// single background worker so it never holds the SQLite write lock
+	// while the dashboard is trying to read /api/history.
 	JSONResponse(w, map[string]string{"status": "ok"})
 
-	// Background: agent status, SMART, wearout, ZFS processing.
-	agentID := session.AgentID
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("⚠️  Report background processing panic for %s: %v", hostname, r)
-			}
-		}()
-
-		if err := agents.UpdateAgentLastSeen(db.DB, agentID); err != nil {
-			log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", agentID, err)
-		}
-		if err := agents.UpdateAgentLastSeenByHostname(db.DB, hostname); err != nil {
-			log.Printf("⚠️  Failed to update agent status by hostname %s: %v", hostname, err)
-		}
-
-		wearout.ProcessWearoutFromReport(db.DB, EventBus, hostname, payload)
-		smart.ProcessReportWithEvents(db.DB, EventBus, hostname, payload)
-
-		if _, ok := payload["zfs"].(map[string]interface{}); ok {
-			ProcessZFSFromReport(hostname, payload)
-		}
-	}()
+	// Enqueue background work (non-blocking; drops if queue is full).
+	select {
+	case reportQueue <- reportWork{hostname: hostname, agentID: session.AgentID, payload: payload}:
+	default:
+		log.Printf("⚠️  Report processing queue full, dropping background work for %s", hostname)
+	}
 }
 
 // History returns latest reports for all hosts with aliases

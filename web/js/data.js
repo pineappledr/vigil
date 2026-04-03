@@ -4,26 +4,35 @@
 
 const Data = {
     async fetch() {
-        let dataLoaded = false;
+        let historyOk = false;
+
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthScoreResponse] = await Promise.all([
-                API.getHistory().catch(() => null),
+                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); return null; }),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
                 API.get('/api/health/score').catch(() => null)
             ]);
 
-            // History is the critical path — parse with its own guard so a
-            // truncated response or network blip doesn't nuke the whole cycle.
+            // ── History (critical path) ──────────────────────────────────
             if (historyResponse && historyResponse.ok) {
                 try {
-                    State.data = await historyResponse.json() || [];
+                    const parsed = await historyResponse.json();
+                    if (Array.isArray(parsed)) {
+                        State.data = parsed;
+                        historyOk = true;
+                    } else {
+                        console.warn('[Data] History response is not an array:', typeof parsed);
+                    }
                 } catch (e) {
                     console.error('[Data] History parse error:', e);
                 }
+            } else if (historyResponse) {
+                console.warn('[Data] History HTTP', historyResponse.status);
             }
             State.resolveActiveServer();
 
+            // ── ZFS ──────────────────────────────────────────────────────
             if (zfsResponse && zfsResponse.ok) {
                 try {
                     State.zfsPools = await zfsResponse.json() || [];
@@ -38,6 +47,7 @@ const Data = {
                 State.zfsDriveMap = {};
             }
 
+            // ── Wearout ──────────────────────────────────────────────────
             if (wearoutResponse && wearoutResponse.ok) {
                 try {
                     const wData = await wearoutResponse.json();
@@ -50,6 +60,7 @@ const Data = {
                 State.wearoutMap = {};
             }
 
+            // ── Health Score ─────────────────────────────────────────────
             if (healthScoreResponse && healthScoreResponse.ok) {
                 try {
                     State.healthScore = await healthScoreResponse.json();
@@ -60,20 +71,18 @@ const Data = {
             } else {
                 State.healthScore = null;
             }
-
-            dataLoaded = true;
         } catch (error) {
-            console.error('[Data] Fetch error:', error);
-            this.setOnlineStatus(false);
+            // Should never reach here — every await is individually guarded.
+            console.error('[Data] Unexpected fetch error:', error);
         }
 
-        if (dataLoaded) {
-            this.setOnlineStatus(true);
-            this.updateLastRefresh();
-            try { this.updateCurrentView(); } catch (e) { console.error('[Data] updateCurrentView error:', e); }
-            try { this.updateSidebar(); } catch (e) { console.error('[Data] updateSidebar error:', e); }
-            try { this.updateStats(); } catch (e) { console.error('[Data] updateStats error:', e); }
-        }
+        // Online = we got a valid history response with data.
+        // If history failed but we have stale data, still render it.
+        this.setOnlineStatus(historyOk || State.data.length > 0);
+        this.updateLastRefresh();
+        try { this.updateCurrentView(); } catch (e) { console.error('[Data] updateCurrentView error:', e); }
+        try { this.updateSidebar(); } catch (e) { console.error('[Data] updateSidebar error:', e); }
+        try { this.updateStats(); } catch (e) { console.error('[Data] updateStats error:', e); }
     },
 
     updateCurrentView() {
