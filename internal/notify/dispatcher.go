@@ -167,10 +167,9 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed 
 			return false, true
 		}
 
-		// Cooldown check — key includes hostname+serial so each
-		// drive gets its own cooldown timer.
+		// Cooldown check
 		if r.Cooldown > 0 {
-			key := fmt.Sprintf("%d:%s:%s:%s", serviceID, e.Type, e.Hostname, e.SerialNumber)
+			key := fmt.Sprintf("%d:%s", serviceID, e.Type)
 			d.mu.Lock()
 			last, ok := d.cooldowns[key]
 			now := time.Now()

@@ -28,16 +28,12 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
-// Logging logs request details. Uses defer so the log line is emitted even
-// if the downstream handler panics (previously the log was skipped on panic,
-// making failing endpoints invisible in server logs).
+// Logging logs request details
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		defer func() {
-			log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
-		}()
 		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
 	})
 }
 

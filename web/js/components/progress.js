@@ -89,16 +89,10 @@ const ProgressComponent = {
                 if (agentId) path += `?agent_id=${encodeURIComponent(agentId)}`;
             }
             const resp = await fetch(`/api/addons/${this._addonId}/proxy?path=${encodeURIComponent(path)}`);
-            if (!resp.ok) {
-                this._showEmptyPlaceholder(compId, 'No active jobs');
-                return;
-            }
+            if (!resp.ok) return;
 
             const jobs = await resp.json();
-            if (!Array.isArray(jobs)) {
-                this._showEmptyPlaceholder(compId, 'No active jobs');
-                return;
-            }
+            if (!Array.isArray(jobs)) return;
 
             // Reconcile: remove tracked jobs that are no longer active on the hub.
             const activeIds = new Set(jobs.map(j => j.job_id).filter(Boolean));
@@ -109,7 +103,14 @@ const ProgressComponent = {
             }
 
             if (jobs.length === 0) {
-                this._showEmptyPlaceholder(compId, 'No active jobs');
+                // Show empty placeholder if nothing is running
+                const container = document.getElementById(`progress-${compId}`);
+                if (container && !container.querySelector('.progress-empty')) {
+                    const empty = document.createElement('div');
+                    empty.className = 'progress-empty';
+                    empty.textContent = 'No active jobs';
+                    container.appendChild(empty);
+                }
                 return;
             }
 
@@ -125,23 +126,7 @@ const ProgressComponent = {
             this._ensurePoll(compId);
         } catch (e) {
             console.error('[Progress] Failed to fetch active jobs:', e);
-            this._showEmptyPlaceholder(compId, 'No active jobs');
         }
-    },
-
-    /** Replace or set the empty placeholder text in the progress container. */
-    _showEmptyPlaceholder(compId, text) {
-        const container = document.getElementById(`progress-${compId}`);
-        if (!container) return;
-        // Only update the placeholder — don't overwrite real job cards.
-        let empty = container.querySelector('.progress-empty');
-        if (Object.keys(this._jobs).length > 0) return;
-        if (!empty) {
-            empty = document.createElement('div');
-            empty.className = 'progress-empty';
-            container.appendChild(empty);
-        }
-        empty.textContent = text;
     },
 
     /** Poll for active job updates every 3 seconds while jobs exist. */

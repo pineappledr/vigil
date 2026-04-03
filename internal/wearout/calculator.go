@@ -2,12 +2,10 @@ package wearout
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"time"
 
 	agentsmart "vigil/cmd/agent/smart"
-	"vigil/internal/events"
 )
 
 // strategies is the registry of available wearout strategies.
@@ -17,15 +15,8 @@ var strategies = map[string]WearoutStrategy{
 	"NVMe": &NVMeStrategy{},
 }
 
-// wearout threshold levels that trigger events.
-const (
-	thresholdWarning  = 60.0
-	thresholdCritical = 80.0
-)
-
 // CalculateAndStore runs the wearout calculation for a drive and persists the result.
-// If bus is non-nil, threshold-crossing events are published.
-func CalculateAndStore(db *sql.DB, bus *events.Bus, driveData *agentsmart.DriveSmartData) (*WearoutResult, error) {
+func CalculateAndStore(db *sql.DB, driveData *agentsmart.DriveSmartData) (*WearoutResult, error) {
 	strategy, ok := strategies[driveData.DriveType]
 	if !ok {
 		return nil, nil // unsupported drive type — skip silently
@@ -33,9 +24,6 @@ func CalculateAndStore(db *sql.DB, bus *events.Bus, driveData *agentsmart.DriveS
 
 	input := buildInput(db, driveData)
 	result := strategy.Calculate(input)
-
-	// Capture previous snapshot before storing so we can detect threshold crossings.
-	prev, _ := GetLatestSnapshot(db, driveData.Hostname, driveData.SerialNumber)
 
 	// Attach trend prediction from historical data
 	history, err := GetSnapshotHistory(db, driveData.Hostname, driveData.SerialNumber, 365)
@@ -57,70 +45,11 @@ func CalculateAndStore(db *sql.DB, bus *events.Bus, driveData *agentsmart.DriveS
 		log.Printf("Warning: failed to store wearout snapshot for %s: %v", driveData.SerialNumber, err)
 	}
 
-	// Publish events for threshold crossings.
-	if bus != nil {
-		publishWearoutEvents(bus, driveData, prev, &result)
-	}
-
 	return &result, nil
 }
 
-// publishWearoutEvents fires wearout events when a drive crosses a threshold
-// for the first time, and when a trend predicts failure within 3 months.
-func publishWearoutEvents(bus *events.Bus, driveData *agentsmart.DriveSmartData, prev *WearoutSnapshot, result *WearoutResult) {
-	newPct := result.Percentage
-	var prevPct float64
-	if prev != nil {
-		prevPct = prev.Percentage
-	}
-
-	label := driveData.ModelName
-	if label == "" {
-		label = driveData.SerialNumber
-	}
-
-	// Critical threshold crossing (80%).
-	if newPct >= thresholdCritical && prevPct < thresholdCritical {
-		bus.Publish(events.Event{
-			Type:         events.WearoutCritical,
-			Severity:     events.SeverityCritical,
-			Hostname:     driveData.Hostname,
-			SerialNumber: driveData.SerialNumber,
-			Message:      fmt.Sprintf("Drive wearout critical: %s (%s) reached %.0f%%", label, driveData.SerialNumber, newPct),
-		})
-		return // critical supersedes warning
-	}
-
-	// Warning threshold crossing (60%).
-	if newPct >= thresholdWarning && prevPct < thresholdWarning {
-		bus.Publish(events.Event{
-			Type:         events.WearoutWarning,
-			Severity:     events.SeverityWarning,
-			Hostname:     driveData.Hostname,
-			SerialNumber: driveData.SerialNumber,
-			Message:      fmt.Sprintf("Drive wearout warning: %s (%s) reached %.0f%%", label, driveData.SerialNumber, newPct),
-		})
-	}
-
-	// Predicted failure within 3 months (7-day dispatcher cooldown suppresses repeats).
-	if result.Prediction != nil && result.Prediction.MonthsRemaining != nil &&
-		result.Prediction.Confidence != "low" {
-		months := *result.Prediction.MonthsRemaining
-		if months < 3.0 {
-			bus.Publish(events.Event{
-				Type:         events.WearoutPredicted,
-				Severity:     events.SeverityWarning,
-				Hostname:     driveData.Hostname,
-				SerialNumber: driveData.SerialNumber,
-				Message:      fmt.Sprintf("Drive failure predicted: %s (%s) has ~%.0f month(s) remaining", label, driveData.SerialNumber, months),
-			})
-		}
-	}
-}
-
 // ProcessWearoutFromReport calculates and stores wearout for all drives in a report.
-// Pass a non-nil bus to enable threshold-crossing notifications.
-func ProcessWearoutFromReport(db *sql.DB, bus *events.Bus, hostname string, reportData map[string]interface{}) {
+func ProcessWearoutFromReport(db *sql.DB, hostname string, reportData map[string]interface{}) {
 	drives, ok := reportData["drives"].([]interface{})
 	if !ok {
 		return
@@ -137,7 +66,7 @@ func ProcessWearoutFromReport(db *sql.DB, bus *events.Bus, hostname string, repo
 			continue
 		}
 
-		if _, err := CalculateAndStore(db, bus, driveData); err != nil {
+		if _, err := CalculateAndStore(db, driveData); err != nil {
 			log.Printf("Warning: wearout calculation failed for %s: %v", driveData.SerialNumber, err)
 		}
 	}

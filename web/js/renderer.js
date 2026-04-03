@@ -60,59 +60,12 @@ const Renderer = {
         }).join('');
     },
 
-    healthScoreCard() {
-        const s = State.healthScore;
-        if (!s) return '';
-
-        const gradeColors = {
-            'Excellent': '#22c55e',
-            'Good': '#84cc16',
-            'Fair': '#eab308',
-            'Warning': '#f97316',
-            'Critical': '#ef4444'
-        };
-        const color = gradeColors[s.grade] || '#94a3b8';
-
-        const barPct = (comp) => {
-            if (!comp || comp.max === 0) return 100;
-            return Math.round((comp.max - comp.deduction) * 100 / comp.max);
-        };
-
-        return `
-            <div class="summary-card health-score-card" title="View full health report" onclick="window.open('/api/reports/health', '_blank')" style="cursor:pointer">
-                <div class="health-score-main">
-                    <div class="health-score-number" style="color:${color}">${s.score}</div>
-                    <div class="health-score-grade" style="color:${color}">${s.grade}</div>
-                    <div class="health-score-label">System Health</div>
-                </div>
-                <div class="health-score-bars">
-                    <div class="health-bar-row">
-                        <span class="health-bar-label">SMART</span>
-                        <div class="health-bar-track"><div class="health-bar-fill" style="width:${barPct(s.components?.smart)}%"></div></div>
-                        <span class="health-bar-val">${s.components?.smart?.max - s.components?.smart?.deduction}/${s.components?.smart?.max}</span>
-                    </div>
-                    <div class="health-bar-row">
-                        <span class="health-bar-label">Wearout</span>
-                        <div class="health-bar-track"><div class="health-bar-fill" style="width:${barPct(s.components?.wearout)}%"></div></div>
-                        <span class="health-bar-val">${s.components?.wearout?.max - s.components?.wearout?.deduction}/${s.components?.wearout?.max}</span>
-                    </div>
-                    <div class="health-bar-row">
-                        <span class="health-bar-label">ZFS</span>
-                        <div class="health-bar-track"><div class="health-bar-fill" style="width:${barPct(s.components?.zfs)}%"></div></div>
-                        <span class="health-bar-val">${s.components?.zfs?.max - s.components?.zfs?.deduction}/${s.components?.zfs?.max}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    },
-
     serverSummaryCards() {
         const stats = State.getStats();
         const zfsStats = State.getZFSStats();
         const showZFS = zfsStats.totalPools > 0;
-
+        
         return `
-            ${this.healthScoreCard()}
             ${Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
                 iconClass: 'blue',

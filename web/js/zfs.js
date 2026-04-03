@@ -72,7 +72,6 @@ const ZFS = {
     },
 
     renderSummaryCards(stats) {
-        const totalStorage = this.formatStorageSize(stats.totalSizeBytes || 0);
         return `
             <div class="summary-grid zfs-summary">
                 <div class="summary-card">
@@ -80,12 +79,12 @@ const ZFS = {
                     <div class="value">${stats.totalPools}</div>
                     <div class="label">Total Pools</div>
                 </div>
-                <div class="summary-card ${stats.healthyPools === stats.totalPools && stats.totalPools > 0 ? 'healthy-glow' : ''}">
+                <div class="summary-card ${stats.healthyPools === stats.totalPools ? 'healthy-glow' : ''}">
                     <div class="icon success">${this.icons.check}</div>
                     <div class="value">${stats.healthyPools}</div>
                     <div class="label">Online</div>
                 </div>
-                <div class="summary-card clickable ${stats.degradedPools > 0 ? 'warning-glow' : ''}"
+                <div class="summary-card clickable ${stats.degradedPools > 0 ? 'warning-glow' : ''}" 
                      onclick="ZFS.filterByState('DEGRADED')"
                      style="${stats.degradedPools === 0 ? 'opacity: 0.5;' : ''}">
                     <div class="icon warning">${this.icons.warning}</div>
@@ -98,21 +97,6 @@ const ZFS = {
                     <div class="icon danger">${this.icons.error}</div>
                     <div class="value">${stats.faultedPools}</div>
                     <div class="label">Faulted</div>
-                </div>
-                <div class="summary-card">
-                    <div class="icon purple">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                        </svg>
-                    </div>
-                    <div class="value" style="font-size:1.4rem">${totalStorage}</div>
-                    <div class="label">Total Raw Storage</div>
-                </div>
-                <div class="summary-card ${stats.activeScrubs > 0 ? 'healthy-glow' : ''}">
-                    <div class="icon ${stats.activeScrubs > 0 ? 'accent' : ''}">${this.icons.scrub}</div>
-                    <div class="value">${stats.activeScrubs}</div>
-                    <div class="label">Active Scrubs</div>
                 </div>
             </div>
         `;
@@ -150,7 +134,6 @@ const ZFS = {
             deviceCount = uniqueDisks.length;
         }
         
-        const frag = pool.fragmentation || 0;
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
 
         return `
@@ -160,12 +143,9 @@ const ZFS = {
                         <span class="zfs-status-dot ${stateClass}"></span>
                         <span class="zfs-pool-name">${Utils.escapeHtml(poolName)}</span>
                     </div>
-                    <div class="zfs-pool-header-right">
-                        ${frag > 0 ? `<span class="zfs-frag-badge ${frag >= 75 ? 'critical' : frag >= 50 ? 'warning' : ''}">Frag ${frag}%</span>` : ''}
-                        <span class="zfs-state-badge ${stateClass}">${state}</span>
-                    </div>
+                    <span class="zfs-state-badge ${stateClass}">${state}</span>
                 </div>
-
+                
                 <div class="zfs-pool-capacity">
                     <div class="zfs-capacity-info">
                         <span class="zfs-capacity-used">${capacity.used}</span>
@@ -174,27 +154,22 @@ const ZFS = {
                         <span class="zfs-capacity-percent">(${capacity.percent}%)</span>
                     </div>
                     <div class="zfs-capacity-bar">
-                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
+                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}" 
                              style="width: ${Math.min(capacity.percent, 100)}%"></div>
                     </div>
-                    ${capacity.percent >= 80 ? `
-                        <div class="zfs-capacity-warning ${capacity.percent >= 90 ? 'critical' : 'warning'}">
-                            ${capacity.percent >= 90 ? '⚠ Critical' : '⚠ Warning'} — ${capacity.free} remaining
-                        </div>
-                    ` : ''}
                 </div>
 
                 <div class="zfs-pool-scrub">
                     ${this.icons.scrub}
-                    <span class="zfs-scrub-info ${scrub.state === 'scanning' || scrub.state === 'in_progress' ? 'scrub-active' : ''}">${scrub.text}</span>
+                    <span class="zfs-scrub-info">${scrub.text}</span>
                 </div>
 
                 <div class="zfs-pool-devices">
                     ${this.icons.drive}
                     <span class="zfs-device-info">
                         ${deviceCount} device${deviceCount !== 1 ? 's' : ''}
-                        ${errors > 0
-                            ? `<span class="zfs-error-count">${errors} error${errors !== 1 ? 's' : ''}</span>`
+                        ${errors > 0 
+                            ? `<span class="zfs-error-count">${errors} error${errors !== 1 ? 's' : ''}</span>` 
                             : '<span class="zfs-no-errors">0 errors</span>'
                         }
                     </span>
@@ -414,15 +389,12 @@ const ZFS = {
 
     renderOverviewTab(pool, capacity, state, topology, lastScrub) {
         const poolName = pool.name || pool.pool_name || 'Unknown';
-        const frag = pool.fragmentation || 0;
-        const scanState = (pool.scan_state || '').toLowerCase();
-        const isScanning = scanState === 'scanning' || scanState === 'in_progress';
-
+        
         return `
             <div class="zfs-overview-section">
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Pool Name</span>
-                    <span class="zfs-detail-value mono">${poolName}</span>
+                    <span class="zfs-detail-value">${poolName}</span>
                 </div>
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Status</span>
@@ -430,11 +402,6 @@ const ZFS = {
                         <span class="zfs-state-badge ${this.getStateClass(state)}">${state}</span>
                     </span>
                 </div>
-                ${pool.pool_guid ? `
-                <div class="zfs-detail-row">
-                    <span class="zfs-detail-label">Pool GUID</span>
-                    <span class="zfs-detail-value mono dim">${pool.pool_guid}</span>
-                </div>` : ''}
             </div>
 
             <div class="zfs-overview-section">
@@ -444,106 +411,64 @@ const ZFS = {
 
             <div class="zfs-overview-section">
                 <h4>Capacity</h4>
-                <div class="zfs-capacity-bar large">
-                    <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
-                         style="width:${Math.min(capacity.percent, 100)}%"></div>
-                </div>
-                <div class="zfs-detail-row" style="margin-top:0.75rem">
-                    <span class="zfs-detail-label">Total</span>
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Usable Capacity</span>
                     <span class="zfs-detail-value">${capacity.total}</span>
                 </div>
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Used</span>
-                    <span class="zfs-detail-value ${capacity.percent >= 90 ? 'error-text' : capacity.percent >= 80 ? 'warning-text' : ''}">${capacity.used} (${capacity.percent}%)</span>
+                    <span class="zfs-detail-value">${capacity.used} (${capacity.percent}%)</span>
                 </div>
                 <div class="zfs-detail-row">
-                    <span class="zfs-detail-label">Free</span>
+                    <span class="zfs-detail-label">Free Space</span>
                     <span class="zfs-detail-value">${capacity.free}</span>
                 </div>
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Fragmentation</span>
-                    <span class="zfs-detail-value ${frag >= 75 ? 'error-text' : frag >= 50 ? 'warning-text' : ''}">${frag}%</span>
+                    <span class="zfs-detail-value">${pool.fragmentation || 0}%</span>
                 </div>
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Dedup Ratio</span>
                     <span class="zfs-detail-value">${(pool.dedup_ratio || 1).toFixed(2)}x</span>
                 </div>
             </div>
-
+            
             <div class="zfs-overview-section">
-                <h4>${isScanning ? '🔄 Scan In Progress' : 'Last Scan'}</h4>
-                ${isScanning ? `
-                    <div class="zfs-scan-progress-bar">
-                        <div class="zfs-scan-progress-fill" style="width:${Math.round(pool.scan_progress || 0)}%"></div>
-                    </div>
-                    <div class="zfs-detail-row" style="margin-top:0.5rem">
-                        <span class="zfs-detail-label">Progress</span>
-                        <span class="zfs-detail-value">${Math.round(pool.scan_progress || 0)}%</span>
-                    </div>
-                    ${lastScrub && lastScrub.rate_bytes_sec > 0 ? `
+                <h4>Last Scan</h4>
+                ${lastScrub ? `
                     <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Rate</span>
-                        <span class="zfs-detail-value">${this.formatBytesPerSec(lastScrub.rate_bytes_sec)}</span>
-                    </div>` : ''}
-                    ${lastScrub && lastScrub.time_remaining > 0 ? `
-                    <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">ETA</span>
-                        <span class="zfs-detail-value">${this.formatDurationShort(lastScrub.time_remaining)}</span>
-                    </div>` : ''}
-                    ${lastScrub && lastScrub.data_examined > 0 ? `
-                    <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Examined</span>
-                        <span class="zfs-detail-value">${this.formatStorageSize(lastScrub.data_examined)}</span>
-                    </div>` : ''}
-                ` : lastScrub ? `
-                    <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Date</span>
+                        <span class="zfs-detail-label">Last Scan Date</span>
                         <span class="zfs-detail-value">${this.formatScrubDate(lastScrub.start_time)}</span>
                     </div>
                     <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Duration</span>
+                        <span class="zfs-detail-label">Last Scan Duration</span>
                         <span class="zfs-detail-value">${this.formatDurationLong(lastScrub.duration_secs)}</span>
                     </div>
                     <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Examined</span>
-                        <span class="zfs-detail-value">${this.formatStorageSize(lastScrub.data_examined)}</span>
-                    </div>
-                    <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Repaired</span>
-                        <span class="zfs-detail-value">${this.formatStorageSize(lastScrub.bytes_repaired)}</span>
-                    </div>
-                    ${lastScrub.rate_bytes_sec > 0 ? `
-                    <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Avg Rate</span>
-                        <span class="zfs-detail-value">${this.formatBytesPerSec(lastScrub.rate_bytes_sec)}</span>
-                    </div>` : ''}
-                    <div class="zfs-detail-row">
-                        <span class="zfs-detail-label">Errors</span>
+                        <span class="zfs-detail-label">Last Scan Errors</span>
                         <span class="zfs-detail-value ${lastScrub.errors_found > 0 ? 'error-text' : ''}">${lastScrub.errors_found || 0}</span>
                     </div>
                 ` : `
                     <div class="zfs-detail-row">
                         <span class="zfs-detail-label">Last Scan</span>
-                        <span class="zfs-detail-value dim">No scrub history</span>
+                        <span class="zfs-detail-value">No scrub history available</span>
                     </div>
                 `}
             </div>
 
             <div class="zfs-overview-section">
                 <h4>Pool Errors</h4>
-                <div class="zfs-errors-grid">
-                    <div class="zfs-error-cell ${pool.read_errors > 0 ? 'has-error' : ''}">
-                        <span class="zfs-error-label">Read</span>
-                        <span class="zfs-error-val">${pool.read_errors || 0}</span>
-                    </div>
-                    <div class="zfs-error-cell ${pool.write_errors > 0 ? 'has-error' : ''}">
-                        <span class="zfs-error-label">Write</span>
-                        <span class="zfs-error-val">${pool.write_errors || 0}</span>
-                    </div>
-                    <div class="zfs-error-cell ${pool.checksum_errors > 0 ? 'has-error' : ''}">
-                        <span class="zfs-error-label">Checksum</span>
-                        <span class="zfs-error-val">${pool.checksum_errors || 0}</span>
-                    </div>
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Read Errors</span>
+                    <span class="zfs-detail-value ${pool.read_errors > 0 ? 'error-text' : ''}">${pool.read_errors || 0}</span>
+                </div>
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Write Errors</span>
+                    <span class="zfs-detail-value ${pool.write_errors > 0 ? 'error-text' : ''}">${pool.write_errors || 0}</span>
+                </div>
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Checksum Errors</span>
+                    <span class="zfs-detail-value ${pool.checksum_errors > 0 ? 'error-text' : ''}">${pool.checksum_errors || 0}</span>
                 </div>
             </div>
         `;
@@ -646,14 +571,9 @@ const ZFS = {
         const diskName = disk.device_name || disk.name || 'Unknown';
         const diskState = (disk.state || 'ONLINE').toUpperCase();
         const serial = disk.serial_number || '';
-
+        
         const displayName = this.getDisplayName(diskName);
         const driveLink = serial ? this.findDriveBySerial(hostname, serial) : null;
-
-        // Cross-reference SMART health and wearout from state
-        const smartHealth = serial ? this.getSmartHealthForDrive(hostname, serial) : null;
-        const wearout = serial ? State.getWearoutForDrive(hostname, serial) : null;
-        const wearoutPct = wearout ? Math.round(wearout.percentage) : null;
 
         return `
             <div class="zfs-disk-row ${this.getStateClass(diskState)}">
@@ -661,24 +581,14 @@ const ZFS = {
                     <span class="zfs-disk-indent">└─</span>
                     <span class="zfs-disk-name">${displayName}</span>
                     <span class="zfs-disk-state ${this.getStateClass(diskState)}">${diskState}</span>
-                    ${smartHealth ? `<span class="zfs-disk-smart-badge ${smartHealth.toLowerCase()}">${smartHealth}</span>` : ''}
                 </div>
                 <div class="zfs-disk-info">
                     ${serial ? `
-                        <span class="zfs-disk-serial ${driveLink ? 'clickable' : ''}"
+                        <span class="zfs-disk-serial ${driveLink ? 'clickable' : ''}" 
                               ${driveLink ? `onclick="event.stopPropagation(); ZFS.navigateToDrive(${driveLink.serverIdx}, ${driveLink.driveIdx})" title="View SMART data"` : ''}>
                             ${serial}
                             ${driveLink ? this.icons.link : ''}
                         </span>
-                    ` : ''}
-                    ${wearoutPct !== null ? `
-                        <div class="zfs-disk-wearout">
-                            <div class="zfs-disk-wearout-track">
-                                <div class="zfs-disk-wearout-fill ${this.getWearoutClass(wearoutPct)}"
-                                     style="width:${Math.min(wearoutPct, 100)}%"></div>
-                            </div>
-                            <span class="zfs-disk-wearout-pct ${this.getWearoutClass(wearoutPct)}">${wearoutPct}%</span>
-                        </div>
                     ` : ''}
                     <span class="zfs-disk-errors">R:${disk.read_errors || 0} W:${disk.write_errors || 0} C:${disk.checksum_errors || 0}</span>
                 </div>
@@ -727,38 +637,19 @@ const ZFS = {
 
         return `
             <div class="zfs-scrub-history">
-                ${history.map(scrub => {
-                    const scanType = (scrub.scan_type || 'scrub').toLowerCase();
-                    const isResilient = scanType === 'resilver';
-                    const stateClass = scrub.errors_found > 0 ? 'has-errors' : scrub.state === 'canceled' ? 'canceled' : 'clean';
-                    return `
-                    <div class="zfs-scrub-item ${stateClass}">
-                        <div class="zfs-scrub-header">
-                            <span class="zfs-scan-type-badge ${isResilient ? 'resilver' : 'scrub'}">${isResilient ? 'RESILVER' : 'SCRUB'}</span>
+                ${history.map(scrub => `
+                    <div class="zfs-scrub-item ${scrub.errors_found > 0 ? 'has-errors' : ''}">
+                        <div class="zfs-scrub-main">
                             <span class="zfs-scrub-date">${this.formatScrubDate(scrub.start_time)}</span>
-                            <span class="zfs-scrub-duration">${this.formatDurationLong(scrub.duration_secs)}</span>
-                            ${scrub.state === 'canceled' ? '<span class="zfs-scrub-canceled">CANCELED</span>' : ''}
                         </div>
-                        <div class="zfs-scrub-stats-grid">
-                            <div class="zfs-scrub-stat">
-                                <span class="zfs-scrub-stat-label">Examined</span>
-                                <span class="zfs-scrub-stat-val">${this.formatStorageSize(scrub.data_examined)}</span>
-                            </div>
-                            <div class="zfs-scrub-stat">
-                                <span class="zfs-scrub-stat-label">Repaired</span>
-                                <span class="zfs-scrub-stat-val">${this.formatStorageSize(scrub.bytes_repaired)}</span>
-                            </div>
-                            <div class="zfs-scrub-stat">
-                                <span class="zfs-scrub-stat-label">Avg Rate</span>
-                                <span class="zfs-scrub-stat-val">${scrub.rate_bytes_sec > 0 ? this.formatBytesPerSec(scrub.rate_bytes_sec) : '—'}</span>
-                            </div>
-                            <div class="zfs-scrub-stat">
-                                <span class="zfs-scrub-stat-label">Errors</span>
-                                <span class="zfs-scrub-stat-val ${scrub.errors_found > 0 ? 'error-text' : 'success-text'}">${scrub.errors_found || 0}</span>
-                            </div>
+                        <div class="zfs-scrub-stats">
+                            <span class="zfs-scrub-duration">${this.formatDurationLong(scrub.duration_secs)}</span>
+                            <span class="zfs-scrub-errors ${scrub.errors_found > 0 ? 'has-errors' : ''}">
+                                ${scrub.errors_found || 0} error${scrub.errors_found !== 1 ? 's' : ''}
+                            </span>
                         </div>
                     </div>
-                `}).join('')}
+                `).join('')}
             </div>
         `;
     },
@@ -841,7 +732,7 @@ const ZFS = {
         const scanState = pool.scan_state || '';
         const scanProgress = pool.scan_progress || 0;
         const lastScanTime = pool.last_scan_time || '';
-
+        
         if (!scanFunction || scanFunction === 'none') {
             return { text: 'No scrub data', state: null };
         }
@@ -851,7 +742,7 @@ const ZFS = {
             const date = this.formatScrubDate(lastScanTime);
             text = date !== 'Unknown' ? `Last: ${date}` : 'Completed';
         } else if (scanState === 'scanning' || scanState === 'in_progress') {
-            text = `In progress — ${Math.round(scanProgress)}%`;
+            text = `In progress (${Math.round(scanProgress)}%)`;
         } else if (scanState === 'canceled') {
             text = 'Scrub canceled';
         } else {
@@ -859,40 +750,6 @@ const ZFS = {
         }
 
         return { text, state: scanState };
-    },
-
-    getSmartHealthForDrive(hostname, serial) {
-        for (const server of State.data) {
-            if (server.hostname !== hostname) continue;
-            for (const drive of (server.details?.drives || [])) {
-                if (drive.serial_number === serial) {
-                    return drive.smart_status || drive.health || null;
-                }
-            }
-        }
-        return null;
-    },
-
-    getWearoutClass(pct) {
-        if (pct >= 80) return 'critical';
-        if (pct >= 60) return 'warning';
-        if (pct >= 30) return 'moderate';
-        return 'healthy';
-    },
-
-    formatBytesPerSec(bps) {
-        if (!bps || bps <= 0) return '—';
-        return this.formatStorageSize(bps) + '/s';
-    },
-
-    formatDurationShort(seconds) {
-        if (!seconds || seconds <= 0) return '—';
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = Math.floor(seconds % 60);
-        if (h > 0) return `${h}h ${m}m`;
-        if (m > 0) return `${m}m ${s}s`;
-        return `${s}s`;
     },
 
     formatStorageSize(size) {

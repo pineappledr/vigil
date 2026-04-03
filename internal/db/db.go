@@ -30,13 +30,6 @@ func Init(path string) error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// SQLite handles concurrency best with a small, bounded connection pool.
-	// WAL mode allows concurrent readers alongside one writer.  Limiting the
-	// pool prevents unbounded connection growth that causes SQLITE_BUSY under
-	// heavy report-processing load.
-	DB.SetMaxOpenConns(4)
-	DB.SetMaxIdleConns(2)
-
 	enableWAL()
 	enableForeignKeys()
 	if err = createSchema(); err != nil {
@@ -57,13 +50,8 @@ func ensureDirectory(path string) error {
 }
 
 func enableWAL() {
-	var mode string
-	if err := DB.QueryRow("PRAGMA journal_mode=WAL").Scan(&mode); err != nil {
+	if _, err := DB.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		log.Printf("⚠️  Could not enable WAL mode: %v", err)
-		return
-	}
-	if mode != "wal" {
-		log.Printf("⚠️  WAL mode not active (got %q) — SQLite performance may be degraded", mode)
 	}
 }
 

@@ -151,7 +151,6 @@ func main() {
 
 	// Add-on runtime: event bus, telemetry broker, websocket hub, heartbeat monitor
 	eventBus := events.NewBus()
-	handlers.EventBus = eventBus
 	broker := addons.NewTelemetryBroker()
 	handlers.TelemetryBroker = broker
 	handlers.WebSocketHub = addons.NewWebSocketHub(db.DB, eventBus, broker)
@@ -260,10 +259,6 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 
 	// ─── Notification Endpoints ──────────────────────────────────────────
 	handlers.RegisterNotificationRoutes(mux, protect)
-
-	// ─── Health & Reports Endpoints ──────────────────────────────────────
-	mux.HandleFunc("GET /api/health/score", protect(handlers.GetHealthScore))
-	mux.HandleFunc("GET /api/reports/health", protect(handlers.GetHealthReport))
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))
