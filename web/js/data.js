@@ -4,6 +4,7 @@
 
 const Data = {
     async fetch() {
+        let dataLoaded = false;
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthScoreResponse] = await Promise.all([
                 API.getHistory(),
@@ -20,35 +21,54 @@ const Data = {
             State.resolveActiveServer();
 
             if (zfsResponse && zfsResponse.ok) {
-                State.zfsPools = await zfsResponse.json() || [];
-                State.buildZFSDriveMap();
+                try {
+                    State.zfsPools = await zfsResponse.json() || [];
+                    State.buildZFSDriveMap();
+                } catch (e) {
+                    console.error('[Data] ZFS parse error:', e);
+                    State.zfsPools = [];
+                    State.zfsDriveMap = {};
+                }
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
             }
 
             if (wearoutResponse && wearoutResponse.ok) {
-                const wData = await wearoutResponse.json();
-                State.buildWearoutMap(wData?.drives);
+                try {
+                    const wData = await wearoutResponse.json();
+                    State.buildWearoutMap(wData?.drives);
+                } catch (e) {
+                    console.error('[Data] Wearout parse error:', e);
+                    State.wearoutMap = {};
+                }
             } else {
                 State.wearoutMap = {};
             }
 
             if (healthScoreResponse && healthScoreResponse.ok) {
-                State.healthScore = await healthScoreResponse.json();
+                try {
+                    State.healthScore = await healthScoreResponse.json();
+                } catch (e) {
+                    console.error('[Data] Health score parse error:', e);
+                    State.healthScore = null;
+                }
             } else {
                 State.healthScore = null;
             }
 
-            this.updateCurrentView();
-            this.updateSidebar();
-            this.updateStats();
+            dataLoaded = true;
+        } catch (error) {
+            console.error('[Data] Fetch error:', error);
+            this.setOnlineStatus(false);
+        }
+
+        if (dataLoaded) {
             this.setOnlineStatus(true);
             this.updateLastRefresh();
-
-        } catch (error) {
-            console.error('Fetch error:', error);
-            this.setOnlineStatus(false);
+            try { this.updateCurrentView(); } catch (e) { console.error('[Data] updateCurrentView error:', e); }
+            try { this.updateSidebar(); } catch (e) { console.error('[Data] updateSidebar error:', e); }
+            try { this.updateStats(); } catch (e) { console.error('[Data] updateStats error:', e); }
         }
     },
 

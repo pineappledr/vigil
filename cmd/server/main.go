@@ -151,6 +151,7 @@ func main() {
 
 	// Add-on runtime: event bus, telemetry broker, websocket hub, heartbeat monitor
 	eventBus := events.NewBus()
+	handlers.EventBus = eventBus
 	broker := addons.NewTelemetryBroker()
 	handlers.TelemetryBroker = broker
 	handlers.WebSocketHub = addons.NewWebSocketHub(db.DB, eventBus, broker)
