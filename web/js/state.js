@@ -127,7 +127,7 @@ const State = {
 
     getZFSStats() {
         const pools = this.zfsPools || [];
-        let healthyPools = 0, degradedPools = 0, faultedPools = 0, totalErrors = 0;
+        let healthyPools = 0, degradedPools = 0, faultedPools = 0, totalErrors = 0, totalSizeBytes = 0, activeScrubs = 0;
         pools.forEach(p => {
             if (!p) return;
             const st = (p.status || p.health || '').toUpperCase();
@@ -135,8 +135,11 @@ const State = {
             else if (st === 'DEGRADED') degradedPools++;
             else if (st === 'FAULTED' || st === 'UNAVAIL') faultedPools++;
             totalErrors += (p.read_errors || 0) + (p.write_errors || 0) + (p.checksum_errors || 0);
+            totalSizeBytes += p.size_bytes || 0;
+            const scanState = (p.scan_state || '').toLowerCase();
+            if (scanState === 'scanning' || scanState === 'in_progress') activeScrubs++;
         });
-        return { totalPools: pools.length, healthyPools, degradedPools, faultedPools, attentionPools: degradedPools + faultedPools, totalErrors };
+        return { totalPools: pools.length, healthyPools, degradedPools, faultedPools, attentionPools: degradedPools + faultedPools, totalErrors, totalSizeBytes, activeScrubs };
     },
 
     getPoolsByHost() {

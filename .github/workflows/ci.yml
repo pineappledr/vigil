@@ -85,10 +85,10 @@ jobs:
           gosec -severity high -confidence high -quiet ./...
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build server image for scanning
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
@@ -98,7 +98,7 @@ jobs:
           cache-from: type=gha
 
       - name: Build agent image for scanning
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent
@@ -141,7 +141,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container registry
         uses: docker/login-action@v3
@@ -156,7 +156,7 @@ jobs:
 
       # Build all images using reusable pattern
       - name: Build Server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
@@ -167,7 +167,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Alpine)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent
@@ -178,7 +178,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Debian)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent.debian
@@ -237,7 +237,7 @@ jobs:
           cache: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container registry
         uses: docker/login-action@v3
@@ -298,7 +298,7 @@ jobs:
           make_latest: false
 
       - name: Build Server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
@@ -311,7 +311,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Alpine)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent
@@ -324,7 +324,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Debian)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent.debian
@@ -356,7 +356,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container registry
         uses: docker/login-action@v3
@@ -370,7 +370,7 @@ jobs:
         run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
       - name: Build Server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
@@ -384,7 +384,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Alpine)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent
@@ -399,7 +399,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Debian)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent.debian
@@ -448,7 +448,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container registry
         uses: docker/login-action@v3
@@ -458,7 +458,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Server
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
@@ -472,7 +472,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Alpine)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent
@@ -488,7 +488,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Agent (Debian)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.agent.debian
