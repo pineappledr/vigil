@@ -32,7 +32,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         Version.init();
     }
 
-    // Fetch initial data
+    // Show cached data immediately, then fetch fresh data in the background
+    Data.restoreCache();
     Data.fetchVersion();
     await Data.fetch();
 

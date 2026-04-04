@@ -3,8 +3,54 @@
  */
 
 const Data = {
+    _cacheKey: 'vigil_data_cache',
+
+    // Restore cached state and render immediately so the dashboard is never empty.
+    restoreCache() {
+        try {
+            const raw = localStorage.getItem(this._cacheKey);
+            if (!raw) return false;
+            const cache = JSON.parse(raw);
+            if (Array.isArray(cache.history) && cache.history.length > 0) {
+                State.data = cache.history;
+                State.resolveActiveServer();
+            }
+            if (Array.isArray(cache.zfs)) {
+                State.zfsPools = cache.zfs;
+                State.buildZFSDriveMap();
+            }
+            if (cache.wearout) {
+                State.buildWearoutMap(cache.wearout);
+            }
+            if (cache.health) {
+                State.healthScore = cache.health;
+            }
+            if (State.data.length > 0) {
+                this.setOnlineStatus(true);
+                this.updateLastRefresh();
+                try { this.updateCurrentView(); } catch (_) {}
+                try { this.updateSidebar(); } catch (_) {}
+                try { this.updateStats(); } catch (_) {}
+                console.log('[Data] Restored cached data (' + State.data.length + ' servers)');
+                return true;
+            }
+        } catch (e) {
+            console.warn('[Data] Cache restore failed:', e.message);
+        }
+        return false;
+    },
+
+    _saveCache(history, zfs, wearout, health) {
+        try {
+            localStorage.setItem(this._cacheKey, JSON.stringify({
+                history, zfs, wearout, health, ts: Date.now()
+            }));
+        } catch (_) {}
+    },
+
     async fetch() {
         let historyOk = false;
+        let historyData = null, zfsData = null, wearoutData = null, healthData = null;
 
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthResponse] = await Promise.all([
@@ -20,6 +66,7 @@ const Data = {
                     const parsed = await historyResponse.json();
                     if (Array.isArray(parsed)) {
                         State.data = parsed;
+                        historyData = parsed;
                         historyOk = true;
                     }
                 } catch (e) {
@@ -31,7 +78,8 @@ const Data = {
             // ── ZFS ──────────────────────────────────────────────────────
             if (zfsResponse && zfsResponse.ok) {
                 try {
-                    State.zfsPools = await zfsResponse.json() || [];
+                    zfsData = await zfsResponse.json() || [];
+                    State.zfsPools = zfsData;
                     State.buildZFSDriveMap();
                 } catch (e) {
                     State.zfsPools = [];
@@ -46,7 +94,8 @@ const Data = {
             if (wearoutResponse && wearoutResponse.ok) {
                 try {
                     const wData = await wearoutResponse.json();
-                    State.buildWearoutMap(wData?.drives);
+                    wearoutData = wData?.drives;
+                    State.buildWearoutMap(wearoutData);
                 } catch (e) {
                     State.wearoutMap = {};
                 }
@@ -57,10 +106,16 @@ const Data = {
             // ── Health Score ────────────────────────────────────────────
             if (healthResponse && healthResponse.ok) {
                 try {
-                    State.healthScore = await healthResponse.json();
+                    healthData = await healthResponse.json();
+                    State.healthScore = healthData;
                 } catch (e) {
                     State.healthScore = null;
                 }
+            }
+
+            // Cache successful data for instant restore on next page load
+            if (historyOk) {
+                this._saveCache(historyData, zfsData, wearoutData, healthData);
             }
         } catch (error) {
             console.error('[Data] Unexpected fetch error:', error);
