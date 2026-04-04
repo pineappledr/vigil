@@ -98,7 +98,7 @@ const Addons = {
                     <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
                 <p>Failed to load add-ons</p>
-                <span class="hint">${this._escape(message)}</span>
+                <span class="hint">${Utils.escapeHtml(message)}</span>
                 <button class="btn btn-secondary" style="margin-top:16px" onclick="Addons.render()">Retry</button>
             </div>
         `;
@@ -157,15 +157,15 @@ const Addons = {
     _addonCard(addon) {
         const statusClass = this._statusClass(addon.status);
         const statusLabel = addon.status.charAt(0).toUpperCase() + addon.status.slice(1);
-        const lastSeen = addon.last_seen ? this._timeAgo(addon.last_seen) : 'never';
+        const lastSeen = addon.last_seen ? Utils.timeAgo(addon.last_seen) : 'never';
         const enabledLabel = addon.enabled ? 'Enabled' : 'Disabled';
         const enabledClass = addon.enabled ? 'enabled' : 'disabled';
-        const urlMeta = addon.url ? `<span class="dot"></span><span>${this._escape(addon.url)}</span>` : '';
+        const urlMeta = addon.url ? `<span class="dot"></span><span>${Utils.escapeHtml(addon.url)}</span>` : '';
 
         const cached = this._updateCache[addon.id];
         const updateBadge = cached?.update_available
-            ? `<span class="addon-update-badge" title="Current: v${this._escape(addon.version)} → Latest: ${this._escape(cached.latest_tag)}">
-                   ${this._icons.updateArrow} ${this._escape(cached.latest_tag)} available
+            ? `<span class="addon-update-badge" title="Current: v${Utils.escapeHtml(addon.version)} → Latest: ${Utils.escapeHtml(cached.latest_tag)}">
+                   ${this._icons.updateArrow} ${Utils.escapeHtml(cached.latest_tag)} available
                </span>`
             : '';
 
@@ -174,7 +174,7 @@ const Addons = {
                 <div class="addon-token-row" onclick="event.stopPropagation()">
                     <label>Token</label>
                     <div class="addon-token-field">
-                        <span class="addon-token-value" id="addon-token-${addon.id}" data-token="${this._escape(token.token)}" data-masked="true">${'*'.repeat(20)}</span>
+                        <span class="addon-token-value" id="addon-token-${addon.id}" data-token="${Utils.escapeHtml(token.token)}" data-masked="true">${'*'.repeat(20)}</span>
                         <button class="btn-token-action" onclick="Addons.toggleTokenVisibility(${addon.id})" title="Show/hide token">
                             ${this._icons.eye}
                         </button>
@@ -193,9 +193,9 @@ const Addons = {
                             ${this._icons.addon}
                         </div>
                         <div class="addon-info">
-                            <h4>${this._escape(addon.name)}</h4>
+                            <h4>${Utils.escapeHtml(addon.name)}</h4>
                             <div class="addon-info-meta">
-                                <span>v${this._escape(addon.version)}</span>
+                                <span>v${Utils.escapeHtml(addon.version)}</span>
                                 ${updateBadge}
                                 <span class="dot"></span>
                                 <span>Last seen ${lastSeen}</span>
@@ -216,7 +216,7 @@ const Addons = {
                         </button>
                     </div>
                 </div>
-                ${addon.description ? `<p class="addon-description">${this._escape(addon.description)}</p>` : ''}
+                ${addon.description ? `<p class="addon-description">${Utils.escapeHtml(addon.description)}</p>` : ''}
                 ${tokenRow}
             </div>
         `;
@@ -238,7 +238,7 @@ const Addons = {
                 <span class="token-value">${truncated}</span>
                 <div class="token-meta">
                     <span class="token-badge ${badgeClass}">${badgeLabel}</span>
-                    <span>${this._timeAgo(token.created_at)}</span>
+                    <span>${Utils.timeAgo(token.created_at)}</span>
                     <button class="btn-agent-delete" onclick="Addons.deleteToken(${token.id})" title="Delete token">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -547,7 +547,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
 
     toggleEnabled(id, enabled) {
         const addon = this.addons.find(a => a.id === id);
-        const name = addon ? this._escape(addon.name) : `Add-on #${id}`;
+        const name = addon ? Utils.escapeHtml(addon.name) : `Add-on #${id}`;
         const action = enabled ? 'Enable' : 'Disable';
 
         Modals.create(`
@@ -603,7 +603,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
 
     confirmDeleteAddon(id) {
         const addon = this.addons.find(a => a.id === id);
-        const name = addon ? this._escape(addon.name) : `Add-on #${id}`;
+        const name = addon ? Utils.escapeHtml(addon.name) : `Add-on #${id}`;
 
         Modals.create(`
             <div class="modal">
@@ -718,7 +718,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
                     const badge = document.createElement('span');
                     badge.className = 'addon-update-badge';
                     badge.title = `Current: v${addon.version} → Latest: ${cached.latest_tag}`;
-                    badge.innerHTML = `${this._icons.updateArrow} ${this._escape(cached.latest_tag)} available`;
+                    badge.innerHTML = `${this._icons.updateArrow} ${Utils.escapeHtml(cached.latest_tag)} available`;
                     versionSpan.after(badge);
                 }
             }
@@ -797,26 +797,6 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
     _statusClass(status) {
         const map = { online: 'addon-online', degraded: 'addon-degraded', offline: 'addon-offline' };
         return map[status] || '';
-    },
-
-    _timeAgo(dateStr) {
-        if (!dateStr) return 'never';
-        const date = Utils.parseUTC(dateStr);
-        if (!date || isNaN(date)) return 'never';
-        if (date.getFullYear() < 2000) return 'never';
-        const mins = Math.floor((Date.now() - date.getTime()) / 60000);
-        if (mins < 1) return 'just now';
-        if (mins < 60) return `${mins}m ago`;
-        const hours = Math.floor(mins / 60);
-        if (hours < 24) return `${hours}h ago`;
-        return `${Math.floor(hours / 24)}d ago`;
-    },
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
     },
 
     _icons: {

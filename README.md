@@ -5,12 +5,12 @@
     <span style="vertical-align: middle;">Vigil</span>
   </h1>
 
-  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis, ZFS pool management, extensible add-ons, and multi-channel notifications.**
+  **Proactive, lightweight server & drive monitoring with S.M.A.R.T. health analysis, ZFS pool management, health scoring, extensible add-ons, multi-channel notifications, and built-in observability.**
   
   <p>
     <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
     <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
-    <img src="https://img.shields.io/badge/Go-1.25.7-00ADD8?logo=go&logoColor=white" alt="Go Version">
+    <img src="https://img.shields.io/badge/Go-1.26.1-00ADD8?logo=go&logoColor=white" alt="Go Version">
     <img src="https://img.shields.io/badge/SQLite-v1.44.0-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
   </p>
 
@@ -20,7 +20,7 @@
 
 > **🆕 v3.0:** Adds the **Add-on ecosystem** (WebSocket-connected daemons with manifest-driven UI), **multi-channel notifications** (Telegram, Discord, Slack, Email, Pushover, Gotify, webhooks) with a guided provider wizard, and **add-on registration tokens**. See [Notifications](#-notifications), [Add-ons](#-add-ons), and the companion [vigil-addons](https://github.com/pineappledr/vigil-addons) repository.
 
-**Vigil** is a next-generation monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, comprehensive ZFS pool monitoring, extensible add-ons, and multi-channel notifications — ensuring you never miss a critical hardware failure.
+**Vigil** is a self-hosted monitoring system built for speed and simplicity. It provides instant visibility into your infrastructure with a modern web dashboard, predictive health analysis, composite health scoring, comprehensive ZFS pool monitoring, extensible add-ons, multi-channel notifications, database backups, and built-in observability — ensuring you never miss a critical hardware failure.
 
 Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora, etc.) including systems with **LSI/Broadcom HBA controllers**.
 
@@ -40,6 +40,13 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora,
 - **🗄️ ZFS Pool Monitoring:** Full ZFS support with pool health, device hierarchy, scrub history, and SMART integration.
 - **🧩 Extensible Add-ons:** Third-party daemons register via API, stream telemetry over WebSocket, and render UI from a JSON manifest — no frontend code required.
 - **📣 Multi-Channel Notifications:** Guided provider wizard for Telegram, Discord, Slack, Email, Pushover, Gotify, and generic webhooks. Event routing, quiet hours, and digest batching included.
+- **🏷️ Drive Groups:** Organize drives into named groups (e.g., "Production", "Backup", "Archive") with per-group notification cooldowns. Set different alert frequencies per group — never remind for backup drives, alert every hour for production.
+- **📈 Health Scoring:** Composite 0–100 health score combining SMART, wearout, and ZFS metrics. Grades from Excellent to Critical. Exportable HTML health reports.
+- **🔮 Wearout Prediction:** SSD/NVMe wear leveling tracking with end-of-life prediction and threshold alerts (warning at 60%, critical at 80%).
+- **📊 Built-in Metrics:** System stats endpoint (`GET /api/stats`) with uptime, report queue depth, processing latency, notification counts, and database size — no Prometheus needed.
+- **💾 Database Backups:** Scheduled and manual SQLite backups via `VACUUM INTO`. Download, restore, and manage backups from the settings page. Upload a backup file to restore, with automatic safety backup before overwrite.
+- **🔍 Request Tracing:** `X-Request-ID` header on every request for log correlation across the agent → server → notification chain.
+- **⚙️ Configurable Retention:** Notification history, SMART data, and host history limits adjustable from the settings page.
 
 ---
 
@@ -76,7 +83,7 @@ Click any drive to see detailed S.M.A.R.T. attributes, temperature, power-on hou
 View all ZFS pools with health status, capacity, and scrub information. Click to see device hierarchy and history.
 
 ### Settings
-Manage your password and account settings.
+Manage account, drive groups, data retention, database backups, and view system stats.
 
 ---
 
@@ -565,9 +572,13 @@ docker run -e AUTH_ENABLED=false ghcr.io/pineappledr/vigil:latest
 | **Passwords** | bcrypt hashing (cost 10) |
 | **Sessions** | Cryptographically random tokens, 7-day TTL, hourly cleanup |
 | **Cookies** | `HttpOnly`, `Secure` (HTTPS), `SameSite=Lax` |
+| **CSRF** | `X-Requested-With` header required on state-changing requests (agent/addon endpoints exempt) |
 | **Rate Limiting** | Per-IP token bucket — 5 req/min on login, 10 req/min on agent auth |
 | **XSS** | All user-controlled data escaped in HTML and JavaScript contexts |
 | **CORS** | Origin reflection with `Vary: Origin` (no wildcard) |
+| **Audit Logging** | Login/logout, host deletion, notification CRUD, settings changes, agent management |
+| **Input Validation** | Hostname regex, alias length/character constraints, body size limits |
+| **Request Tracing** | `X-Request-ID` on every request for log correlation |
 | **CI/CD** | govulncheck, gosec, and Trivy scans gate every build |
 
 ---
@@ -612,6 +623,63 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 | `GET` | `/api/users/me` | Get current user |
 | `POST` | `/api/users/password` | Change password |
 | `POST` | `/api/users/username` | Change username |
+
+### SMART Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/smart/attributes` | Get SMART attributes for a drive |
+| `GET` | `/api/smart/attributes/history` | Get SMART attribute history |
+| `GET` | `/api/smart/attributes/trend` | Get attribute trend data |
+| `GET` | `/api/smart/health/summary` | Get health summary for a drive |
+| `GET` | `/api/smart/health/all` | Get health summary for all drives |
+| `GET` | `/api/smart/health/issues` | Get drives with health issues |
+| `GET` | `/api/smart/critical-attributes` | Get critical SMART attributes |
+| `GET` | `/api/smart/temperature/history` | Get temperature history |
+| `POST` | `/api/smart/cleanup` | Clean up old SMART data |
+
+### Health & Report Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health/score` | Get composite health score (0–100) |
+| `GET` | `/api/reports/health` | Get HTML health report (`?format=json` for JSON) |
+
+### Wearout Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/wearout` | Get wearout data for all drives |
+| `GET` | `/api/wearout/{hostname}/{serial}` | Get wearout for a specific drive |
+
+### Settings, Backup & Stats Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/settings/{category}` | Get settings for a category |
+| `PUT` | `/api/settings/{category}/{key}` | Update a setting value |
+| `POST` | `/api/backup` | Trigger a manual database backup |
+| `GET` | `/api/backups` | List existing backup files |
+| `GET` | `/api/backups/{filename}/download` | Download a backup file |
+| `POST` | `/api/backups/restore` | Restore from uploaded `.db` file (multipart) |
+| `DELETE` | `/api/backups/{filename}` | Delete a backup file |
+| `GET` | `/api/stats` | Get system metrics (uptime, queue, latency, counts) |
+
+### Drive Group Endpoints (Require Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/drive-groups` | List all groups with member counts |
+| `POST` | `/api/drive-groups` | Create a new group |
+| `GET` | `/api/drive-groups/{id}` | Get group with members |
+| `PUT` | `/api/drive-groups/{id}` | Update group name/color |
+| `DELETE` | `/api/drive-groups/{id}` | Delete group (cascades members and rules) |
+| `POST` | `/api/drive-groups/{id}/members` | Assign a drive to a group |
+| `DELETE` | `/api/drive-groups/members/{hostname}/{serial}` | Unassign a drive |
+| `GET` | `/api/drive-groups/assignments` | Get all assignments map |
+| `GET` | `/api/notifications/services/{id}/group-rules` | Get group rules for a service |
+| `PUT` | `/api/notifications/services/{id}/group-rules/{groupId}` | Set group rules |
+| `DELETE` | `/api/notifications/services/{id}/group-rules/{groupId}` | Remove group override |
 
 ### Agent Management Endpoints (Require Authentication)
 
@@ -660,6 +728,7 @@ Vigil v3.0 introduces a multi-channel notification system powered by [Shoutrrr](
 - **Provider Wizard** — Select a provider from the dropdown and fill in the dedicated fields. Vigil builds and validates the Shoutrrr URL automatically.
 - **Test Before Save** — Send a test notification directly from the setup modal to verify your credentials before committing.
 - **Event Rules** — Choose which event types (drive failure, ZFS errors, add-on notifications, etc.) each service should receive.
+- **Group Overrides** — Set per-group notification cooldowns. Production drives can alert every hour while backup drives only alert once or never.
 - **Quiet Hours** — Suppress non-critical alerts during configurable time windows.
 - **Digest Batching** — Aggregate frequent events into periodic summaries instead of individual messages.
 - **Secret Masking** — Password and token fields are masked in API responses. Editing a service preserves secrets unless you explicitly change them.

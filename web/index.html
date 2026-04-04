@@ -5,16 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vigil · Infrastructure Monitor</title>
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/smart-attributes.css">
-    <link rel="stylesheet" href="css/zfs.css">
-    <link rel="stylesheet" href="css/offline-indicator.css">
-    <link rel="stylesheet" href="css/temperature.css">
-    <link rel="stylesheet" href="css/agents.css">
-    <link rel="stylesheet" href="css/version.css">
-    <link rel="stylesheet" href="css/wearout.css">
-    <link rel="stylesheet" href="css/addons.css">
-    <link rel="stylesheet" href="css/notifications.css">
-    <link rel="stylesheet" href="css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,10 +18,10 @@
                     <img src="img/Vigil.png" alt="Vigil" class="logo-img">                   
                     <span class="logo-text">Vigil</span>
                 </div>
-                <div id="status-indicator" class="status-dot offline" title="Connecting..."></div>
+                <div id="status-indicator" class="status-dot offline" title="Connecting..." role="status" aria-label="Connection status"></div>
             </div>
             
-            <nav class="sidebar-nav">
+            <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
                 <div class="nav-section">
                     <span class="nav-label">Overview</span>
                     <a href="javascript:void(0)" class="nav-item active" id="nav-dashboard">
@@ -48,7 +38,7 @@
                 <div class="nav-section">
                     <div class="nav-section-header">
                         <span class="nav-label">SERVERS</span>
-                        <button id="server-sort-btn" class="sort-btn" title="Sort servers">
+                        <button id="server-sort-btn" class="sort-btn" title="Sort servers" aria-label="Sort servers">
                             <span class="sort-icon">↑</span>
                             <span class="sort-text">A-Z</span>
                         </button>
@@ -151,7 +141,7 @@
         </aside>
         <div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('open'); this.classList.remove('active');"></div>
 
-        <main class="main-content">
+        <main class="main-content" role="main">
             <header class="main-header">
                 <button class="hamburger-btn" id="hamburger-btn" onclick="document.querySelector('.sidebar').classList.toggle('open'); document.querySelector('.sidebar-overlay').classList.toggle('active');" aria-label="Toggle menu">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -169,8 +159,8 @@
                     <h1 id="page-title">Infrastructure Overview</h1>
                 </div>
                 <div class="header-right">
-                    <span class="last-update">Last update: <time id="last-update-time">--:--:--</time></span>
-                    <button class="btn-refresh" id="btn-refresh" title="Refresh">
+                    <span class="last-update">Last update: <time id="last-update-time" aria-live="polite">--:--:--</time></span>
+                    <button class="btn-refresh" id="btn-refresh" title="Refresh" aria-label="Refresh data">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="23 4 23 10 17 10"/>
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -248,6 +238,8 @@
     <script src="js/manifest-renderer.js"></script>
     <script src="js/addons.js"></script>
     <script src="js/notification-settings.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/drive-groups.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/temperature.js"></script>
     <script src="js/version.js"></script>

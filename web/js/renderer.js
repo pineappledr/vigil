@@ -44,74 +44,124 @@ const Renderer = {
             return;
         }
         
-        summaryCards.innerHTML = this.serverSummaryCards();
-        
+        this._reconcileSummaryCards(summaryCards);
+
         if (!servers || servers.length === 0) {
             serverList.innerHTML = Components.emptyState('noServers');
             return;
         }
-        
+
         const sortedServers = State.getSortedData();
-        
-        serverList.innerHTML = sortedServers.map((server) => {
+
+        const htmls = [];
+        const keys = [];
+        sortedServers.forEach((server) => {
             const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
-            return Components.serverSection(server, actualIdx, drives);
-        }).join('');
+            keys.push(server.hostname);
+            htmls.push(Components.serverSection(server, actualIdx, drives));
+        });
+        Utils.reconcileChildren(serverList, htmls, keys);
     },
 
-    serverSummaryCards() {
+    _healthScoreCard() {
+        const hs = State.healthScore;
+        if (!hs) return '';
+        let iconClass = 'green';
+        if (hs.score < 40) iconClass = 'red';
+        else if (hs.score < 75) iconClass = 'yellow';
+        return Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+            iconClass, key: 'health-score',
+            value: hs.score,
+            label: hs.grade,
+            onClick: "Navigation.showHealthScore()",
+            active: State.activeFilter === 'health',
+            title: 'Click to view health score breakdown'
+        });
+    },
+
+    _reconcileSummaryCards(container) {
         const stats = State.getStats();
         const zfsStats = State.getZFSStats();
         const showZFS = zfsStats.totalPools > 0;
-        
-        return `
-            ${Components.summaryCard({
-                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
-                iconClass: 'blue',
-                value: stats.totalServers,
-                label: 'Servers',
-                onClick: null
-            })}
-            ${Components.summaryCard({
-                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
-                iconClass: 'purple',
-                value: stats.totalDrives,
-                label: 'Total Drives',
-                onClick: "Navigation.showFilter('all')",
-                active: State.activeFilter === 'all',
-                title: 'Click to view all drives'
-            })}
-            ${Components.summaryCard({
-                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
-                iconClass: 'green',
-                value: stats.healthyDrives,
-                label: 'Healthy',
-                onClick: "Navigation.showFilter('healthy')",
-                active: State.activeFilter === 'healthy',
-                title: 'Click to view healthy drives'
-            })}
-            ${Components.summaryCard({
+        const htmls = [];
+        const keys = [];
+
+        const add = (key, html) => { if (html) { keys.push(key); htmls.push(html); } };
+
+        add('servers', Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
+            iconClass: 'blue', key: 'servers',
+            value: stats.totalServers,
+            label: 'Servers',
+            onClick: "Navigation.showDashboard()",
+            active: !State.activeFilter && State.activeView === 'drives' && State.activeServerIndex === null,
+            title: 'Click to view dashboard'
+        }));
+        add('drives', Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
+            iconClass: 'purple', key: 'drives',
+            value: stats.totalDrives,
+            label: `<span class="card-type-breakdown">${stats.nvmeCount} NVMe · ${stats.ssdCount} SSD · ${stats.hddCount} HDD</span>`,
+            onClick: "Navigation.showFilter('all')",
+            active: State.activeFilter === 'all',
+            title: 'Click to view all drives'
+        }));
+        add('healthy', Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+            iconClass: 'green', key: 'healthy',
+            value: stats.healthyDrives,
+            label: 'Healthy',
+            onClick: "Navigation.showFilter('healthy')",
+            active: State.activeFilter === 'healthy',
+            title: 'Click to view healthy drives'
+        }));
+        add('health-score', this._healthScoreCard());
+        if (stats.warningDrives > 0) {
+            add('warning', Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-                iconClass: 'red',
-                value: stats.attentionDrives,
-                label: 'Need Attention',
-                onClick: stats.attentionDrives > 0 ? "Navigation.showFilter('attention')" : null,
-                active: State.activeFilter === 'attention',
-                title: stats.attentionDrives > 0 ? 'Click to view drives needing attention' : 'All drives healthy'
-            })}
-            ${showZFS ? Components.summaryCard({
+                iconClass: 'yellow', key: 'warning',
+                value: stats.warningDrives,
+                label: 'Warning',
+                onClick: "Navigation.showFilter('warning')",
+                active: State.activeFilter === 'warning',
+                title: 'Click to view drives with warnings'
+            }));
+        }
+        if (stats.criticalDrives > 0) {
+            add('critical', Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+                iconClass: 'red', key: 'critical',
+                value: stats.criticalDrives,
+                label: 'Critical',
+                onClick: "Navigation.showFilter('critical')",
+                active: State.activeFilter === 'critical',
+                title: 'Click to view failing drives'
+            }));
+        }
+        if (showZFS) {
+            add('zfs', Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="7" cy="6" r="1" fill="currentColor"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="7" cy="18" r="1" fill="currentColor"/></svg>`,
-                iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan',
+                iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan', key: 'zfs',
                 value: `${zfsStats.healthyPools}/${zfsStats.totalPools}`,
                 label: 'ZFS Pools',
                 onClick: "Navigation.showZFS()",
                 active: State.activeView === 'zfs',
-                title: zfsStats.attentionPools > 0 
-                    ? `${zfsStats.attentionPools} pool(s) need attention` 
+                title: zfsStats.attentionPools > 0
+                    ? `${zfsStats.attentionPools} pool(s) need attention`
                     : 'Click to view ZFS pools'
-            }) : ''}
-        `;
+            }));
+        }
+
+        Utils.reconcileChildren(container, htmls, keys);
+    },
+
+    // String version for one-shot renders (filtered views, health breakdown)
+    serverSummaryCards() {
+        const container = document.createElement('div');
+        this._reconcileSummaryCards(container);
+        return container.innerHTML;
     },
 
     serverDetailSummaryCards(server) {
@@ -186,20 +236,111 @@ const Renderer = {
         `;
     },
 
+    healthBreakdown() {
+        this.ensureDashboardStructure();
+        const serverList = document.getElementById('server-list');
+        const summaryCards = document.getElementById('summary-cards');
+        if (!serverList || !summaryCards) return;
+
+        summaryCards.innerHTML = this.serverSummaryCards();
+
+        const hs = State.healthScore;
+        if (!hs) {
+            serverList.innerHTML = '<p style="color:var(--text-muted);padding:20px">Health score not available.</p>';
+            return;
+        }
+
+        const gradeColor = (score) => {
+            if (score >= 90) return 'var(--success)';
+            if (score >= 75) return Utils.getCSSVar('--success');
+            if (score >= 60) return 'var(--warning)';
+            if (score >= 40) return '#f97316';
+            return 'var(--danger)';
+        };
+
+        const componentCard = (label, comp, icon) => {
+            const ded = Math.round(comp.deduction);
+            return `
+                <div class="health-component-card">
+                    <div class="health-component-header">
+                        <span class="health-component-icon">${icon}</span>
+                        <span class="health-component-label">${label}</span>
+                    </div>
+                    <div class="health-component-deduction" style="color:${ded > 0 ? 'var(--danger)' : 'var(--success)'}">
+                        ${ded > 0 ? '−' + ded : '0'}
+                    </div>
+                    <div class="health-component-details">${Utils.escapeHtml(comp.details)}</div>
+                </div>`;
+        };
+
+        // Build drive list for drives with issues
+        const issuesDrives = [];
+        State.data.forEach((server, serverIdx) => {
+            (server.details?.drives || []).forEach((drive, driveIdx) => {
+                if (Utils.getHealthStatus(drive) !== 'healthy') {
+                    issuesDrives.push({ ...drive, _serverIdx: serverIdx, _driveIdx: driveIdx, _hostname: server.hostname, _idx: driveIdx });
+                }
+            });
+        });
+
+        const drivesHtml = issuesDrives.length > 0
+            ? `<div class="drive-table-wrapper">
+                    <table class="drive-table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Name</th>
+                                <th>Serial</th>
+                                <th>Host</th>
+                                <th>Type</th>
+                                <th>Temp</th>
+                                <th>Age</th>
+                                <th>SMART</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${issuesDrives.map(d => this._driveTableRow(d)).join('')}
+                        </tbody>
+                    </table>
+                </div>`
+            : '<p style="color:var(--text-muted)">All drives are healthy.</p>';
+
+        serverList.innerHTML = `
+            <div class="health-breakdown-view">
+                <div class="health-score-banner" style="border-color:${gradeColor(hs.score)}">
+                    <div class="health-score-big" style="color:${gradeColor(hs.score)}">${hs.score}</div>
+                    <div class="health-score-info">
+                        <div class="health-score-grade" style="color:${gradeColor(hs.score)}">${Utils.escapeHtml(hs.grade)}</div>
+                        <div class="health-score-sub">out of 100</div>
+                    </div>
+                </div>
+                <h3 class="health-section-title">Score Components</h3>
+                <div class="health-components-grid">
+                    ${componentCard('SMART', hs.components.smart, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>')}
+                    ${componentCard('Wearout', hs.components.wearout, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>')}
+                    ${componentCard('ZFS', hs.components.zfs, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h16"/></svg>')}
+                </div>
+                <h3 class="health-section-title">Drives Needing Attention</h3>
+                ${drivesHtml}
+            </div>
+        `;
+    },
+
     filteredDrives(filterFn, filterType) {
         // Restore structure first
         this.ensureDashboardStructure();
-        
+
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
-        
+
         if (!serverList || !summaryCards) return;
-        
+
         summaryCards.innerHTML = this.serverSummaryCards();
-        
+
         const matchingDrives = [];
         const sortedServers = State.getSortedData();
-        
+
         sortedServers.forEach((server) => {
             const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             (server.details?.drives || []).forEach((drive, driveIdx) => {
@@ -214,39 +355,103 @@ const Renderer = {
                 }
             });
         });
-        
+
         if (matchingDrives.length === 0) {
             serverList.innerHTML = Components.emptyState(filterType === 'attention' ? 'attention' : 'noDrives');
             return;
         }
-        
+
         const nvme = matchingDrives.filter(d => Utils.getDriveType(d) === 'NVMe');
         const ssd = matchingDrives.filter(d => Utils.getDriveType(d) === 'SSD');
         const hdd = matchingDrives.filter(d => !['NVMe', 'SSD'].includes(Utils.getDriveType(d)));
-        
-        const renderFilteredSection = (title, icon, drives) => {
+
+        const renderTableSection = (title, icon, drives) => {
             if (drives.length === 0) return '';
             return `
-                <div class="drive-type-section">
-                    <div class="drive-type-header">
+                <div class="drive-table-section">
+                    <div class="drive-table-header">
                         ${icon}
                         <span>${title}</span>
-                        <span class="drive-type-count">${drives.length}</span>
+                        <span class="drive-table-count">${drives.length}</span>
                     </div>
-                    <div class="drives-grid">
-                        ${drives.map(d => Components.driveCard(d, d._serverIdx)).join('')}
+                    <div class="drive-table-wrapper">
+                        <table class="drive-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Name</th>
+                                    <th>Serial</th>
+                                    <th>Host</th>
+                                    <th>Capacity</th>
+                                    <th>Temp</th>
+                                    <th>Age</th>
+                                    <th>Wearout</th>
+                                    <th>SMART</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${drives.map(d => this._driveTableRow(d)).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             `;
         };
-        
+
         serverList.innerHTML = `
             <div class="filtered-drives-view">
-                ${renderFilteredSection('NVMe Drives', Components.icons.nvme, nvme)}
-                ${renderFilteredSection('Solid State Drives', Components.icons.ssd, ssd)}
-                ${renderFilteredSection('Hard Disk Drives', Components.icons.hdd, hdd)}
+                ${renderTableSection('NVMe Drives', Components.icons.nvme, nvme)}
+                ${renderTableSection('Solid State Drives', Components.icons.ssd, ssd)}
+                ${renderTableSection('Hard Disk Drives', Components.icons.hdd, hdd)}
             </div>
         `;
+    },
+
+    _driveTableRow(drive) {
+        const status = Utils.getHealthStatus(drive);
+        const driveName = Utils.getDriveName(drive);
+        const serial = drive.serial_number || 'N/A';
+        const hostname = drive._hostname || '';
+        const wearoutData = State.getWearoutForDrive(hostname, serial);
+        const wearoutRaw = wearoutData ? wearoutData.percentage : null;
+        const wearoutPct = wearoutRaw !== null ? Math.round(wearoutRaw * 10) / 10 : null;
+        const smartPassed = drive.smart_status?.passed;
+        const alias = drive._alias || '';
+        const displayName = alias || driveName;
+
+        return `
+            <tr class="drive-table-row ${status}" onclick="Navigation.showDriveDetails(${drive._serverIdx}, ${drive._driveIdx})">
+                <td><span class="drive-status-dot ${status}"></span></td>
+                <td class="drive-table-name" title="${Utils.escapeHtml(driveName)}">${Utils.escapeHtml(displayName)}</td>
+                <td class="drive-table-serial">${Utils.escapeHtml(serial)}</td>
+                <td class="drive-table-host">${Utils.escapeHtml(hostname)}</td>
+                <td>${Utils.formatSize(drive.user_capacity?.bytes)}</td>
+                <td>${drive.temperature?.current ?? '--'}°C</td>
+                <td>${Utils.formatAge(drive.power_on_time?.hours)}</td>
+                <td class="drive-table-wearout">${wearoutPct !== null ? this._wearoutBar(wearoutPct) : '--'}</td>
+                <td><span class="smart-badge ${smartPassed ? 'passed' : 'failed'}">${smartPassed ? 'OK' : 'FAIL'}</span></td>
+                <td class="drive-table-actions">
+                    <button class="alias-btn-sm" onclick="event.stopPropagation(); Modals.showAlias('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(serial)}', '${Utils.escapeJSString(alias)}', '${Utils.escapeJSString(driveName)}')" title="Set alias">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                </td>
+            </tr>
+        `;
+    },
+
+    _wearoutBar(pct) {
+        const remaining = Math.max(0, Math.min(100, 100 - pct));
+        let barClass = 'wearout-good';
+        if (pct > 80) barClass = 'wearout-critical';
+        else if (pct > 50) barClass = 'wearout-warning';
+        return `
+            <div class="wearout-bar-container">
+                <span class="wearout-tooltip">${pct}% used · ${remaining.toFixed(1)}% remaining</span>
+                <div class="wearout-bar">
+                    <div class="wearout-bar-fill ${barClass}" style="width:${Math.min(pct, 100)}%"></div>
+                </div>
+            </div>`;
     },
 
     driveDetails(serverIdx, driveIdx) {
@@ -425,6 +630,143 @@ const Renderer = {
                     </div>
                 </div>
                 
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                        <h3>Data Retention</h3>
+                    </div>
+                    <div class="settings-card" id="retention-settings">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Notification History</div>
+                                <div class="settings-item-desc">Days to keep notification history</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-notification-days" min="1" max="3650" value="90"
+                                onchange="Settings.saveRetention('notification_history_days', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">SMART Data</div>
+                                <div class="settings-item-desc">Days to keep SMART attribute and temperature history</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-smart-days" min="1" max="3650" value="90"
+                                onchange="Settings.saveRetention('smart_data_days', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Host History Limit</div>
+                                <div class="settings-item-desc">Maximum report history entries per host</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-host-limit" min="10" max="1000" value="50"
+                                onchange="Settings.saveRetention('host_history_limit', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Notification Display Limit</div>
+                                <div class="settings-item-desc">Default number of notification records to show</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-notify-limit" min="10" max="500" value="50"
+                                onchange="Settings.saveRetention('notification_display_limit', this.value)">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <h3>Database Backup</h3>
+                    </div>
+                    <div class="settings-card" id="backup-settings">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Automatic Backups</div>
+                                <div class="settings-item-desc">Enable scheduled database backups</div>
+                            </div>
+                            <input type="checkbox" class="settings-toggle" id="backup-enabled" checked
+                                onchange="Settings.saveBackupSetting('enabled', this.checked ? 'true' : 'false')">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Backup Interval</div>
+                                <div class="settings-item-desc">Hours between automatic backups</div>
+                            </div>
+                            <input type="number" class="settings-input" id="backup-interval" min="1" max="168" value="24"
+                                onchange="Settings.saveBackupSetting('interval_hours', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Max Backups</div>
+                                <div class="settings-item-desc">Maximum number of backup files to retain</div>
+                            </div>
+                            <input type="number" class="settings-input" id="backup-max" min="1" max="100" value="7"
+                                onchange="Settings.saveBackupSetting('max_backups', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Manual Backup</div>
+                                <div class="settings-item-desc">Create a backup now</div>
+                            </div>
+                            <div class="backup-actions">
+                                <button class="btn btn-secondary" id="backup-now-btn" onclick="Settings.triggerBackup()">Backup Now</button>
+                                <button class="btn btn-secondary" onclick="Settings.restoreFromFile()">Restore from File</button>
+                            </div>
+                        </div>
+                        <div id="backup-progress" class="backup-progress" style="display:none">
+                            <div class="backup-progress-bar"><div class="backup-progress-fill"></div></div>
+                            <span class="backup-progress-text">Creating backup…</span>
+                        </div>
+                        <div id="backup-list"></div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                            <line x1="6" y1="6" x2="6.01" y2="6"/>
+                            <line x1="6" y1="18" x2="6.01" y2="18"/>
+                        </svg>
+                        <h3>Drive Groups</h3>
+                    </div>
+                    <div class="settings-card" id="drive-groups-settings">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-desc">Organize drives into groups with per-group notification rules</div>
+                            </div>
+                        </div>
+                        <div id="drive-groups-list"></div>
+                        <div id="drive-groups-create"></div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <path d="M3 9h18"/>
+                            <path d="M9 21V9"/>
+                        </svg>
+                        <h3>System Stats</h3>
+                    </div>
+                    <div class="settings-card" id="system-stats">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-desc">Loading stats...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="settings-section">
                     <div class="settings-section-header">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

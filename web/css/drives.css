@@ -48,9 +48,9 @@
     flex-shrink: 0;
 }
 
-.section-icon.nvme { color: #f59e0b; }
-.section-icon.ssd { color: #3b82f6; }
-.section-icon.hdd { color: #10b981; }
+.section-icon.nvme { color: var(--warning); }
+.section-icon.ssd { color: var(--accent-primary); }
+.section-icon.hdd { color: var(--success); }
 .section-icon.server { color: var(--accent-primary); }
 
 .drive-section-count {

@@ -58,6 +58,23 @@ func Migrate(db *sql.DB) error {
 		log.Printf("  ✓ %s", s.label)
 	}
 
+	// Backfill: ensure monitoring event rules that previously had 0 cooldown
+	// get sensible defaults so notifications are not spammed every report cycle.
+	backfills := []struct {
+		eventType   string
+		cooldownSec int
+	}{
+		{"smart_critical", 86400},
+		{"temp_critical", 3600},
+		{"zfs_pool_faulted", 86400},
+		{"zfs_device_failed", 86400},
+		{"reallocated_sectors", 86400},
+	}
+	for _, b := range backfills {
+		db.Exec(`UPDATE notification_event_rules SET cooldown_secs = ? WHERE event_type = ? AND cooldown_secs = 0`, b.cooldownSec, b.eventType)
+	}
+	log.Println("  ✓ cooldown backfill")
+
 	log.Println("🔔 Migration completed: Notification extensions ready")
 	return nil
 }

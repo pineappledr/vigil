@@ -267,8 +267,8 @@ const DeployWizardComponent = {
 
         return keys.map((key, i) =>
             `<button class="agent-platform-btn${i === 0 ? ' active' : ''}"
-                    data-platform="${this._escape(key)}"
-                    onclick="DeployWizardComponent.switchPlatform('${this._escapeJS(compId)}', '${this._escapeJS(key)}')">${this._escape(platforms[key].label || key)}</button>`
+                    data-platform="${Utils.escapeHtml(key)}"
+                    onclick="DeployWizardComponent.switchPlatform('${this._escapeJS(compId)}', '${this._escapeJS(key)}')">${Utils.escapeHtml(platforms[key].label || key)}</button>`
         ).join('');
     },
 
@@ -327,7 +327,7 @@ const DeployWizardComponent = {
 
             html += `
                 <div class="form-group">
-                    <label>${this._escape(label)}</label>
+                    <label>${Utils.escapeHtml(label)}</label>
                     <div class="form-input-with-copy">
                         <input type="${isSecret ? 'password' : 'text'}" id="${fieldId}" class="form-input form-input-mono"
                                value="" readonly placeholder="Loading..."
@@ -342,7 +342,7 @@ const DeployWizardComponent = {
                             ${rotateBtn}
                         </div>
                     </div>
-                    ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
+                    ${envDef.hint ? `<span class="form-hint">${Utils.escapeHtml(envDef.hint)}</span>` : ''}
                 </div>
             `;
         }
@@ -362,10 +362,10 @@ const DeployWizardComponent = {
 
             html += `
                 <div class="form-group">
-                    <label>${this._escape(label)}${optionalTag}</label>
+                    <label>${Utils.escapeHtml(label)}${optionalTag}</label>
                     <input type="text" id="${fieldId}" class="form-input"
-                           placeholder="${this._escape(placeholder)}">
-                    ${envDef.hint ? `<span class="form-hint">${this._escape(envDef.hint)}</span>` : ''}
+                           placeholder="${Utils.escapeHtml(placeholder)}">
+                    ${envDef.hint ? `<span class="form-hint">${Utils.escapeHtml(envDef.hint)}</span>` : ''}
                 </div>
             `;
         }
@@ -620,13 +620,6 @@ services:
     },
 
     // ─── Helpers ─────────────────────────────────────────────────────────
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
-    },
 
     _escapeJS(str) {
         if (!str) return '';

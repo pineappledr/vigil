@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"vigil/internal/agents"
+	"vigil/internal/audit"
+	"vigil/internal/auth"
 	"vigil/internal/crypto"
 	"vigil/internal/db"
+	"vigil/internal/validate"
 )
 
 // ServerKeys is set from main.go after key initialisation.
@@ -309,6 +312,9 @@ func DeleteRegisteredAgent(w http.ResponseWriter, r *http.Request) {
 	deleted := agents.DeleteHostData(db.DB, hostname)
 
 	log.Printf("🗑️  Deleted agent id=%d (%s) — cascade: %v", id, hostname, deleted)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "agent_delete", "agent", idStr, hostname, "success")
+	}
 	JSONResponse(w, map[string]interface{}{
 		"status":  "deleted",
 		"cascade": deleted,
@@ -329,6 +335,13 @@ func CreateToken(w http.ResponseWriter, r *http.Request) {
 	var req createTokenRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
+	if req.Name != "" {
+		if err := validate.Name(req.Name, 128); err != nil {
+			JSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	var expiresIn *time.Duration
 	if req.ExpiresIn != nil && *req.ExpiresIn > 0 {
 		d := time.Duration(*req.ExpiresIn) * time.Second
@@ -342,6 +355,9 @@ func CreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔑 Registration token created: %.16s... (name=%q)", tok.Token, tok.Name)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "token_create", "registration_token", "", tok.Name, "success")
+	}
 	JSONResponse(w, tok)
 }
 
@@ -374,17 +390,9 @@ func DeleteToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "token_delete", "registration_token", idStr, "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
 }
 
-// ─── Audit helper ─────────────────────────────────────────────────────────────
-
-func logAuditEvent(event string, agentID int64, hostname, remoteAddr string) {
-	db.DB.Exec(`
-		INSERT INTO audit_log (action, resource, resource_id, details, ip_address, status)
-		VALUES (?, 'agent', ?, ?, ?, 'blocked')
-	`, event, strconv.FormatInt(agentID, 10),
-		fmt.Sprintf("agent=%s event=%s", hostname, event),
-		remoteAddr,
-	)
-}

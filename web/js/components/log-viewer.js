@@ -91,7 +91,7 @@ const LogViewerComponent = {
         return `<select class="smart-time-filter" id="log-time-filter-${compId}"
                         onchange="LogViewerComponent._onTimeFilterChange('${compId}')">
                     ${options.map(opt =>
-                        `<option value="${this._escape(opt.value)}"${opt.value === defaultVal ? ' selected' : ''}>${this._escape(opt.label)}</option>`
+                        `<option value="${Utils.escapeHtml(opt.value)}"${opt.value === defaultVal ? ' selected' : ''}>${Utils.escapeHtml(opt.label)}</option>`
                     ).join('')}
                 </select>`;
     },
@@ -222,7 +222,7 @@ const LogViewerComponent = {
                 <div class="log-line-header">
                     <span class="log-time">${timestamp}</span>
                     <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
-                    ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
+                    ${source ? `<span class="log-source">[${Utils.escapeHtml(source)}]</span>` : ''}
                 </div>
                 <div class="log-collapsible">
                     <button class="log-collapse-toggle" onclick="LogViewerComponent._toggleCollapse('${collapseId}', this)"
@@ -230,10 +230,10 @@ const LogViewerComponent = {
                         <svg class="log-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                             <polyline points="9 18 15 12 9 6"/>
                         </svg>
-                        <span class="log-msg log-msg-summary">${this._escape(firstLine)}</span>
+                        <span class="log-msg log-msg-summary">${Utils.escapeHtml(firstLine)}</span>
                         <span class="log-line-count">${lineCount} lines</span>
                     </button>
-                    <pre class="log-msg log-msg-pre log-collapsed" id="${collapseId}">${this._escape(payload.message)}</pre>
+                    <pre class="log-msg log-msg-pre log-collapsed" id="${collapseId}">${Utils.escapeHtml(payload.message)}</pre>
                 </div>
             `;
             line.classList.add('log-line-multiline');
@@ -241,8 +241,8 @@ const LogViewerComponent = {
             line.innerHTML = `
                 <span class="log-time">${timestamp}</span>
                 <span class="log-level log-level-${level}">${level.toUpperCase()}</span>
-                ${source ? `<span class="log-source">[${this._escape(source)}]</span>` : ''}
-                <span class="log-msg">${this._escape(payload.message)}</span>
+                ${source ? `<span class="log-source">[${Utils.escapeHtml(source)}]</span>` : ''}
+                <span class="log-msg">${Utils.escapeHtml(payload.message)}</span>
             `;
         }
 
@@ -302,10 +302,4 @@ const LogViewerComponent = {
         }
     },
 
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    }
 };

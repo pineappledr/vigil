@@ -51,8 +51,8 @@ const FormComponent = {
             this._fetchSources(compId);
         }, 0);
 
-        const submitLabel = this._escape(config.submit_label || 'Submit');
-        const resetLabel = config.reset_label ? this._escape(config.reset_label) : '';
+        const submitLabel = Utils.escapeHtml(config.submit_label || 'Submit');
+        const resetLabel = config.reset_label ? Utils.escapeHtml(config.reset_label) : '';
         const formClass = isInline ? 'addon-form addon-form-inline' : 'addon-form';
         const resetBtn = resetLabel
             ? `<button type="button" class="btn btn-secondary${isInline ? ' btn-sm' : ''}" onclick="FormComponent.resetToDefaults('${compId}')">${resetLabel}</button>`
@@ -224,8 +224,8 @@ const FormComponent = {
 
             const options = this._sourceToOptions(source, data, field);
             const placeholder = field.placeholder || 'Select...';
-            select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
-                options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
+            select.innerHTML = `<option value="">${Utils.escapeHtml(placeholder)}</option>` +
+                options.map(o => `<option value="${Utils.escapeHtml(o.value)}">${Utils.escapeHtml(o.label)}</option>`).join('');
             select.disabled = false;
 
             // Auto-select: carry forward the page-level agent selection, or
@@ -293,7 +293,7 @@ const FormComponent = {
             if (field.source !== source) continue;
             const select = document.getElementById(`field-${compId}-${field.name}`);
             if (select) {
-                select.innerHTML = `<option value="">${this._escape(message)}</option>`;
+                select.innerHTML = `<option value="">${Utils.escapeHtml(message)}</option>`;
                 select.disabled = false;
             }
         }
@@ -324,15 +324,15 @@ const FormComponent = {
             if (typeof field.visible_when === 'object') {
                 vwAttr = `data-visible-when-json='${JSON.stringify(field.visible_when)}'`;
             } else {
-                vwAttr = `data-visible-when="${this._escape(field.visible_when)}"`;
+                vwAttr = `data-visible-when="${Utils.escapeHtml(field.visible_when)}"`;
             }
         }
 
-        const dep = field.depends_on ? `data-depends-on="${this._escape(field.depends_on)}"` : '';
-        const calc = field.live_calculation ? `data-calc="${this._escape(field.live_calculation)}"` : '';
+        const dep = field.depends_on ? `data-depends-on="${Utils.escapeHtml(field.depends_on)}"` : '';
+        const calc = field.live_calculation ? `data-calc="${Utils.escapeHtml(field.live_calculation)}"` : '';
 
         if (field.type === 'hidden') {
-            return `<input type="hidden" id="${id}" name="${this._escape(field.name)}" value="">`;
+            return `<input type="hidden" id="${id}" name="${Utils.escapeHtml(field.name)}" value="">`;
         }
 
         const input = this._inputForType(id, field, required, compId);
@@ -342,12 +342,12 @@ const FormComponent = {
             : '';
 
         const hint = field.hint
-            ? `<div class="form-hint">${this._escape(field.hint)}</div>`
+            ? `<div class="form-hint">${Utils.escapeHtml(field.hint)}</div>`
             : '';
 
         return `
             <div class="form-group addon-form-group" id="fg-${id}" ${hidden} ${vwAttr} ${dep} ${calc}>
-                ${field.type !== 'checkbox' ? `<label for="${id}">${this._escape(field.label || field.name)}</label>` : ''}
+                ${field.type !== 'checkbox' ? `<label for="${id}">${Utils.escapeHtml(field.label || field.name)}</label>` : ''}
                 ${input}
                 ${hint}
                 ${calcDisplay}
@@ -357,7 +357,7 @@ const FormComponent = {
 
     _inputForType(id, field, required, compId) {
         const ev = `FormComponent._onInput('${compId}', '${this._escapeJS(field.name)}')`;
-        const name = this._escape(field.name);
+        const name = Utils.escapeHtml(field.name);
 
         switch (field.type) {
             case 'select':
@@ -387,7 +387,7 @@ const FormComponent = {
         // Source-backed selects start with "Loading..." placeholder
         if (field.source && this._sourceMap[field.source]) {
             const placeholder = field.depends_on
-                ? `Select a ${this._escape(field.depends_on)} first...`
+                ? `Select a ${Utils.escapeHtml(field.depends_on)} first...`
                 : 'Loading...';
             return `<select id="${id}" name="${name}" class="form-input" ${required}
                         onchange="${ev}" disabled>
@@ -401,13 +401,13 @@ const FormComponent = {
         const options = (field.options || [])
             .map(o => {
                 const sel = (def !== null && String(o.value) === def) ? ' selected' : '';
-                return `<option value="${this._escape(o.value)}"${sel}>${this._escape(o.label)}</option>`;
+                return `<option value="${Utils.escapeHtml(o.value)}"${sel}>${Utils.escapeHtml(o.label)}</option>`;
             })
             .join('');
 
         // Only show the empty placeholder if no default is pre-selected
         const placeholder = def === null
-            ? `<option value="">${this._escape(field.placeholder || 'Select...')}</option>`
+            ? `<option value="">${Utils.escapeHtml(field.placeholder || 'Select...')}</option>`
             : '';
 
         const customEv = `FormComponent._onCustomSelect('${compId}', '${this._escapeJS(field.name)}')`;
@@ -423,7 +423,7 @@ const FormComponent = {
         const customPlaceholder = field.custom_placeholder || '0 3 * * * (min hour day month weekday)';
         return `${selectHtml}
                 <input type="text" id="${id}-custom" class="form-input form-custom-input"
-                       placeholder="${this._escape(customPlaceholder)}"
+                       placeholder="${Utils.escapeHtml(customPlaceholder)}"
                        style="display:none; margin-top:6px"
                        oninput="${ev}">`;
     },
@@ -431,7 +431,7 @@ const FormComponent = {
     _checkboxInput(id, field, ev, name) {
         return `<label class="addon-checkbox">
                     <input type="checkbox" id="${id}" name="${name}" onchange="${ev}">
-                    ${this._escape(field.label || field.name)}
+                    ${Utils.escapeHtml(field.label || field.name)}
                 </label>`;
     },
 
@@ -439,7 +439,7 @@ const FormComponent = {
         const checked = field.default === true ? 'checked' : '';
         return `<label class="addon-toggle">
                     <input type="checkbox" id="${id}" name="${name}" onchange="${ev}" ${checked}>
-                    <span class="toggle-label">${this._escape(field.label || field.name)}</span>
+                    <span class="toggle-label">${Utils.escapeHtml(field.label || field.name)}</span>
                 </label>`;
     },
 
@@ -455,9 +455,9 @@ const FormComponent = {
                         min="${min}" max="${max}" step="${step}" value="${initial}"
                         oninput="${ev}; FormComponent._updateRangeDisplay('${id}', '${this._escapeJS(unit)}')">
                     <div class="form-range-labels">
-                        <span>${min}${this._escape(unit)}</span>
-                        <span class="form-range-value" id="rv-${id}">${initial}${this._escape(unit)}</span>
-                        <span>${max}${this._escape(unit)}</span>
+                        <span>${min}${Utils.escapeHtml(unit)}</span>
+                        <span class="form-range-value" id="rv-${id}">${initial}${Utils.escapeHtml(unit)}</span>
+                        <span>${max}${Utils.escapeHtml(unit)}</span>
                     </div>
                 </div>`;
     },
@@ -597,8 +597,8 @@ const FormComponent = {
                 this._fetchDependentOptions(meta.addonId, fieldName, parentValue)
                     .then(options => {
                         const placeholder = fieldDef?.placeholder || 'Select...';
-                        select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
-                            options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
+                        select.innerHTML = `<option value="">${Utils.escapeHtml(placeholder)}</option>` +
+                            options.map(o => `<option value="${Utils.escapeHtml(o.value)}">${Utils.escapeHtml(o.label)}</option>`).join('');
                         select.disabled = false;
                     })
                     .catch(() => {
@@ -639,12 +639,12 @@ const FormComponent = {
 
         const placeholder = fieldDef.placeholder || 'Select...';
         if (!parentValue) {
-            select.innerHTML = `<option value="">Select a ${this._escape(fieldDef.depends_on)} first...</option>`;
+            select.innerHTML = `<option value="">Select a ${Utils.escapeHtml(fieldDef.depends_on)} first...</option>`;
         } else if (options.length === 0) {
             select.innerHTML = `<option value="">No options available</option>`;
         } else {
-            select.innerHTML = `<option value="">${this._escape(placeholder)}</option>` +
-                options.map(o => `<option value="${this._escape(o.value)}">${this._escape(o.label)}</option>`).join('');
+            select.innerHTML = `<option value="">${Utils.escapeHtml(placeholder)}</option>` +
+                options.map(o => `<option value="${Utils.escapeHtml(o.value)}">${Utils.escapeHtml(o.label)}</option>`).join('');
         }
         select.disabled = false;
     },
@@ -932,7 +932,7 @@ const FormComponent = {
                     </div>
                     <p>Please review and confirm the following action:</p>
                     <div class="gate-summary">
-                        <div class="gate-summary-action">${this._escape(action)}</div>
+                        <div class="gate-summary-action">${Utils.escapeHtml(action)}</div>
                         ${summary}
                     </div>
                     <div class="form-group">
@@ -961,8 +961,8 @@ const FormComponent = {
                 const val = this._getFieldValue(compId, f.name);
                 if (!val) return '';
                 return `<div class="gate-summary-item">
-                    <span class="gate-label">${this._escape(f.label || f.name)}:</span>
-                    <span class="gate-value">${this._escape(val)}</span>
+                    <span class="gate-label">${Utils.escapeHtml(f.label || f.name)}:</span>
+                    <span class="gate-value">${Utils.escapeHtml(val)}</span>
                 </div>`;
             })
             .filter(Boolean)
@@ -1039,13 +1039,6 @@ const FormComponent = {
     },
 
     // ─── Helpers ──────────────────────────────────────────────────────────
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
-    },
 
     _escapeJS(str) {
         if (!str) return '';

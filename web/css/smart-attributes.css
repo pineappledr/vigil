@@ -234,7 +234,7 @@
 .nvme-health-header svg {
     width: 24px;
     height: 24px;
-    color: #f59e0b;
+    color: var(--warning);
 }
 
 .nvme-health-header h3 {
@@ -245,7 +245,7 @@
 
 .nvme-health-header .badge {
     background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
+    color: var(--warning);
     padding: 4px 10px;
     border-radius: 12px;
     font-size: 0.7rem;
@@ -1075,7 +1075,7 @@ tr.warning-row .attr-tooltip-trigger::after {
 
 .temp-period-select:hover,
 .temp-period-select:focus {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     outline: none;
 }
 

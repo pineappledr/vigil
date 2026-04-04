@@ -7,9 +7,13 @@ import (
 	"strconv"
 	"time"
 
+	"vigil/internal/audit"
+	"vigil/internal/auth"
 	"vigil/internal/db"
 	"vigil/internal/events"
 	"vigil/internal/notify"
+	"vigil/internal/settings"
+	"vigil/internal/validate"
 )
 
 // NotifySender is set from main.go to enable test-fire.
@@ -105,8 +109,12 @@ func CreateNotificationService(w http.ResponseWriter, r *http.Request) {
 		JSONError(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.Name == "" || req.ServiceType == "" {
-		JSONError(w, "name and service_type are required", http.StatusBadRequest)
+	if req.ServiceType == "" {
+		JSONError(w, "service_type is required", http.StatusBadRequest)
+		return
+	}
+	if err := validate.Name(req.Name, 128); err != nil {
+		JSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -161,6 +169,9 @@ func CreateNotificationService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔔 Notification service created: %s (%s)", svc.Name, svc.ServiceType)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "notification_service_create", "notification_service", strconv.FormatInt(id, 10), svc.Name, "success")
+	}
 	w.WriteHeader(http.StatusCreated)
 	JSONResponse(w, svc)
 }
@@ -224,6 +235,9 @@ func UpdateNotificationService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "notification_service_update", "notification_service", strconv.FormatInt(id, 10), "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "updated"})
 }
 
@@ -243,6 +257,9 @@ func DeleteNotificationService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔔 Notification service deleted: id=%d", id)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "notification_service_delete", "notification_service", strconv.FormatInt(id, 10), "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
 }
 
@@ -272,6 +289,9 @@ func UpdateEventRules(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "notification_rules_update", "notification_service", strconv.FormatInt(id, 10), "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "updated"})
 }
 
@@ -299,6 +319,9 @@ func UpdateQuietHours(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "notification_quiet_hours_update", "notification_service", strconv.FormatInt(id, 10), "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "updated"})
 }
 
@@ -326,6 +349,9 @@ func UpdateDigestConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "notification_digest_update", "notification_service", strconv.FormatInt(id, 10), "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "updated"})
 }
 
@@ -461,7 +487,7 @@ func TestNotificationURL(w http.ResponseWriter, r *http.Request) {
 // GetNotificationHistory returns recent notification records.
 // GET /api/notifications/history?limit=50
 func GetNotificationHistory(w http.ResponseWriter, r *http.Request) {
-	limit := 50
+	limit := settings.GetInt(db.DB, "retention", "notification_display_limit", 50)
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 500 {
 			limit = n

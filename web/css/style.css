@@ -8,3 +8,13 @@
 @import url('settings.css');
 @import url('version.css');
 @import url('smart-attributes.css');
+@import url('zfs.css');
+@import url('offline-indicator.css');
+@import url('temperature.css');
+@import url('agents.css');
+@import url('wearout.css');
+@import url('addons.css');
+@import url('notifications.css');
+@import url('drive-groups.css');
+@import url('responsive.css');
+@import url('print.css');

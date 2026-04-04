@@ -71,6 +71,7 @@ func createSchema() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_reports_hostname ON reports(hostname);
 	CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp);
+	CREATE INDEX IF NOT EXISTS idx_reports_host_ts ON reports(hostname, timestamp);
 
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,6 +104,25 @@ func createSchema() error {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 	return nil
+}
+
+// OpenValidate opens a SQLite database file and runs a quick integrity check.
+// Returns the open *sql.DB on success so the caller can close it.
+func OpenValidate(path string) (*sql.DB, error) {
+	d, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro", path))
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	var result string
+	if err := d.QueryRow("PRAGMA integrity_check(1)").Scan(&result); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("integrity check: %w", err)
+	}
+	if result != "ok" {
+		d.Close()
+		return nil, fmt.Errorf("integrity check failed: %s", result)
+	}
+	return d, nil
 }
 
 func migrateSchema() {

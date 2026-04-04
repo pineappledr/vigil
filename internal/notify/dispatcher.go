@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/containrrr/shoutrrr"
+	"vigil/internal/drivegroups"
 	"vigil/internal/events"
 )
 
@@ -36,6 +37,11 @@ type Dispatcher struct {
 	db     *sql.DB
 	bus    *events.Bus
 	sender Sender
+
+	// OnSent is called after each successful send (for metrics).
+	OnSent func()
+	// OnFailed is called after each failed send (for metrics).
+	OnFailed func()
 
 	// cooldowns tracks the last dispatch time per (service_id, event_type).
 	mu        sync.Mutex
@@ -148,17 +154,48 @@ func (d *Dispatcher) severityAllowed(svc NotificationService, sev events.Severit
 // severity filter in handle(), allowing specific event types to fire regardless
 // of the global Critical/Warning/Healthy threshold.
 func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed bool, explicit bool) {
+	// If the event identifies a specific drive (both hostname and serial present),
+	// check for group-specific rules first. Events without a serial (e.g. SnapRAID,
+	// addon events) skip straight to service-level rules.
+	source := d.eventSource(e)
+	if e.Hostname != "" && e.SerialNumber != "" {
+		groupID, err := drivegroups.GetDriveGroup(d.db, e.Hostname, e.SerialNumber)
+		if err == nil && groupID != nil {
+			groupRules, err := drivegroups.GetGroupEventRules(d.db, serviceID, *groupID)
+			if err == nil && len(groupRules) > 0 {
+				return d.evaluateRules(serviceID, e, groupRulesToEventRules(groupRules), source)
+			}
+			// No group rules configured → fall through to service-level defaults.
+		}
+	}
+
+	// Service-level rules (existing behavior).
 	rules, err := GetEventRules(d.db, serviceID)
 	if err != nil {
 		log.Printf("notify: get rules for service %d: %v", serviceID, err)
-		return true, false // fail open — if rules can't load, allow
+		return true, false // fail open
 	}
-
-	// If no rules are configured, allow all events (severity filter still applies).
 	if len(rules) == 0 {
 		return true, false
 	}
 
+	return d.evaluateRules(serviceID, e, rules, source)
+}
+
+// eventSource returns the cooldown source key for an event.
+func (d *Dispatcher) eventSource(e events.Event) string {
+	source := e.Hostname + ":" + e.SerialNumber
+	if source == ":" && e.Metadata != nil {
+		if name := e.Metadata["addon_name"]; name != "" {
+			source = "addon:" + name
+		}
+	}
+	return source
+}
+
+// evaluateRules checks a set of event rules against the event, enforcing
+// cooldowns. Used for both service-level and group-level rules.
+func (d *Dispatcher) evaluateRules(serviceID int64, e events.Event, rules []EventRule, source string) (allowed bool, explicit bool) {
 	for _, r := range rules {
 		if r.EventType != string(e.Type) {
 			continue
@@ -167,15 +204,24 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed 
 			return false, true
 		}
 
-		// Cooldown check
-		if r.Cooldown > 0 {
-			key := fmt.Sprintf("%d:%s", serviceID, e.Type)
+		// Cooldown check.
+		// -1 = permanent (fire once, never again until server restart).
+		//  0 = no cooldown (fire every time).
+		// >0 = cooldown in seconds.
+		if r.Cooldown != 0 {
+			key := fmt.Sprintf("%d:%s:%s", serviceID, e.Type, source)
 			d.mu.Lock()
-			last, ok := d.cooldowns[key]
+			last, seen := d.cooldowns[key]
 			now := time.Now()
-			if ok && now.Sub(last) < time.Duration(r.Cooldown)*time.Second {
-				d.mu.Unlock()
-				return false, true
+			if seen {
+				if r.Cooldown < 0 {
+					d.mu.Unlock()
+					return false, true
+				}
+				if now.Sub(last) < time.Duration(r.Cooldown)*time.Second {
+					d.mu.Unlock()
+					return false, true
+				}
 			}
 			d.cooldowns[key] = now
 			d.mu.Unlock()
@@ -186,6 +232,20 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed 
 
 	// Event type not in rules list — allow by default, not explicit.
 	return true, false
+}
+
+// groupRulesToEventRules converts group-specific rules to the common EventRule
+// type so they can be evaluated with the same logic.
+func groupRulesToEventRules(gr []drivegroups.GroupEventRule) []EventRule {
+	out := make([]EventRule, len(gr))
+	for i, r := range gr {
+		out[i] = EventRule{
+			EventType: r.EventType,
+			Enabled:   r.Enabled,
+			Cooldown:  r.Cooldown,
+		}
+	}
+	return out
 }
 
 // inQuietHours returns true if the event should be suppressed.
@@ -241,9 +301,15 @@ func (d *Dispatcher) dispatch(svc NotificationService, e events.Event) {
 		rec.Status = "failed"
 		rec.ErrorMessage = err.Error()
 		log.Printf("notify: send to %s failed: %v", svc.Name, err)
+		if d.OnFailed != nil {
+			d.OnFailed()
+		}
 	} else {
 		rec.Status = "sent"
 		rec.SentAt = time.Now().UTC()
+		if d.OnSent != nil {
+			d.OnSent()
+		}
 	}
 
 	if _, dbErr := RecordNotification(d.db, rec); dbErr != nil {

@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"vigil/internal/addons"
+	"vigil/internal/audit"
 	"vigil/internal/auth"
 	"vigil/internal/db"
+	"vigil/internal/validate"
 )
 
 // TelemetryBroker is set from main.go during startup.
@@ -214,6 +216,7 @@ func SetAddonEnabled(w http.ResponseWriter, r *http.Request) {
 		log.Printf("📦 Add-on %s: %s (id=%d, by=%s)", action, addon.Name, id, session.Username)
 	}
 
+	audit.LogEvent(db.DB, r, session.UserID, session.Username, "addon_toggle", "addon", fmt.Sprintf("%d", id), action, "success")
 	JSONResponse(w, map[string]interface{}{
 		"status":  "updated",
 		"enabled": req.Enabled,
@@ -285,6 +288,9 @@ func CreateAddonFromUI(w http.ResponseWriter, r *http.Request) {
 
 	addon, _ := addons.Get(db.DB, addonID)
 	log.Printf("📦 Add-on registered from UI: %s (id=%d, token=%.16s…)", req.Name, addonID, req.Token)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "addon_create", "addon", fmt.Sprintf("%d", addonID), req.Name, "success")
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	JSONResponse(w, map[string]interface{}{
@@ -401,6 +407,13 @@ func CreateAddonToken(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
+	if req.Name != "" {
+		if err := validate.Name(req.Name, 128); err != nil {
+			JSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	expiry := 1 * time.Hour
 	tok, err := addons.CreateRegistrationToken(db.DB, req.Name, &expiry)
 	if err != nil {
@@ -410,6 +423,9 @@ func CreateAddonToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔑 Add-on registration token created: %.16s… expires=%v (name=%q)", tok.Token, tok.ExpiresAt, tok.Name)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "addon_token_create", "addon_token", "", tok.Name, "success")
+	}
 	w.WriteHeader(http.StatusCreated)
 	JSONResponse(w, tok)
 }
@@ -451,6 +467,9 @@ func DeleteAddonToken(w http.ResponseWriter, r *http.Request) {
 		log.Printf("❌ Delete addon token: %v", err)
 		JSONError(w, "Failed to delete token", http.StatusInternalServerError)
 		return
+	}
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "addon_token_delete", "addon_token", fmt.Sprintf("%d", id), "", "success")
 	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
 }

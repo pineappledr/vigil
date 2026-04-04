@@ -70,6 +70,133 @@
 
 .settings-item-desc a:hover { text-decoration: underline; }
 
+.settings-input {
+    width: 80px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    text-align: right;
+}
+.settings-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+.settings-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    appearance: none;
+    background: var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+.settings-toggle:checked { background: var(--accent-primary); }
+.settings-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: var(--text-white);
+    border-radius: 50%;
+    transition: transform var(--transition-fast);
+}
+.settings-toggle:checked::after { transform: translateX(20px); }
+
+.backup-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.backup-actions a.btn { text-decoration: none; }
+
+/* Backup list table */
+.backup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+.backup-table thead th {
+    text-align: left;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #94a3b8);
+    border-bottom: 1px solid var(--border-color, #334155);
+}
+.backup-table thead th:last-child { text-align: right; }
+.backup-table tbody tr { border-bottom: 1px solid var(--border-color, #334155); }
+.backup-table tbody tr:last-child { border-bottom: none; }
+.backup-table tbody td {
+    padding: 10px 16px;
+    white-space: nowrap;
+}
+.backup-link {
+    color: var(--accent-primary, #6366f1);
+    text-decoration: none;
+}
+.backup-link:hover { text-decoration: underline; }
+.backup-row-actions {
+    text-align: right;
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+.backup-icon-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+}
+.backup-icon-btn:hover {
+    color: var(--text-primary, #f1f5f9);
+    background: var(--hover-bg, rgba(255,255,255,0.05));
+}
+.backup-icon-btn.danger:hover { color: #ef4444; }
+
+/* Backup progress bar */
+.backup-progress {
+    padding: 12px 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.backup-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.backup-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+.backup-progress-fill.error {
+    background: #ef4444;
+}
+.backup-progress-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
 /* ============================================
    ANIMATIONS
    ============================================ */

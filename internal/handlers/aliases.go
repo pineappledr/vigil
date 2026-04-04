@@ -7,8 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"vigil/internal/audit"
+	"vigil/internal/auth"
 	"vigil/internal/db"
 	"vigil/internal/models"
+	"vigil/internal/validate"
 )
 
 // GetAliases returns drive aliases, optionally filtered by hostname
@@ -66,6 +69,11 @@ func SetAlias(w http.ResponseWriter, r *http.Request) {
 
 	req.Alias = strings.TrimSpace(req.Alias)
 
+	if err := validate.Alias(req.Alias); err != nil {
+		JSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Delete if alias is empty
 	if req.Alias == "" {
 		db.DB.Exec("DELETE FROM drive_aliases WHERE hostname = ? AND serial_number = ?",
@@ -88,6 +96,9 @@ func SetAlias(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("📝 Alias set: %s/%s -> %s", req.Hostname, req.SerialNumber, req.Alias)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "alias_set", "alias", req.SerialNumber, req.Hostname+"/"+req.SerialNumber+" -> "+req.Alias, "success")
+	}
 	JSONResponse(w, map[string]string{"status": "ok"})
 }
 
@@ -110,5 +121,8 @@ func DeleteAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "alias_delete", "alias", id, "", "success")
+	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
 }

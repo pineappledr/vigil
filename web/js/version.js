@@ -83,12 +83,12 @@ const Version = {
                 <div class="update-banner-text">
                     <span class="update-banner-title">Update Available</span>
                     <span class="update-banner-version">
-                        v${this.escapeHtml(info.current_version)} → 
-                        <strong>v${this.escapeHtml(info.latest_version)}</strong>
+                        v${Utils.escapeHtml(info.current_version)} → 
+                        <strong>v${Utils.escapeHtml(info.latest_version)}</strong>
                     </span>
                 </div>
                 <div class="update-banner-actions">
-                    <a href="${this.escapeHtml(info.release_url)}" 
+                    <a href="${Utils.escapeHtml(info.release_url)}" 
                        target="_blank" 
                        rel="noopener noreferrer"
                        class="update-banner-btn primary">
@@ -256,15 +256,6 @@ const Version = {
         }
     },
 
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    },
 
     /**
      * Manual check triggered by user (shows result in UI)
@@ -296,9 +287,9 @@ const Version = {
                             </svg>
                             <div class="update-status-text">
                                 <strong>Update available!</strong>
-                                <span>v${this.escapeHtml(info.current_version)} → v${this.escapeHtml(info.latest_version)}</span>
+                                <span>v${Utils.escapeHtml(info.current_version)} → v${Utils.escapeHtml(info.latest_version)}</span>
                             </div>
-                            <a href="${this.escapeHtml(info.release_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">
+                            <a href="${Utils.escapeHtml(info.release_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">
                                 View Release
                             </a>
                         </div>
@@ -312,7 +303,7 @@ const Version = {
                             </svg>
                             <div class="update-status-text">
                                 <strong>You're up to date!</strong>
-                                <span>Version ${this.escapeHtml(info.current_version)} is the latest</span>
+                                <span>Version ${Utils.escapeHtml(info.current_version)} is the latest</span>
                             </div>
                         </div>
                     `;

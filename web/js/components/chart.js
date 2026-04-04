@@ -69,7 +69,7 @@ const ChartComponent = {
             x: {
                 type: 'category',
                 ticks: {
-                    color: '#8892b0',
+                    color: Utils.getCSSVar('--chart-tooltip-body'),
                     font: { family: 'Outfit', size: 11 },
                     maxTicksLimit: 8,
                     maxRotation: 0
@@ -93,12 +93,12 @@ const ChartComponent = {
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: {
-                        labels: { color: '#8892b0', font: { family: 'Outfit', size: 12 }, boxWidth: 12 }
+                        labels: { color: Utils.getCSSVar('--chart-tooltip-body'), font: { family: 'Outfit', size: 12 }, boxWidth: 12 }
                     },
                     tooltip: {
-                        backgroundColor: '#1a1f2e',
-                        titleColor: '#ccd6f6',
-                        bodyColor: '#8892b0',
+                        backgroundColor: Utils.getCSSVar('--chart-tooltip-bg'),
+                        titleColor: Utils.getCSSVar('--chart-tooltip-title'),
+                        bodyColor: Utils.getCSSVar('--chart-tooltip-body'),
                         borderColor: 'rgba(100, 255, 218, 0.2)',
                         borderWidth: 1,
                         padding: 10,
@@ -261,13 +261,13 @@ const ChartComponent = {
             title: {
                 display: !!(config?.title),
                 text: config?.title || '',
-                color: '#8892b0',
+                color: Utils.getCSSVar('--chart-tooltip-body'),
                 font: { family: 'Outfit', size: 12 }
             },
             min: config?.min,
             max: config?.max,
             ticks: {
-                color: '#8892b0',
+                color: Utils.getCSSVar('--chart-tooltip-body'),
                 font: { family: 'Outfit', size: 11 },
                 callback: unitSuffix
                     ? function(value) { return value + unitSuffix; }

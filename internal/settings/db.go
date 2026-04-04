@@ -130,6 +130,28 @@ func GetSetting(db *sql.DB, category, key string) (*Setting, error) {
 	return &s, nil
 }
 
+// GetInt returns the integer value for a setting, or fallback if not found/unparseable.
+func GetInt(db *sql.DB, category, key string, fallback int) int {
+	s, err := GetSetting(db, category, key)
+	if err != nil || s == nil {
+		return fallback
+	}
+	v, err := strconv.Atoi(s.Value)
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+// GetBool returns the boolean value for a setting, or fallback if not found.
+func GetBool(db *sql.DB, category, key string, fallback bool) bool {
+	s, err := GetSetting(db, category, key)
+	if err != nil || s == nil {
+		return fallback
+	}
+	return s.Value == "true"
+}
+
 // UpdateSetting updates the value of a specific setting
 func UpdateSetting(db *sql.DB, category, key, value string) error {
 	existing, err := GetSetting(db, category, key)

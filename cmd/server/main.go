@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,11 +18,14 @@ import (
 	"vigil/internal/config"
 	"vigil/internal/crypto"
 	"vigil/internal/db"
+	"vigil/internal/drivegroups"
 	"vigil/internal/events"
 	"vigil/internal/handlers"
+	"vigil/internal/metrics"
 	"vigil/internal/middleware"
 	"vigil/internal/models"
 	"vigil/internal/notify"
+	"vigil/internal/settings"
 	"vigil/internal/smart"
 	"vigil/internal/wearout"
 )
@@ -29,7 +34,33 @@ import (
 var version = "dev"
 
 func main() {
+	rotateKeys := flag.Bool("rotate-keys", false, "Rotate server Ed25519 keys and exit")
+	flag.Parse()
+
 	log.SetFlags(log.Ltime | log.Ldate)
+
+	// Handle key rotation before anything else
+	if *rotateKeys {
+		cfg := config.Load()
+		dataDir := filepath.Dir(cfg.DBPath)
+		if dataDir == "." {
+			if cwd, err := os.Getwd(); err == nil {
+				dataDir = cwd
+			}
+		}
+		keys, err := crypto.RotateKeys(dataDir)
+		if err != nil {
+			log.Fatalf("❌ Key rotation failed: %v", err)
+		}
+		fmt.Println("✅ Server keys rotated successfully.")
+		fmt.Printf("   New public key: %s\n", keys.PublicKeyBase64())
+		fmt.Printf("   Old keys backed up to %s/*.bak\n", dataDir)
+		fmt.Println("\nNext steps:")
+		fmt.Println("  1. Restart the Vigil server")
+		fmt.Println("  2. Re-register all agents (vigil-agent register)")
+		os.Exit(0)
+	}
+
 	log.Printf("🚀 Vigil Server v%s starting...", version)
 
 	// Set version for handlers
@@ -45,6 +76,11 @@ func main() {
 	}
 	defer db.DB.Close()
 	log.Printf("✓ Database: %s", cfg.DBPath)
+
+	// Initialise settings table (must run before anything that reads settings)
+	if err := settings.InitSettingsTable(db.DB); err != nil {
+		log.Printf("⚠️  Settings table warning: %v", err)
+	}
 
 	// Run SMART attributes migration
 	if err := smart.MigrateSmartAttributes(db.DB); err != nil {
@@ -76,6 +112,11 @@ func main() {
 		log.Printf("⚠️  Notification migration warning: %v", err)
 	}
 
+	// Run drive groups migration
+	if err := drivegroups.Migrate(db.DB); err != nil {
+		log.Printf("⚠️  Drive groups migration warning: %v", err)
+	}
+
 	// Load or generate server Ed25519 key pair
 	dataDir := filepath.Dir(cfg.DBPath)
 	if dataDir == "." {
@@ -88,6 +129,7 @@ func main() {
 		log.Fatalf("❌ Failed to initialise server keys: %v", err)
 	}
 	handlers.ServerKeys = keys
+	handlers.BackupDir = filepath.Join(dataDir, "backups")
 	log.Printf("✓ Server keys: %s", filepath.Join(dataDir, "vigil.key"))
 
 	// Auth initialisation
@@ -99,19 +141,35 @@ func main() {
 	}
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
-	if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
+	notifyDays := settings.GetInt(db.DB, "retention", "notification_history_days", 90)
+	if err := notify.PurgeOldHistory(db.DB, notifyDays); err != nil {
 		log.Printf("⚠️  Notification history purge: %v", err)
 	}
 
-	// Periodic session cleanup
+	// Periodic cleanup (sessions, notification history, SMART data retention, backups)
 	go func() {
+		var lastBackupUnix int64
 		ticker := time.NewTicker(1 * time.Hour)
 		for range ticker.C {
 			auth.CleanupExpiredSessions()
 			agents.CleanupExpiredAgentSessions(db.DB)
-			if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
+			nd := settings.GetInt(db.DB, "retention", "notification_history_days", 90)
+			if err := notify.PurgeOldHistory(db.DB, nd); err != nil {
 				log.Printf("⚠️  Notification history purge: %v", err)
 			}
+			sd := settings.GetInt(db.DB, "retention", "smart_data_days", 90)
+			if deleted, err := smart.CleanupOldSmartData(db.DB, sd); err != nil {
+				log.Printf("⚠️  SMART data cleanup: %v", err)
+			} else if deleted > 0 {
+				log.Printf("🧹 SMART data cleanup: removed %d old records", deleted)
+			}
+			rl := settings.GetInt(db.DB, "retention", "host_history_limit", 50)
+			if deleted, err := handlers.CleanupOldReports(rl); err != nil {
+				log.Printf("⚠️  Report cleanup: %v", err)
+			} else if deleted > 0 {
+				log.Printf("🧹 Report cleanup: removed %d old records", deleted)
+			}
+			handlers.RunScheduledBackup(&lastBackupUnix)
 		}
 	}()
 
@@ -158,13 +216,20 @@ func main() {
 	hbm.Start()
 	defer hbm.Stop()
 
+	// Initialize metrics collector
+	m := metrics.New()
+	handlers.Metrics = m
+	handlers.DBPath = cfg.DBPath
+
 	// Wire notification dispatch to event bus
 	dispatcher := notify.NewDispatcher(db.DB, eventBus, nil)
+	dispatcher.OnSent = func() { m.NotificationsSent.Add(1) }
+	dispatcher.OnFailed = func() { m.NotificationsFailed.Add(1) }
 	dispatcher.Start()
 	defer dispatcher.Stop()
 
 	mux := setupRoutes(cfg)
-	handler := middleware.Logging(middleware.CORS(mux))
+	handler := middleware.MaxBodySize(1<<20, middleware.RequestID(middleware.Logging(middleware.CORS(middleware.CSRFCheck(mux)))))
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -257,8 +322,24 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// ─── Add-on Endpoints ────────────────────────────────────────────────
 	handlers.RegisterAddonRoutes(mux, protect)
 
+	// ─── Health & Report Endpoints ──────────────────────────────────────
+	handlers.RegisterHealthRoutes(mux, protect)
+	handlers.RegisterReportRoutes(mux, protect)
+
 	// ─── Notification Endpoints ──────────────────────────────────────────
 	handlers.RegisterNotificationRoutes(mux, protect)
+
+	// ─── Settings Endpoints ──────────────────────────────────────────────
+	handlers.RegisterSettingsRoutes(mux, protect)
+
+	// ─── Backup Endpoints ────────────────────────────────────────────────
+	handlers.RegisterBackupRoutes(mux, protect)
+
+	// ─── Stats Endpoints ─────────────────────────────────────────────────
+	handlers.RegisterStatsRoutes(mux, protect)
+
+	// ─── Drive Group Endpoints ───────────────────────────────────────────
+	handlers.RegisterDriveGroupRoutes(mux, protect)
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))

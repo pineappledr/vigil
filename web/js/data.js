@@ -3,45 +3,162 @@
  */
 
 const Data = {
-    async fetch() {
+    _cacheKey: 'vigil_data_cache',
+    _lastHash: null,
+
+    // Restore cached state and render immediately so the dashboard is never empty.
+    restoreCache() {
         try {
-            const [historyResponse, zfsResponse, wearoutResponse] = await Promise.all([
-                API.getHistory(),
+            const raw = localStorage.getItem(this._cacheKey);
+            if (!raw) return false;
+            const cache = JSON.parse(raw);
+            if (Array.isArray(cache.history) && cache.history.length > 0) {
+                State.data = cache.history;
+                State.resolveActiveServer();
+            }
+            if (Array.isArray(cache.zfs)) {
+                State.zfsPools = cache.zfs;
+                State.buildZFSDriveMap();
+            }
+            if (cache.wearout) {
+                State.buildWearoutMap(cache.wearout);
+            }
+            if (cache.health) {
+                State.healthScore = cache.health;
+            }
+            if (State.data.length > 0) {
+                this.setOnlineStatus(true);
+                this.updateLastRefresh();
+                try { this.updateCurrentView(); } catch (_) {}
+                try { this.updateSidebar(); } catch (_) {}
+                try { this.updateStats(); } catch (_) {}
+                console.log('[Data] Restored cached data (' + State.data.length + ' servers)');
+                return true;
+            }
+        } catch (e) {
+            console.warn('[Data] Cache restore failed:', e.message);
+        }
+        return false;
+    },
+
+    _saveCache(history, zfs, wearout, health) {
+        try {
+            localStorage.setItem(this._cacheKey, JSON.stringify({
+                history, zfs, wearout, health, ts: Date.now()
+            }));
+        } catch (_) {}
+    },
+
+    _dataFingerprint(history, zfs, wearout, health) {
+        const parts = [
+            history ? history.map(s => s.hostname + ':' + (s.last_seen || s.timestamp)).join(',') : '',
+            zfs ? zfs.map(p => (p.name || p.pool_name) + ':' + (p.status || p.health)).join(',') : '',
+            wearout ? JSON.stringify(wearout).length : 0,
+            health ? health.score : ''
+        ];
+        return parts.join('|');
+    },
+
+    async fetch() {
+        let historyOk = false;
+        let historyData = null, zfsData = null, wearoutData = null, healthData = null;
+
+        try {
+            const [historyResponse, zfsResponse, wearoutResponse, healthResponse, groupsResponse, assignResponse] = await Promise.all([
+                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); return null; }),
                 API.getZFSPools().catch(() => null),
-                API.get('/api/wearout/all').catch(() => null)
+                API.get('/api/wearout/all').catch(() => null),
+                API.get('/api/health/score').catch(() => null),
+                API.getDriveGroups().catch(() => null),
+                API.getDriveGroupAssignments().catch(() => null)
             ]);
 
-            if (!historyResponse.ok) {
-                throw new Error(`HTTP ${historyResponse.status}`);
+            // ── History (critical path) ──────────────────────────────────
+            if (historyResponse && historyResponse.ok) {
+                try {
+                    const parsed = await historyResponse.json();
+                    if (Array.isArray(parsed)) {
+                        State.data = parsed;
+                        historyData = parsed;
+                        historyOk = true;
+                    }
+                } catch (e) {
+                    console.error('[Data] History parse error:', e);
+                }
             }
-
-            State.data = await historyResponse.json() || [];
             State.resolveActiveServer();
 
+            // ── ZFS ──────────────────────────────────────────────────────
             if (zfsResponse && zfsResponse.ok) {
-                State.zfsPools = await zfsResponse.json() || [];
-                State.buildZFSDriveMap();
+                try {
+                    zfsData = await zfsResponse.json() || [];
+                    State.zfsPools = zfsData;
+                    State.buildZFSDriveMap();
+                } catch (e) {
+                    State.zfsPools = [];
+                    State.zfsDriveMap = {};
+                }
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
             }
 
+            // ── Wearout ──────────────────────────────────────────────────
             if (wearoutResponse && wearoutResponse.ok) {
-                const wData = await wearoutResponse.json();
-                State.buildWearoutMap(wData?.drives);
+                try {
+                    const wData = await wearoutResponse.json();
+                    wearoutData = wData?.drives;
+                    State.buildWearoutMap(wearoutData);
+                } catch (e) {
+                    State.wearoutMap = {};
+                }
             } else {
                 State.wearoutMap = {};
             }
 
-            this.updateCurrentView();
-            this.updateSidebar();
-            this.updateStats();
-            this.setOnlineStatus(true);
-            this.updateLastRefresh();
+            // ── Health Score ────────────────────────────────────────────
+            if (healthResponse && healthResponse.ok) {
+                try {
+                    healthData = await healthResponse.json();
+                    State.healthScore = healthData;
+                } catch (e) {
+                    State.healthScore = null;
+                }
+            }
 
+            // ── Drive Groups ───────────────────────────────────────────
+            if (groupsResponse && groupsResponse.ok) {
+                try { State.driveGroups = await groupsResponse.json() || []; } catch (_) { State.driveGroups = []; }
+            } else {
+                State.driveGroups = [];
+            }
+            if (assignResponse && assignResponse.ok) {
+                try { State.driveGroupAssignments = await assignResponse.json() || {}; } catch (_) { State.driveGroupAssignments = {}; }
+            } else {
+                State.driveGroupAssignments = {};
+            }
+            State.buildDriveGroupMap();
+
+            // Cache successful data for instant restore on next page load
+            if (historyOk) {
+                this._saveCache(historyData, zfsData, wearoutData, healthData);
+            }
         } catch (error) {
-            console.error('Fetch error:', error);
-            this.setOnlineStatus(false);
+            console.error('[Data] Unexpected fetch error:', error);
+        }
+
+        // Skip DOM updates if data hasn't changed (prevents flicker)
+        const fingerprint = this._dataFingerprint(historyData, zfsData, wearoutData, healthData);
+        const dataChanged = fingerprint !== this._lastHash;
+        this._lastHash = fingerprint;
+
+        this.setOnlineStatus(historyOk || State.data.length > 0);
+        this.updateLastRefresh();
+
+        if (dataChanged) {
+            try { this.updateCurrentView(); } catch (e) { console.error('[Data] View error:', e); }
+            try { this.updateSidebar(); } catch (e) { console.error('[Data] Sidebar error:', e); }
+            try { this.updateStats(); } catch (e) { console.error('[Data] Stats error:', e); }
         }
     },
 
@@ -74,13 +191,17 @@ const Data = {
 
         if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
+        } else if (State.activeFilter === 'health') {
+            Renderer.healthBreakdown();
         } else if (State.activeFilter) {
-            const filterFn = State.activeFilter === 'attention'
-                ? d => Utils.getHealthStatus(d) !== 'healthy'
-                : State.activeFilter === 'healthy'
-                ? d => Utils.getHealthStatus(d) === 'healthy'
-                : () => true;
-            Renderer.filteredDrives(filterFn, State.activeFilter);
+            const filterFns = {
+                critical: d => Utils.getHealthStatus(d) === 'critical',
+                warning: d => Utils.getHealthStatus(d) === 'warning',
+                attention: d => Utils.getHealthStatus(d) !== 'healthy',
+                healthy: d => Utils.getHealthStatus(d) === 'healthy',
+                all: () => true,
+            };
+            Renderer.filteredDrives(filterFns[State.activeFilter] || (() => true), State.activeFilter);
         } else {
             Renderer.dashboard(State.data);
         }
@@ -102,7 +223,9 @@ const Data = {
 
         const sortedData = State.getSortedData();
 
-        serverNav.innerHTML = sortedData.map((server, sortedIdx) => {
+        const htmls = [];
+        const keys = [];
+        sortedData.forEach((server, sortedIdx) => {
             const drives = server.details?.drives || [];
             const hasWarning = drives.some(d => Utils.getHealthStatus(d) === 'warning');
             const hasCritical = drives.some(d => Utils.getHealthStatus(d) === 'critical');
@@ -115,16 +238,19 @@ const Data = {
             else if (hasCritical) statusClass = 'critical';
             else if (hasWarning) statusClass = 'warning';
 
-            return `
+            keys.push(server.hostname);
+            htmls.push(`
                 <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}"
+                     data-key="${Utils.escapeHtml(server.hostname)}"
                      onclick="navShowServer(${sortedIdx})"
                      title="${isOffline ? 'Not reporting — no data received in 5+ minutes' : 'Online — last update ' + timeSince}">
                     <span class="status-indicator ${statusClass}"></span>
                     <span class="server-name">${Utils.escapeHtml(server.hostname)}</span>
                     ${isOffline ? '<span class="offline-badge">NOT REPORTING</span>' : ''}
                 </div>
-            `;
-        }).join('');
+            `);
+        });
+        Utils.reconcileChildren(serverNav, htmls, keys);
     },
 
     updateSortIndicator() {

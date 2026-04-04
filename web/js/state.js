@@ -11,15 +11,19 @@ const State = {
     currentUser: null,
     mustChangePassword: false,
 
+    healthScore: null,
     zfsPools: [],
     zfsDriveMap: {},
     wearoutMap: {},
+    driveGroups: [],
+    driveGroupAssignments: {},
+    driveGroupMap: {},
     activeView: 'drives',
     serverSortOrder: 'asc',
 
     API_URL: '/api/history',
-    REFRESH_INTERVAL: 5000,
-    OFFLINE_THRESHOLD_MINUTES: 5,
+    REFRESH_INTERVAL: 30000,
+    OFFLINE_THRESHOLD_MINUTES: 10,
 
     init() {
         const savedSort = localStorage.getItem('vigil_server_sort');
@@ -101,27 +105,28 @@ const State = {
     getTimeSinceUpdate(server) {
         const ts = server?.last_seen || server?.timestamp;
         if (!ts) return 'Unknown';
-        const date = Utils.parseUTC(ts);
-        if (!date || isNaN(date)) return 'Unknown';
-        const mins = Math.floor((Date.now() - date) / 60000);
-        if (mins < 1) return 'Just now';
-        if (mins < 60) return `${mins}m ago`;
-        const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}h ago`;
-        return `${Math.floor(hrs / 24)}d ago`;
+        return Utils.timeAgo(ts);
     },
 
     getStats() {
-        let totalDrives = 0, healthyDrives = 0, attentionDrives = 0, offlineServers = 0;
+        let totalDrives = 0, healthyDrives = 0, warningDrives = 0, criticalDrives = 0, offlineServers = 0;
+        let nvmeCount = 0, ssdCount = 0, hddCount = 0;
         this.data.forEach(s => {
             const drives = s.details?.drives || [];
             totalDrives += drives.length;
             if (this.isServerOffline(s)) offlineServers++;
             drives.forEach(d => {
-                Utils.getHealthStatus(d) === 'healthy' ? healthyDrives++ : attentionDrives++;
+                const status = Utils.getHealthStatus(d);
+                if (status === 'critical') criticalDrives++;
+                else if (status === 'warning') warningDrives++;
+                else healthyDrives++;
+                const type = Utils.getDriveType(d);
+                if (type === 'NVMe') nvmeCount++;
+                else if (type === 'SSD') ssdCount++;
+                else hddCount++;
             });
         });
-        return { totalServers: this.data.length, totalDrives, healthyDrives, attentionDrives, offlineServers };
+        return { totalServers: this.data.length, totalDrives, healthyDrives, warningDrives, criticalDrives, attentionDrives: warningDrives + criticalDrives, offlineServers, nvmeCount, ssdCount, hddCount };
     },
 
     getZFSStats() {
@@ -193,5 +198,22 @@ const State = {
 
     getWearoutForDrive(hostname, serial) {
         return this.wearoutMap[`${hostname}:${serial}`] || null;
+    },
+
+    buildDriveGroupMap() {
+        this.driveGroupMap = {};
+        const groupById = {};
+        (this.driveGroups || []).forEach(g => { groupById[g.id] = g; });
+        const assignments = this.driveGroupAssignments || {};
+        Object.keys(assignments).forEach(key => {
+            const group = groupById[assignments[key]];
+            if (group) {
+                this.driveGroupMap[key] = { id: group.id, name: group.name, color: group.color };
+            }
+        });
+    },
+
+    getDriveGroup(hostname, serial) {
+        return this.driveGroupMap[`${hostname}:${serial}`] || null;
     }
 };

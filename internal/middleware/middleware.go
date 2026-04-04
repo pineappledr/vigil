@@ -1,12 +1,17 @@
 package middleware
 
 import (
+	"bufio"
+	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // CORS adds CORS headers to responses (reflects request origin instead of wildcard)
@@ -18,7 +23,7 @@ func CORS(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -28,12 +33,124 @@ func CORS(next http.Handler) http.Handler {
 	})
 }
 
-// Logging logs request details
+// csrfExemptPrefixes are paths that use non-cookie auth (Ed25519 signatures,
+// bearer tokens) and must not require X-Requested-With.
+var csrfExemptPrefixes = []string{
+	"/api/report",
+	"/api/v1/agents/register",
+	"/api/v1/agents/auth",
+	"/api/v1/server/pubkey",
+	"/api/addons/webhook/",
+	"/health",
+	"/api/version",
+}
+
+// CSRFCheck requires state-changing requests (POST/PUT/DELETE) to include
+// an X-Requested-With header. Browsers will not attach this header in
+// cross-origin requests without a CORS preflight, providing defense-in-depth
+// on top of SameSite=Lax cookies.
+func CSRFCheck(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Safe methods are always allowed
+		if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Exempt agent/addon endpoints that use non-cookie auth
+		path := r.URL.Path
+		for _, prefix := range csrfExemptPrefixes {
+			if strings.HasPrefix(path, prefix) {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		// Require the custom header
+		if r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"Forbidden: missing X-Requested-With header"}`))
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// MaxBodySize limits request body size to prevent abuse.
+// The restore endpoint is exempted since it handles its own limit for file uploads.
+func MaxBodySize(maxBytes int64, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil && r.URL.Path != "/api/backups/restore" {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ─── Request ID ─────────────────────────────────────────────────────────────
+
+type contextKey string
+
+const RequestIDKey contextKey = "requestID"
+
+// GetRequestID returns the request ID from the request context.
+func GetRequestID(r *http.Request) string {
+	if id, ok := r.Context().Value(RequestIDKey).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// RequestID assigns a unique ID to each request. If the incoming request
+// already carries an X-Request-ID header (e.g. from a reverse proxy),
+// that value is reused; otherwise a new UUID is generated.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = uuid.New().String()[:8] // short ID for log readability
+		}
+		ctx := context.WithValue(r.Context(), RequestIDKey, id)
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// ─── Status-capturing response writer ───────────────────────────────────────
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	sr.status = code
+	sr.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack implements http.Hijacker for websocket support.
+func (sr *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := sr.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not support Hijack")
+}
+
+// Logging logs request details with request ID and response status.
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		id := GetRequestID(r)
+		dur := time.Since(start).Round(time.Millisecond)
+		if id != "" {
+			log.Printf("[%s] %s %s %d %s", id, r.Method, r.URL.Path, rec.status, dur)
+		} else {
+			log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, dur)
+		}
 	})
 }
 
@@ -116,7 +233,7 @@ func (rl *RateLimiter) cleanup() {
 // Limit wraps an http.HandlerFunc with rate limiting.
 func (rl *RateLimiter) Limit(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := extractIP(r)
+		ip := ExtractIP(r)
 		if !rl.allow(ip) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", "60")
@@ -129,7 +246,9 @@ func (rl *RateLimiter) Limit(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func extractIP(r *http.Request) string {
+// ExtractIP returns the client IP from the request, respecting
+// X-Forwarded-For and X-Real-IP headers for reverse proxy setups.
+func ExtractIP(r *http.Request) string {
 	// Check X-Forwarded-For for reverse proxy setups
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// First IP in the chain is the client

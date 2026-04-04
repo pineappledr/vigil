@@ -98,7 +98,7 @@ const NotificationSettings = {
             ${this.services.map(s => `
                 <div class="notif-service-item ${s.id === this.activeServiceId ? 'active' : ''} ${s.enabled ? '' : 'disabled'}"
                      onclick="NotificationSettings.selectService(${s.id})">
-                    <div class="notif-service-name">${this._escape(s.name)}</div>
+                    <div class="notif-service-name">${Utils.escapeHtml(s.name)}</div>
                     <div class="notif-service-type">${this._providerLabel(s.service_type)}</div>
                     <span class="notif-service-badge ${s.enabled ? 'enabled' : 'disabled'}">
                         ${s.enabled ? 'Active' : 'Disabled'}
@@ -144,7 +144,10 @@ const NotificationSettings = {
             el.classList.toggle('active', el.querySelector('.notif-service-name')?.textContent === this.activeService?.name);
         });
 
-        if (content) content.innerHTML = this._serviceDetail();
+        if (content) {
+            content.innerHTML = this._serviceDetail();
+            this._loadGroupOverrides(id);
+        }
     },
 
     _serviceDetail() {
@@ -154,7 +157,7 @@ const NotificationSettings = {
         return `
             <div class="notif-detail">
                 <div class="notif-detail-header">
-                    <h3>${this._escape(s.name)}</h3>
+                    <h3>${Utils.escapeHtml(s.name)}</h3>
                     <div class="notif-detail-actions">
                         <button class="btn btn-secondary" onclick="NotificationSettings.editProviderConfig(${s.id})">
                             ${this._icons.edit} Edit Config
@@ -208,6 +211,14 @@ const NotificationSettings = {
                     ${this._eventRulesTable()}
                 </div>
 
+                <div class="notif-section group-rules-section">
+                    <div class="group-rules-header">
+                        <h4>Group Overrides</h4>
+                    </div>
+                    <p class="notif-hint">Override event rules for specific drive groups. Drives in a group with overrides use the group settings instead of the defaults above.</p>
+                    <div id="group-overrides-container"></div>
+                </div>
+
                 <div class="notif-section">
                     <h4>Quiet Hours</h4>
                     ${this._quietHoursForm(s.id)}
@@ -257,11 +268,11 @@ const NotificationSettings = {
             ${sortedCategories.map(cat => `
                 <div class="notif-rules-category">
                     <div class="notif-rules-category-header">
-                        <h5>${this._escape(cat)}</h5>
+                        <h5>${Utils.escapeHtml(cat)}</h5>
                         <label class="addon-checkbox notif-category-toggle">
                             <input type="checkbox"
                                 ${groups[cat].every(g => g.rule.enabled) ? 'checked' : ''}
-                                onchange="NotificationSettings._toggleCategory('${this._escape(cat)}', this.checked)">
+                                onchange="NotificationSettings._toggleCategory('${Utils.escapeHtml(cat)}', this.checked)">
                             All
                         </label>
                     </div>
@@ -281,16 +292,16 @@ const NotificationSettings = {
                                 const sevClass = sev ? `notif-severity-${sev}` : '';
                                 return `
                                 <tr>
-                                    <td>${this._escape(label)}</td>
+                                    <td>${Utils.escapeHtml(label)}</td>
                                     <td><span class="notif-severity-badge ${sevClass}">${sev || '--'}</span></td>
                                     <td>
-                                        <input type="checkbox" data-rule-category="${this._escape(cat)}" ${rule.enabled ? 'checked' : ''}
+                                        <input type="checkbox" data-rule-category="${Utils.escapeHtml(cat)}" ${rule.enabled ? 'checked' : ''}
                                             onchange="NotificationSettings._updateRuleEnabled(${idx}, this.checked)">
                                     </td>
                                     <td>
-                                        <input type="number" class="form-input form-input-sm" value="${rule.cooldown_secs || 0}"
-                                            min="0" step="60" onchange="NotificationSettings._updateRuleCooldown(${idx}, this.value)">
-                                        <span class="form-hint">sec</span>
+                                        <select class="form-input form-input-sm" onchange="NotificationSettings._updateRuleCooldown(${idx}, this.value)">
+                                            ${NotificationSettings._cooldownOptions(rule.cooldown_secs)}
+                                        </select>
                                     </td>
                                 </tr>`;
                             }).join('')}
@@ -385,8 +396,36 @@ const NotificationSettings = {
         if (this.eventRules[idx]) this.eventRules[idx].enabled = enabled;
     },
 
+    _cooldownPresets: [
+        { value: 0,        label: 'No cooldown' },
+        { value: 300,      label: '5 minutes' },
+        { value: 600,      label: '10 minutes' },
+        { value: 3600,     label: '1 hour' },
+        { value: 86400,    label: '24 hours' },
+        { value: 604800,   label: '7 days' },
+        { value: 2592000,  label: '30 days' },
+        { value: 15552000, label: '6 months' },
+        { value: -1,       label: "Don't remind" },
+    ],
+
+    _cooldownOptions(currentVal) {
+        const presets = this._cooldownPresets;
+        const known = presets.some(p => p.value === currentVal);
+        let opts = '';
+        // If the current value isn't in the presets, show it first so it's not lost
+        if (!known && currentVal != null) {
+            const label = currentVal > 0 ? `${currentVal}s (custom)` : `${currentVal} (custom)`;
+            opts += `<option value="${currentVal}" selected>${label}</option>`;
+        }
+        for (const p of presets) {
+            const sel = (known && p.value === currentVal) ? ' selected' : '';
+            opts += `<option value="${p.value}"${sel}>${p.label}</option>`;
+        }
+        return opts;
+    },
+
     _updateRuleCooldown(idx, value) {
-        if (this.eventRules[idx]) this.eventRules[idx].cooldown_secs = parseInt(value) || 0;
+        if (this.eventRules[idx]) this.eventRules[idx].cooldown_secs = parseInt(value);
     },
 
     async saveEventRules() {
@@ -477,7 +516,7 @@ const NotificationSettings = {
                                 onchange="NotificationSettings._onProviderChange()">
                             ${types.map(t => {
                                 const def = this.providerDefs[t];
-                                return `<option value="${t}">${this._escape(def.label)}</option>`;
+                                return `<option value="${t}">${Utils.escapeHtml(def.label)}</option>`;
                             }).join('')}
                         </select>
                     </div>
@@ -543,8 +582,8 @@ const NotificationSettings = {
                     input = `
                         <div class="form-input-password-wrap">
                             <input type="password" id="${id}" class="form-input"
-                                   placeholder="${this._escape(f.placeholder || '')}"
-                                   value="${this._escape(prefillVal)}"
+                                   placeholder="${Utils.escapeHtml(f.placeholder || '')}"
+                                   value="${Utils.escapeHtml(prefillVal)}"
                                    data-field-key="${f.key}" ${f.required ? 'required' : ''}>
                             <button type="button" class="btn-eye-toggle"
                                     onclick="NotificationSettings._togglePasswordVisibility('${id}')" title="Toggle visibility">
@@ -558,8 +597,8 @@ const NotificationSettings = {
                             const selected = prefillVal
                                 ? o.value === prefillVal
                                 : o.value === (f.default || '');
-                            return `<option value="${this._escape(o.value)}" ${selected ? 'selected' : ''}>
-                                ${this._escape(o.label)}
+                            return `<option value="${Utils.escapeHtml(o.value)}" ${selected ? 'selected' : ''}>
+                                ${Utils.escapeHtml(o.label)}
                             </option>`;
                         }).join('')}
                     </select>`;
@@ -568,28 +607,28 @@ const NotificationSettings = {
                     input = `<label class="addon-checkbox">
                         <input type="checkbox" id="${id}" data-field-key="${f.key}"
                                ${prefillVal === 'true' ? 'checked' : ''}>
-                        ${this._escape(f.label)}
+                        ${Utils.escapeHtml(f.label)}
                     </label>`;
                     break;
                 case 'number':
                     input = `<input type="number" id="${id}" class="form-input"
-                               placeholder="${this._escape(f.placeholder || '')}"
-                               value="${this._escape(prefillVal || f.default || '')}"
+                               placeholder="${Utils.escapeHtml(f.placeholder || '')}"
+                               value="${Utils.escapeHtml(prefillVal || f.default || '')}"
                                data-field-key="${f.key}" ${f.required ? 'required' : ''}>`;
                     break;
                 default:
                     input = `<input type="text" id="${id}" class="form-input"
-                               placeholder="${this._escape(f.placeholder || '')}"
-                               value="${this._escape(prefillVal)}"
+                               placeholder="${Utils.escapeHtml(f.placeholder || '')}"
+                               value="${Utils.escapeHtml(prefillVal)}"
                                data-field-key="${f.key}" ${f.required ? 'required' : ''}>`;
             }
 
             const labelHtml = f.type === 'checkbox' ? '' :
-                `<label>${this._escape(f.label)}${req}</label>`;
+                `<label>${Utils.escapeHtml(f.label)}${req}</label>`;
             const docsLink = f.docs_url ?
-                ` <a href="${this._escape(f.docs_url)}" target="_blank" rel="noopener noreferrer">Shoutrrr Services</a>` : '';
+                ` <a href="${Utils.escapeHtml(f.docs_url)}" target="_blank" rel="noopener noreferrer">Shoutrrr Services</a>` : '';
             const helpHtml = f.help_text ?
-                `<span class="form-hint">${this._escape(f.help_text)}${docsLink}</span>` : '';
+                `<span class="form-hint">${Utils.escapeHtml(f.help_text)}${docsLink}</span>` : '';
 
             return `<div class="form-group">${labelHtml}${input}${helpHtml}</div>`;
         }).join('');
@@ -726,13 +765,13 @@ const NotificationSettings = {
                         <select id="prov-type" class="form-input" disabled>
                             ${types.map(t => {
                                 const def = this.providerDefs[t];
-                                return `<option value="${t}" ${t === s.service_type ? 'selected' : ''}>${this._escape(def.label)}</option>`;
+                                return `<option value="${t}" ${t === s.service_type ? 'selected' : ''}>${Utils.escapeHtml(def.label)}</option>`;
                             }).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Friendly Name</label>
-                        <input type="text" id="prov-name" class="form-input" value="${this._escape(s.name)}">
+                        <input type="text" id="prov-name" class="form-input" value="${Utils.escapeHtml(s.name)}">
                     </div>
                     <div id="prov-fields-container"></div>
 
@@ -831,14 +870,14 @@ const NotificationSettings = {
                     ${records.map(r => `
                         <tr class="notif-history-${r.status}">
                             <td class="notif-time">${this._formatTime(r.created_at)}</td>
-                            <td>${this._escape(r.event_type)}</td>
-                            <td>${this._escape(r.hostname || '--')}</td>
-                            <td class="notif-msg">${this._escape(r.message)}</td>
+                            <td>${Utils.escapeHtml(r.event_type)}</td>
+                            <td>${Utils.escapeHtml(r.hostname || '--')}</td>
+                            <td class="notif-msg">${Utils.escapeHtml(r.message)}</td>
                             <td>
                                 <span class="notif-status-badge ${r.status}">
-                                    ${r.status === 'sent' ? 'Sent' : r.status === 'failed' ? 'Failed' : this._escape(r.status)}
+                                    ${r.status === 'sent' ? 'Sent' : r.status === 'failed' ? 'Failed' : Utils.escapeHtml(r.status)}
                                 </span>
-                                ${r.error_message ? `<span class="notif-error-hint" title="${this._escape(r.error_message)}">!</span>` : ''}
+                                ${r.error_message ? `<span class="notif-error-hint" title="${Utils.escapeHtml(r.error_message)}">!</span>` : ''}
                             </td>
                         </tr>
                     `).join('')}
@@ -850,8 +889,8 @@ const NotificationSettings = {
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     _providerLabel(type) {
-        if (this.providerDefs?.[type]) return this._escape(this.providerDefs[type].label);
-        return this._escape(type);
+        if (this.providerDefs?.[type]) return Utils.escapeHtml(this.providerDefs[type].label);
+        return Utils.escapeHtml(type);
     },
 
     _showStatus(msg, isError) {
@@ -871,11 +910,186 @@ const NotificationSettings = {
         return d.toLocaleString('en-US', opts);
     },
 
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+    // ─── Group Override Rules ──────────────────────────────────────────────
+
+    _groupOverrides: {},  // groupId -> [rules]
+
+    async _loadGroupOverrides(serviceId) {
+        const container = document.getElementById('group-overrides-container');
+        if (!container) return;
+
+        try {
+            await this._ensureEventTypeMeta();
+            const resp = await API.getGroupEventRulesForService(serviceId);
+            this._groupOverrides = resp.ok ? await resp.json() : {};
+        } catch (_) {
+            this._groupOverrides = {};
+        }
+
+        this._renderGroupOverrides(serviceId, container);
+    },
+
+    _renderGroupOverrides(serviceId, container) {
+        const groups = State.driveGroups || [];
+        const overrideGroupIds = Object.keys(this._groupOverrides).map(Number);
+
+        // Build event type meta lookup
+        const metaMap = {};
+        if (this.eventTypeMeta) {
+            for (const m of this.eventTypeMeta) metaMap[m.type] = m;
+        }
+
+        let html = '';
+
+        // Render existing group overrides
+        overrideGroupIds.forEach(gid => {
+            const group = groups.find(g => g.id === gid);
+            if (!group) return;
+            const rules = this._groupOverrides[gid] || [];
+
+            html += `
+                <div class="group-override-card">
+                    <div class="group-override-header">
+                        <span class="group-color-dot" style="background:${Utils.escapeHtml(group.color)}"></span>
+                        <span class="group-name">${Utils.escapeHtml(group.name)}</span>
+                        <button class="remove-override" onclick="NotificationSettings._removeGroupOverride(${serviceId}, ${gid})" title="Remove override">Remove</button>
+                    </div>
+                    <table class="notif-rules-table">
+                        <thead><tr><th>Event</th><th>Enabled</th><th>Cooldown</th></tr></thead>
+                        <tbody>
+                            ${this._groupRuleRows(serviceId, gid, rules, metaMap)}
+                        </tbody>
+                    </table>
+                    <button class="btn btn-secondary btn-sm" style="margin-top:0.5rem" onclick="NotificationSettings._saveGroupOverride(${serviceId}, ${gid})">Save Group Rules</button>
+                </div>
+            `;
+        });
+
+        // Add group dropdown (only groups without existing overrides)
+        const available = groups.filter(g => !overrideGroupIds.includes(g.id));
+        if (available.length > 0) {
+            html += `
+                <select class="assign-drive-select" onchange="NotificationSettings._addGroupOverride(${serviceId}, Number(this.value)); this.value=''">
+                    <option value="">+ Add group override...</option>
+                    ${available.map(g => `<option value="${g.id}">${Utils.escapeHtml(g.name)}</option>`).join('')}
+                </select>
+            `;
+        }
+
+        if (!html) {
+            html = '<p class="notif-hint" style="opacity:0.6">No drive groups created yet. Create groups in Settings to configure per-group rules.</p>';
+        }
+
+        container.innerHTML = html;
+    },
+
+    _groupRuleRows(serviceId, groupId, existingRules, metaMap) {
+        // Show all available event types, with group overrides if they exist
+        const ruleMap = {};
+        existingRules.forEach(r => { ruleMap[r.event_type] = r; });
+
+        // Use all known event types from metadata (not just service-level rules)
+        const allTypes = this.eventTypeMeta || [];
+        if (allTypes.length === 0) return '<tr><td colspan="3" style="opacity:0.6">No event types available</td></tr>';
+
+        // Group by category for readability
+        const categories = {};
+        allTypes.forEach(m => {
+            const cat = m.category || 'Other';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(m);
+        });
+
+        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'System', 'Other'];
+        const sorted = categoryOrder.filter(c => categories[c]);
+
+        return sorted.map(cat => {
+            const rows = categories[cat].map(m => {
+                const override = ruleMap[m.type];
+                const enabled = override ? override.enabled : true;
+                const cooldown = override ? override.cooldown_secs : 300;
+
+                return `
+                    <tr>
+                        <td>${Utils.escapeHtml(m.label)}</td>
+                        <td><input type="checkbox" data-group-rule="${groupId}" data-event-type="${Utils.escapeHtml(m.type)}" ${enabled ? 'checked' : ''}></td>
+                        <td>
+                            <select class="form-input form-input-sm" data-group-cooldown="${groupId}" data-event-type="${Utils.escapeHtml(m.type)}">
+                                ${this._cooldownOptions(cooldown)}
+                            </select>
+                        </td>
+                    </tr>`;
+            }).join('');
+            return `<tr><td colspan="3" style="font-weight:600;padding-top:0.5rem;opacity:0.7">${Utils.escapeHtml(cat)}</td></tr>${rows}`;
+        }).join('');
+    },
+
+    async _addGroupOverride(serviceId, groupId) {
+        if (!groupId) return;
+        // Initialize with default rules for all event types (all enabled, 5m cooldown)
+        const allTypes = this.eventTypeMeta || [];
+        const rules = allTypes.map(m => ({
+            event_type: m.type,
+            enabled: true,
+            cooldown_secs: 300
+        }));
+
+        try {
+            const resp = await API.updateGroupEventRules(serviceId, groupId, rules);
+            if (resp.ok) {
+                Utils.toast('Group override added', 'success');
+                await this._loadGroupOverrides(serviceId);
+            } else {
+                Utils.toast('Failed to add override', 'error');
+            }
+        } catch (_) {
+            Utils.toast('Failed to add override', 'error');
+        }
+    },
+
+    async _saveGroupOverride(serviceId, groupId) {
+        const checkboxes = document.querySelectorAll(`input[data-group-rule="${groupId}"]`);
+        const cooldowns = document.querySelectorAll(`select[data-group-cooldown="${groupId}"]`);
+
+        const rules = [];
+        checkboxes.forEach(cb => {
+            const eventType = cb.dataset.eventType;
+            const cooldownEl = document.querySelector(`select[data-group-cooldown="${groupId}"][data-event-type="${eventType}"]`);
+            rules.push({
+                event_type: eventType,
+                enabled: cb.checked,
+                cooldown_secs: parseInt(cooldownEl?.value || '300', 10)
+            });
+        });
+
+        try {
+            const resp = await API.updateGroupEventRules(serviceId, groupId, rules);
+            if (resp.ok) {
+                this._showStatus('Group rules saved');
+            } else {
+                this._showStatus('Failed to save group rules', true);
+            }
+        } catch (_) {
+            this._showStatus('Failed to save group rules', true);
+        }
+    },
+
+    async _removeGroupOverride(serviceId, groupId) {
+        const group = (State.driveGroups || []).find(g => g.id === groupId);
+        const name = group ? group.name : `#${groupId}`;
+        if (!confirm(`Remove override for "${name}"? Drives in this group will use the default service rules.`)) return;
+
+        try {
+            const resp = await API.deleteGroupEventRules(serviceId, groupId);
+            if (resp.ok) {
+                Utils.toast('Group override removed', 'success');
+                await this._loadGroupOverrides(serviceId);
+            } else {
+                Utils.toast('Failed to remove override', 'error');
+            }
+        } catch (_) {
+            Utils.toast('Failed to remove override', 'error');
+        }
     },
 
     _icons: {

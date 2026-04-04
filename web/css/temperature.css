@@ -34,7 +34,7 @@
 .temp-title svg {
     width: 24px;
     height: 24px;
-    color: var(--accent-blue);
+    color: var(--accent-primary);
 }
 
 .temp-controls {
@@ -57,7 +57,7 @@
 
 .temp-select:hover,
 .temp-select:focus {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     outline: none;
 }
 
@@ -83,7 +83,7 @@
 }
 
 .btn-icon-text:hover {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     background: var(--bg-secondary);
 }
 
@@ -109,7 +109,7 @@
 }
 
 .btn-compare:hover:not(:disabled) {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     color: var(--text-primary);
 }
 
@@ -119,14 +119,14 @@
 }
 
 .btn-compare:not(:disabled) {
-    border-color: var(--accent-blue);
-    color: var(--accent-blue);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
 }
 
 .btn-compare.active {
-    background: var(--accent-blue);
-    border-color: var(--accent-blue);
-    color: #fff;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--text-white);
 }
 
 .btn-compare.active:hover {
@@ -149,7 +149,7 @@
 
 .temp-select-sm:hover,
 .temp-select-sm:focus {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     outline: none;
 }
 
@@ -166,7 +166,7 @@
 
 .temp-select-sm:hover,
 .temp-select-sm:focus {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     outline: none;
 }
 
@@ -209,10 +209,10 @@
     height: 22px;
 }
 
-.temp-card-icon.blue { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-.temp-card-icon.green { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.temp-card-icon.yellow { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.temp-card-icon.red { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.temp-card-icon.blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); }
+.temp-card-icon.green { background: var(--success-soft); color: var(--success); }
+.temp-card-icon.yellow { background: var(--warning-soft); color: var(--warning); }
+.temp-card-icon.red { background: var(--danger-soft); color: var(--danger); }
 .temp-card-icon.gray { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
 
 .temp-card-content {
@@ -385,9 +385,9 @@
     border-left: 3px solid;
 }
 
-.temp-alert-item.warning { border-left-color: #f59e0b; }
-.temp-alert-item.critical { border-left-color: #ef4444; }
-.temp-alert-item.spike { border-left-color: #8b5cf6; }
+.temp-alert-item.warning { border-left-color: var(--warning); }
+.temp-alert-item.critical { border-left-color: var(--danger); }
+.temp-alert-item.spike { border-left-color: var(--purple); }
 
 .alert-icon {
     flex-shrink: 0;
@@ -399,9 +399,9 @@
     height: 18px;
 }
 
-.temp-alert-item.warning .alert-icon { color: #f59e0b; }
-.temp-alert-item.critical .alert-icon { color: #ef4444; }
-.temp-alert-item.spike .alert-icon { color: #8b5cf6; }
+.temp-alert-item.warning .alert-icon { color: var(--warning); }
+.temp-alert-item.critical .alert-icon { color: var(--danger); }
+.temp-alert-item.spike .alert-icon { color: var(--purple); }
 
 .alert-content {
     flex: 1;
@@ -428,7 +428,7 @@
 
 .alert-badge {
     background: var(--danger);
-    color: #fff;
+    color: var(--text-white);
     font-size: 0.6875rem;
     font-weight: 600;
     padding: 0.125rem 0.5rem;
@@ -463,14 +463,14 @@
 }
 
 .filter-tab:hover {
-    border-color: var(--accent-blue);
+    border-color: var(--accent-primary);
     color: var(--text-primary);
 }
 
 .filter-tab.active {
-    background: var(--accent-blue);
-    border-color: var(--accent-blue);
-    color: #fff;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--text-white);
 }
 
 /* Server Groups Container */
@@ -632,8 +632,8 @@
 }
 
 .temp-drive-card.selected {
-    border-color: var(--accent-blue);
-    box-shadow: 0 0 0 1px var(--accent-blue);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 1px var(--accent-primary);
 }
 
 .temp-drive-card.warning {
@@ -678,18 +678,18 @@
 }
 
 .drive-temp.normal {
-    background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    background: var(--success-soft);
+    color: var(--success);
 }
 
 .drive-temp.warning {
-    background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
+    background: var(--warning-soft);
+    color: var(--warning);
 }
 
 .drive-temp.critical {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 .drive-card-body {
@@ -727,8 +727,8 @@
 }
 
 .temp-bar.normal { background: linear-gradient(90deg, #22c55e, #4ade80); }
-.temp-bar.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-.temp-bar.critical { background: linear-gradient(90deg, #ef4444, #f87171); }
+.temp-bar.warning { background: linear-gradient(90deg, var(--warning), #fbbf24); }
+.temp-bar.critical { background: linear-gradient(90deg, var(--danger), #f87171); }
 
 .temp-markers {
     position: absolute;
@@ -747,8 +747,8 @@
     border-radius: 1px;
 }
 
-.temp-markers .marker.warning { background: #f59e0b; }
-.temp-markers .marker.critical { background: #ef4444; }
+.temp-markers .marker.warning { background: var(--warning); }
+.temp-markers .marker.critical { background: var(--danger); }
 
 .drive-card-footer {
     display: flex;
@@ -772,7 +772,7 @@
 
 .compare-checkbox input {
     cursor: pointer;
-    accent-color: var(--accent-blue);
+    accent-color: var(--accent-primary);
     width: 12px;
     height: 12px;
 }

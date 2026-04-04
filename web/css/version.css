@@ -5,7 +5,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #2563eb 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding: 12px 20px;
     animation: slideDown 0.3s ease-out;
@@ -115,7 +115,7 @@
     right: -2px;
     width: 8px;
     height: 8px;
-    background: #3b82f6;
+    background: var(--accent-primary);
     border-radius: 50%;
     border: 2px solid var(--bg-primary);
     animation: pulse-update 2s infinite;
@@ -274,11 +274,11 @@ button.check-updates-btn svg,
 }
 
 .update-status.up-to-date svg {
-    stroke: #10b981;
+    stroke: var(--success);
 }
 
 .update-status.up-to-date strong {
-    color: #10b981;
+    color: var(--success);
 }
 
 /* Update available state */
@@ -288,11 +288,11 @@ button.check-updates-btn svg,
 }
 
 .update-status.update-available svg {
-    stroke: #3b82f6;
+    stroke: var(--accent-primary);
 }
 
 .update-status.update-available strong {
-    color: #3b82f6;
+    color: var(--accent-primary);
 }
 
 /* Error state */
@@ -302,11 +302,11 @@ button.check-updates-btn svg,
 }
 
 .update-status.update-error svg {
-    stroke: #ef4444;
+    stroke: var(--danger);
 }
 
 .update-status.update-error strong {
-    color: #ef4444;
+    color: var(--danger);
 }
 
 /* Small button variant for View Release */
@@ -347,7 +347,7 @@ button.check-updates-btn svg,
 }
 
 .header-update-indicator.has-update svg {
-    stroke: #3b82f6;
+    stroke: var(--accent-primary);
 }
 
 .header-update-indicator.has-update::after {
@@ -357,7 +357,7 @@ button.check-updates-btn svg,
     right: 6px;
     width: 8px;
     height: 8px;
-    background: #ef4444;
+    background: var(--danger);
     border-radius: 50%;
     border: 2px solid var(--bg-primary);
     animation: pulse-update 2s infinite;

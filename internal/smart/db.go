@@ -220,13 +220,25 @@ func GetDriveHealthSummary(db *sql.DB, hostname, serialNumber string) (*agentsma
 	return agentsmart.AnalyzeDriveHealth(driveData), nil
 }
 
-// GetAllDrivesHealthSummary returns health summaries for all monitored drives
+// GetAllDrivesHealthSummary returns health summaries for all monitored drives.
+// Uses a single query to batch-load the latest attributes for every drive,
+// then analyses each drive in memory — avoids the previous N+1 pattern.
 func GetAllDrivesHealthSummary(db *sql.DB) ([]*agentsmart.DriveHealthAnalysis, error) {
-	// Get all unique drives
+	// Batch-load the latest attributes for ALL drives in one query.
+	// The inner join picks the max timestamp per (hostname, serial_number).
 	query := `
-		SELECT DISTINCT hostname, serial_number
-		FROM smart_attributes
-		ORDER BY hostname, serial_number
+		SELECT sa.hostname, sa.serial_number,
+		       sa.attribute_id, sa.attribute_name, sa.value, sa.worst,
+		       sa.threshold, sa.raw_value, sa.flags, sa.when_failed, sa.timestamp
+		FROM smart_attributes sa
+		INNER JOIN (
+			SELECT hostname, serial_number, MAX(timestamp) AS max_ts
+			FROM smart_attributes
+			GROUP BY hostname, serial_number
+		) latest ON sa.hostname = latest.hostname
+			AND sa.serial_number = latest.serial_number
+			AND sa.timestamp = latest.max_ts
+		ORDER BY sa.hostname, sa.serial_number, sa.attribute_id
 	`
 
 	rows, err := db.Query(query)
@@ -235,20 +247,107 @@ func GetAllDrivesHealthSummary(db *sql.DB) ([]*agentsmart.DriveHealthAnalysis, e
 	}
 	defer rows.Close()
 
-	var summaries []*agentsmart.DriveHealthAnalysis
+	// Group attributes by (hostname, serial).
+	type driveKey struct{ host, serial string }
+	driveAttrs := make(map[driveKey][]agentsmart.SmartAttribute)
+	var order []driveKey // preserve insertion order
+
 	for rows.Next() {
 		var hostname, serial string
-		if err := rows.Scan(&hostname, &serial); err != nil {
+		var attr agentsmart.SmartAttribute
+		var whenFailed sql.NullString
+		var timestampStr string
+
+		if err := rows.Scan(
+			&hostname, &serial,
+			&attr.ID, &attr.Name, &attr.Value, &attr.Worst,
+			&attr.Threshold, &attr.RawValue, &attr.Flags, &whenFailed, &timestampStr,
+		); err != nil {
 			continue
 		}
+		if whenFailed.Valid {
+			attr.WhenFailed = whenFailed.String
+		}
+		attr.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestampStr)
 
-		summary, err := GetDriveHealthSummary(db, hostname, serial)
+		key := driveKey{hostname, serial}
+		if _, exists := driveAttrs[key]; !exists {
+			order = append(order, key)
+		}
+		driveAttrs[key] = append(driveAttrs[key], attr)
+	}
+
+	// Batch-load drive info (model, type, smart_passed) from the latest
+	// reports — one query per hostname rather than one per drive.
+	driveInfoCache := make(map[driveKey]*DriveInfo)
+	hostsSeen := make(map[string]bool)
+	for _, key := range order {
+		if hostsSeen[key.host] {
+			continue
+		}
+		hostsSeen[key.host] = true
+
+		var dataJSON []byte
+		err := db.QueryRow(`SELECT data FROM reports WHERE hostname = ? ORDER BY timestamp DESC LIMIT 1`, key.host).Scan(&dataJSON)
 		if err != nil {
-			log.Printf("Warning: Failed to get health summary for %s/%s: %v", hostname, serial, err)
 			continue
 		}
+		var reportData map[string]interface{}
+		if json.Unmarshal(dataJSON, &reportData) != nil {
+			continue
+		}
+		drives, _ := reportData["drives"].([]interface{})
+		for _, di := range drives {
+			dm, _ := di.(map[string]interface{})
+			if dm == nil {
+				continue
+			}
+			serial, _ := dm["serial_number"].(string)
+			if serial == "" {
+				continue
+			}
+			info := &DriveInfo{Hostname: key.host, SerialNumber: serial, SmartPassed: true}
+			if m, ok := dm["model_name"].(string); ok {
+				info.ModelName = m
+			} else if m, ok := dm["model_family"].(string); ok {
+				info.ModelName = m
+			}
+			if status, ok := dm["smart_status"].(map[string]interface{}); ok {
+				if passed, ok := status["passed"].(bool); ok {
+					info.SmartPassed = passed
+				}
+			}
+			if rr, ok := dm["rotation_rate"].(float64); ok {
+				if rr == 0 {
+					info.DriveType = "SSD"
+				} else {
+					info.DriveType = "HDD"
+				}
+			}
+			if proto, ok := dm["nvme_smart_health_information_log"].(map[string]interface{}); ok && proto != nil {
+				info.DriveType = "NVMe"
+			}
+			driveInfoCache[driveKey{key.host, serial}] = info
+		}
+	}
 
-		summaries = append(summaries, summary)
+	// Analyse each drive in memory.
+	var summaries []*agentsmart.DriveHealthAnalysis
+	for _, key := range order {
+		attrs := driveAttrs[key]
+		driveData := &agentsmart.DriveSmartData{
+			Hostname:     key.host,
+			SerialNumber: key.serial,
+			Attributes:   attrs,
+			SmartPassed:  true,
+			Timestamp:    time.Now(),
+		}
+		if info, ok := driveInfoCache[key]; ok {
+			driveData.ModelName = info.ModelName
+			driveData.DriveType = info.DriveType
+			driveData.SmartPassed = info.SmartPassed
+		}
+		summaries = append(summaries, agentsmart.AnalyzeDriveHealth(driveData))
 	}
 
 	return summaries, nil
