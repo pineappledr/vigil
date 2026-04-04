@@ -10,14 +10,15 @@ const Components = {
         hdd: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon hdd"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="3"/><line x1="14" y1="9" x2="18" y2="9"/><line x1="14" y1="12" x2="18" y2="12"/><line x1="14" y1="15" x2="18" y2="15"/></svg>`
     },
 
-    summaryCard({ icon, iconClass, value, label, onClick, active = false, title = '', id = '' }) {
+    summaryCard({ icon, iconClass, value, label, onClick, active = false, title = '', id = '', key = '' }) {
         const clickable = onClick ? 'clickable' : '';
         const activeClass = active ? 'active' : '';
         const onClickAttr = onClick ? `onclick="${onClick}"` : '';
         const idAttr = id ? `id="${id}"` : '';
+        const keyAttr = key ? `data-key="${key}"` : '';
 
         return `
-            <div class="summary-card ${clickable} ${activeClass} card-${iconClass}" ${onClickAttr} ${idAttr} title="${title}">
+            <div class="summary-card ${clickable} ${activeClass} card-${iconClass}" ${onClickAttr} ${idAttr} ${keyAttr} title="${title}">
                 <div class="icon ${iconClass}">${icon}</div>
                 <div class="summary-card-value value">${value}</div>
                 <div class="label">${label}</div>
@@ -200,7 +201,7 @@ const Components = {
         const sortedIdx = sortedData.findIndex(s => s.hostname === server.hostname);
 
         return `
-            <div class="drive-section">
+            <div class="drive-section" data-key="${Utils.escapeHtml(server.hostname)}">
                 <div class="drive-section-header clickable" onclick="Navigation.showServer(${sortedIdx >= 0 ? sortedIdx : serverIdx})">
                     <div class="drive-section-title">
                         ${this.icons.server}

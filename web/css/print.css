@@ -1,0 +1,88 @@
+/* ============================================
+   VIGIL DASHBOARD - Print Styles
+   ============================================ */
+
+@media print {
+    /* Hide non-essential UI */
+    .sidebar,
+    .sidebar-overlay,
+    .main-header,
+    .modal-overlay,
+    .confirm-overlay,
+    #toast-container,
+    .btn-refresh,
+    .btn-back,
+    .hamburger-btn,
+    .user-dropdown,
+    .nav-section,
+    .alias-btn-sm,
+    .compare-checkbox {
+        display: none !important;
+    }
+
+    /* Reset layout */
+    .main-content {
+        margin-left: 0 !important;
+    }
+
+    .app {
+        display: block;
+    }
+
+    /* White background, black text */
+    body,
+    .main-content,
+    .view,
+    .summary-card,
+    .drive-table,
+    .health-score-banner,
+    .health-component-card,
+    .temp-chart-section,
+    .temp-drives-section,
+    .temp-summary-card {
+        background: white !important;
+        color: black !important;
+        box-shadow: none !important;
+    }
+
+    /* Borders for structure */
+    .summary-card,
+    .health-component-card,
+    .drive-table-section {
+        border: 1px solid #ccc !important;
+    }
+
+    /* Text colors */
+    .summary-card .value,
+    .summary-card .label,
+    .health-score-big,
+    .health-score-grade,
+    .drive-table td,
+    .drive-table th {
+        color: black !important;
+    }
+
+    /* Ensure tables print cleanly */
+    .drive-table {
+        width: 100% !important;
+    }
+
+    .drive-table thead th {
+        background: #f0f0f0 !important;
+        color: black !important;
+    }
+
+    /* Show all views content for print */
+    .view.hidden {
+        display: none !important;
+    }
+
+    /* Page breaks */
+    .summary-grid {
+        page-break-inside: avoid;
+    }
+
+    .drive-table-section {
+        page-break-inside: avoid;
+    }
+}

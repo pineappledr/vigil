@@ -573,7 +573,7 @@ const Temperature = {
         }
 
         // Generate datasets - one per drive/server
-        const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+        const colors = [Utils.getCSSVar('--accent-primary'), Utils.getCSSVar('--success'), Utils.getCSSVar('--warning'), Utils.getCSSVar('--danger'), Utils.getCSSVar('--purple'), Utils.getCSSVar('--cyan'), '#ec4899'];
         const datasets = drivesToChart.slice(0, 7).map((drive, idx) => {
             const baseTemp = drive.temperature || 35;
             const data = labels.map((_, i) => {
@@ -613,7 +613,7 @@ const Temperature = {
                         display: datasets.length > 1,
                         position: 'top',
                         labels: {
-                            color: '#94a3b8',
+                            color: Utils.getCSSVar('--text-secondary'),
                             usePointStyle: true,
                             padding: 15,
                             font: { size: 11 }
@@ -622,7 +622,7 @@ const Temperature = {
                     tooltip: {
                         backgroundColor: 'rgba(15, 23, 42, 0.9)',
                         titleColor: '#fff',
-                        bodyColor: '#94a3b8',
+                        bodyColor: Utils.getCSSVar('--text-secondary'),
                         borderColor: '#334155',
                         borderWidth: 1,
                         callbacks: {
@@ -636,14 +636,14 @@ const Temperature = {
                         max: 70,
                         grid: { color: 'rgba(255, 255, 255, 0.06)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             callback: v => `${v}°C`
                         }
                     },
                     x: {
                         grid: { color: 'rgba(255, 255, 255, 0.03)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             maxTicksLimit: 8
                         }
                     }
@@ -659,7 +659,7 @@ const Temperature = {
                     // Warning line
                     const warningY = yAxis.getPixelForValue(thresholds.warning);
                     ctx.save();
-                    ctx.strokeStyle = '#f59e0b';
+                    ctx.strokeStyle = Utils.getCSSVar('--warning');
                     ctx.lineWidth = 1;
                     ctx.setLineDash([5, 5]);
                     ctx.beginPath();
@@ -669,7 +669,7 @@ const Temperature = {
 
                     // Critical line
                     const criticalY = yAxis.getPixelForValue(thresholds.critical);
-                    ctx.strokeStyle = '#ef4444';
+                    ctx.strokeStyle = Utils.getCSSVar('--danger');
                     ctx.beginPath();
                     ctx.moveTo(xAxis.left, criticalY);
                     ctx.lineTo(xAxis.right, criticalY);
@@ -864,7 +864,7 @@ const Temperature = {
         }
 
         // Generate datasets for selected drives
-        const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
+        const colors = [Utils.getCSSVar('--accent-primary'), Utils.getCSSVar('--success'), Utils.getCSSVar('--warning'), Utils.getCSSVar('--danger'), Utils.getCSSVar('--purple')];
         const datasets = this.selectedDrives.map((drive, idx) => {
             const baseTemp = drive.temperature || 35;
             const data = labels.map((_, i) => {
@@ -910,7 +910,7 @@ const Temperature = {
                         display: true,
                         position: 'top',
                         labels: {
-                            color: '#94a3b8',
+                            color: Utils.getCSSVar('--text-secondary'),
                             usePointStyle: true,
                             padding: 15,
                             font: { size: 11 }
@@ -919,7 +919,7 @@ const Temperature = {
                     tooltip: {
                         backgroundColor: 'rgba(15, 23, 42, 0.9)',
                         titleColor: '#fff',
-                        bodyColor: '#94a3b8',
+                        bodyColor: Utils.getCSSVar('--text-secondary'),
                         borderColor: '#334155',
                         borderWidth: 1,
                         callbacks: {
@@ -933,14 +933,14 @@ const Temperature = {
                         max: 70,
                         grid: { color: 'rgba(255, 255, 255, 0.06)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             callback: v => `${v}°C`
                         }
                     },
                     x: {
                         grid: { color: 'rgba(255, 255, 255, 0.03)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             maxTicksLimit: 8
                         }
                     }
@@ -956,7 +956,7 @@ const Temperature = {
                     // Warning line
                     const warningY = yAxis.getPixelForValue(thresholds.warning);
                     ctx.save();
-                    ctx.strokeStyle = '#f59e0b';
+                    ctx.strokeStyle = Utils.getCSSVar('--warning');
                     ctx.lineWidth = 1;
                     ctx.setLineDash([5, 5]);
                     ctx.beginPath();
@@ -966,7 +966,7 @@ const Temperature = {
 
                     // Critical line
                     const criticalY = yAxis.getPixelForValue(thresholds.critical);
-                    ctx.strokeStyle = '#ef4444';
+                    ctx.strokeStyle = Utils.getCSSVar('--danger');
                     ctx.beginPath();
                     ctx.moveTo(xAxis.left, criticalY);
                     ctx.lineTo(xAxis.right, criticalY);

@@ -126,7 +126,7 @@
 .summary-card.card-blue.active { background: rgba(59, 130, 246, 0.05); }
 
 .summary-card.card-purple.clickable:hover,
-.summary-card.card-purple.active { border-color: #8b5cf6; box-shadow: 0 0 20px rgba(139, 92, 246, 0.2); }
+.summary-card.card-purple.active { border-color: var(--purple); box-shadow: 0 0 20px rgba(139, 92, 246, 0.2); }
 .summary-card.card-purple.active { background: rgba(139, 92, 246, 0.05); }
 
 .summary-card.card-green.clickable:hover,
@@ -142,7 +142,7 @@
 .summary-card.card-red.active { background: rgba(239, 68, 68, 0.05); }
 
 .summary-card.card-cyan.clickable:hover,
-.summary-card.card-cyan.active { border-color: #06b6d4; box-shadow: 0 0 20px rgba(6, 182, 212, 0.2); }
+.summary-card.card-cyan.active { border-color: var(--cyan); box-shadow: 0 0 20px rgba(6, 182, 212, 0.2); }
 .summary-card.card-cyan.active { background: rgba(6, 182, 212, 0.05); }
 
 .summary-card .icon {
@@ -157,13 +157,13 @@
 
 .summary-card .icon svg { width: 20px; height: 20px; }
 
-.summary-card .icon.blue { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); }
+.summary-card .icon.blue,
+.summary-card .icon.accent { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); }
 .summary-card .icon.green { background: var(--success-soft); color: var(--success); }
 .summary-card .icon.yellow { background: var(--warning-soft); color: var(--warning); }
 .summary-card .icon.red { background: var(--danger-soft); color: var(--danger); }
-.summary-card .icon.purple { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
-.summary-card .icon.cyan { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
-.summary-card .icon.accent { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); }
+.summary-card .icon.purple { background: var(--purple-soft); color: var(--purple); }
+.summary-card .icon.cyan { background: var(--cyan-soft); color: var(--cyan); }
 
 .summary-card .value {
     font-size: 2rem;
@@ -257,7 +257,7 @@
     border: 1px solid rgba(0, 255, 170, 0.2);
     padding: 12px 16px;
     border-radius: 6px;
-    color: var(--accent-color, #00ffaa);
+    color: var(--success);
 }
 
 /* Detail grid */
@@ -282,7 +282,7 @@
 
 .zfs-detail-item .value {
     font-size: 14px;
-    color: #fff;
+    color: var(--text-white);
     font-weight: 500;
 }
 
@@ -302,11 +302,11 @@
 .zfs-error-item .error-count {
     font-size: 24px;
     font-weight: 600;
-    color: var(--accent-color, #00ffaa);
+    color: var(--success);
 }
 
 .zfs-error-item .error-count.has-errors {
-    color: var(--danger-color, #ff4444);
+    color: var(--danger);
 }
 
 .zfs-error-item .error-label {
@@ -341,7 +341,7 @@
 
 .zfs-vdev-name {
     font-weight: 600;
-    color: #fff;
+    color: var(--text-white);
     font-size: 14px;
 }
 
@@ -349,7 +349,7 @@
     font-size: 10px;
     padding: 3px 8px;
     background: rgba(100, 100, 255, 0.2);
-    color: #aaccff;
+    color: var(--accent-primary);
     border-radius: 4px;
     text-transform: uppercase;
     font-weight: 600;
@@ -363,9 +363,9 @@
     font-weight: 500;
 }
 
-.zfs-vdev-state.online { background: rgba(0, 200, 100, 0.2); color: #00c864; }
-.zfs-vdev-state.degraded { background: rgba(255, 200, 0, 0.2); color: #ffc800; }
-.zfs-vdev-state.faulted { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
+.zfs-vdev-state.online { background: var(--success-soft); color: var(--success); }
+.zfs-vdev-state.degraded { background: var(--warning-soft); color: var(--warning); }
+.zfs-vdev-state.faulted { background: var(--danger-soft); color: var(--danger); }
 
 .zfs-vdev-errors {
     margin-left: auto;
@@ -411,7 +411,7 @@
 
 .zfs-disk-name {
     font-weight: 500;
-    color: #fff;
+    color: var(--text-white);
     font-size: 13px;
 }
 
@@ -422,9 +422,9 @@
     font-weight: 500;
 }
 
-.zfs-disk-state.online { background: rgba(0, 200, 100, 0.15); color: #00c864; }
-.zfs-disk-state.degraded { background: rgba(255, 200, 0, 0.15); color: #ffc800; }
-.zfs-disk-state.faulted { background: rgba(255, 68, 68, 0.15); color: #ff4444; }
+.zfs-disk-state.online { background: var(--success-soft); color: var(--success); }
+.zfs-disk-state.degraded { background: var(--warning-soft); color: var(--warning); }
+.zfs-disk-state.faulted { background: var(--danger-soft); color: var(--danger); }
 
 .zfs-disk-info {
     display: flex;
@@ -442,17 +442,17 @@
 }
 
 .zfs-disk-serial.clickable {
-    color: var(--accent-color, #00ffaa);
+    color: var(--success);
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
-    background: rgba(0, 255, 170, 0.1);
+    background: var(--success-soft);
     transition: all 0.2s;
 }
 
 .zfs-disk-serial.clickable:hover {
-    background: rgba(0, 255, 170, 0.2);
-    color: #fff;
+    background: rgba(16, 185, 129, 0.25);
+    color: var(--text-white);
 }
 
 .zfs-disk-serial .link-icon {
@@ -500,8 +500,8 @@
 }
 
 .zfs-scrub-item.has-errors {
-    border-left-color: var(--danger-color, #ff4444);
-    background: rgba(255, 68, 68, 0.05);
+    border-left-color: var(--danger);
+    background: rgba(239, 68, 68, 0.05);
 }
 
 .zfs-scrub-main {
@@ -513,7 +513,7 @@
 .zfs-scrub-date {
     font-weight: 500;
     font-size: 14px;
-    color: #fff;
+    color: var(--text-white);
     font-family: monospace;
 }
 
@@ -521,7 +521,7 @@
     font-size: 10px;
     padding: 2px 6px;
     background: rgba(100, 100, 255, 0.15);
-    color: #aaccff;
+    color: var(--accent-primary);
     border-radius: 3px;
     font-weight: 500;
 }
@@ -541,13 +541,13 @@
     font-size: 12px;
     padding: 4px 12px;
     border-radius: 12px;
-    background: rgba(0, 255, 170, 0.15);
-    color: var(--accent-color, #00ffaa);
+    background: var(--success-soft);
+    color: var(--success);
 }
 
 .zfs-scrub-errors.has-errors {
-    background: rgba(255, 68, 68, 0.15);
-    color: var(--danger-color, #ff4444);
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 /* ─── Loading State ────────────────────────────────────────────────────────── */
@@ -565,7 +565,7 @@
     width: 36px;
     height: 36px;
     border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: var(--accent-color, #00ffaa);
+    border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     margin-bottom: 16px;
@@ -587,7 +587,7 @@
 /* ─── Error text ───────────────────────────────────────────────────────────── */
 
 .error-text {
-    color: var(--danger-color, #ff4444) !important;
+    color: var(--danger) !important;
 }
 
 /* ─── Toast Notifications ──────────────────────────────────────────────────── */

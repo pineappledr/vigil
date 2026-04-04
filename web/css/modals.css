@@ -261,7 +261,7 @@
     margin: 0 0 12px 0;
     font-size: 12px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
 }
@@ -281,12 +281,12 @@
 
 .zfs-detail-label {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
 }
 
 .zfs-detail-value {
     font-size: 14px;
-    color: #fff;
+    color: var(--text-white);
     font-weight: 500;
 }
 
@@ -298,7 +298,7 @@
     border: 1px solid rgba(0, 255, 170, 0.2);
     padding: 12px 16px;
     border-radius: 6px;
-    color: var(--accent-color, #00ffaa);
+    color: var(--success);
 }
 
 /* ─── Device List Styles ─────────────────────────────────────────────────────── */
@@ -327,7 +327,7 @@
 
 .zfs-vdev-name {
     font-weight: 600;
-    color: #fff;
+    color: var(--text-white);
     font-size: 14px;
 }
 
@@ -336,7 +336,7 @@
     font-size: 10px;
     padding: 3px 8px;
     background: rgba(100, 100, 255, 0.2);
-    color: #aaccff;
+    color: var(--accent-primary);
     border-radius: 4px;
     text-transform: uppercase;
     font-weight: 600;
@@ -353,13 +353,13 @@
 
 .zfs-vdev-state.online,
 .zfs-device-state.online,
-.zfs-disk-state.online { background: rgba(0, 200, 100, 0.2); color: #00c864; }
+.zfs-disk-state.online { background: rgba(0, 200, 100, 0.2); color: var(--success); }
 .zfs-vdev-state.degraded,
 .zfs-device-state.degraded,
-.zfs-disk-state.degraded { background: rgba(255, 200, 0, 0.2); color: #ffc800; }
+.zfs-disk-state.degraded { background: rgba(255, 200, 0, 0.2); color: var(--warning); }
 .zfs-vdev-state.faulted,
 .zfs-device-state.faulted,
-.zfs-disk-state.faulted { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
+.zfs-disk-state.faulted { background: rgba(255, 68, 68, 0.2); color: var(--danger); }
 
 .zfs-vdev-errors {
     margin-left: auto;
@@ -410,7 +410,7 @@
 .zfs-disk-name,
 .zfs-device-name {
     font-weight: 500;
-    color: #fff;
+    color: var(--text-white);
     font-size: 13px;
     font-family: monospace;
 }
@@ -433,7 +433,7 @@
 .zfs-device-serial {
     font-family: 'Monaco', 'Consolas', monospace;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -441,7 +441,7 @@
 
 .zfs-disk-serial.clickable,
 .zfs-device-serial.clickable {
-    color: var(--accent-color, #00ffaa);
+    color: var(--success);
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
@@ -452,7 +452,7 @@
 .zfs-disk-serial.clickable:hover,
 .zfs-device-serial.clickable:hover {
     background: rgba(0, 255, 170, 0.2);
-    color: #fff;
+    color: var(--text-white);
 }
 
 .zfs-disk-serial .link-icon,
@@ -496,7 +496,7 @@
 }
 
 .zfs-scrub-item.has-errors {
-    border-left-color: var(--danger-color, #ff4444);
+    border-left-color: var(--danger);
     background: rgba(255, 68, 68, 0.05);
 }
 
@@ -509,7 +509,7 @@
 .zfs-scrub-date {
     font-weight: 500;
     font-size: 14px;
-    color: #fff;
+    color: var(--text-white);
     font-family: monospace;
 }
 
@@ -521,7 +521,7 @@
 
 .zfs-scrub-duration {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
 }
 
 .zfs-scrub-errors {
@@ -529,12 +529,12 @@
     padding: 4px 12px;
     border-radius: 12px;
     background: rgba(0, 255, 170, 0.15);
-    color: var(--accent-color, #00ffaa);
+    color: var(--success);
 }
 
 .zfs-scrub-errors.has-errors {
     background: rgba(255, 68, 68, 0.15);
-    color: var(--danger-color, #ff4444);
+    color: var(--danger);
 }
 
 /* ─── States ───────────────────────────────────────────────────────────────── */
@@ -552,7 +552,7 @@
     width: 36px;
     height: 36px;
     border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: var(--accent-color, #00ffaa);
+    border-top-color: var(--success);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     margin-bottom: 16px;
@@ -570,7 +570,7 @@
 }
 
 .error-text {
-    color: var(--danger-color, #ff4444) !important;
+    color: var(--danger) !important;
 }
 
 /* State badge */
@@ -582,9 +582,9 @@
     text-transform: uppercase;
 }
 
-.zfs-state-badge.online { background: rgba(0, 200, 100, 0.2); color: #00c864; }
-.zfs-state-badge.degraded { background: rgba(255, 200, 0, 0.2); color: #ffc800; }
-.zfs-state-badge.faulted { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
+.zfs-state-badge.online { background: rgba(0, 200, 100, 0.2); color: var(--success); }
+.zfs-state-badge.degraded { background: rgba(255, 200, 0, 0.2); color: var(--warning); }
+.zfs-state-badge.faulted { background: rgba(255, 68, 68, 0.2); color: var(--danger); }
 /* ─── Job Detail Modal ───────────────────────────────────────────────────── */
 
 .modal-job-detail {

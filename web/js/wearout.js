@@ -342,7 +342,7 @@ const Wearout = {
                 datasets: [{
                     label: 'Wearout %',
                     data: values,
-                    borderColor: '#3b82f6',
+                    borderColor: Utils.getCSSVar('--accent-primary'),
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     fill: true,
                     tension: 0.3,
@@ -357,9 +357,9 @@ const Wearout = {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: '#1a2234',
-                        titleColor: '#f1f5f9',
-                        bodyColor: '#94a3b8',
+                        backgroundColor: Utils.getCSSVar('--bg-elevated'),
+                        titleColor: Utils.getCSSVar('--text-primary'),
+                        bodyColor: Utils.getCSSVar('--text-secondary'),
                         borderColor: 'rgba(148,163,184,0.2)',
                         borderWidth: 1,
                         callbacks: {
@@ -370,14 +370,14 @@ const Wearout = {
                 scales: {
                     x: {
                         grid: { color: 'rgba(148,163,184,0.08)' },
-                        ticks: { color: '#64748b', maxTicksLimit: 8, font: { family: "'JetBrains Mono'" } }
+                        ticks: { color: Utils.getCSSVar('--text-muted'), maxTicksLimit: 8, font: { family: "'JetBrains Mono'" } }
                     },
                     y: {
                         min: 0,
                         max: 100,
                         grid: { color: 'rgba(148,163,184,0.08)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             callback: v => v + '%',
                             font: { family: "'JetBrains Mono'" }
                         }

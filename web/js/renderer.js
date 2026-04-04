@@ -44,20 +44,24 @@ const Renderer = {
             return;
         }
         
-        summaryCards.innerHTML = this.serverSummaryCards();
-        
+        this._reconcileSummaryCards(summaryCards);
+
         if (!servers || servers.length === 0) {
             serverList.innerHTML = Components.emptyState('noServers');
             return;
         }
-        
+
         const sortedServers = State.getSortedData();
-        
-        serverList.innerHTML = sortedServers.map((server) => {
+
+        const htmls = [];
+        const keys = [];
+        sortedServers.forEach((server) => {
             const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             const drives = (server.details?.drives || []).map((d, i) => ({...d, _idx: i}));
-            return Components.serverSection(server, actualIdx, drives);
-        }).join('');
+            keys.push(server.hostname);
+            htmls.push(Components.serverSection(server, actualIdx, drives));
+        });
+        Utils.reconcileChildren(serverList, htmls, keys);
     },
 
     _healthScoreCard() {
@@ -68,7 +72,7 @@ const Renderer = {
         else if (hs.score < 75) iconClass = 'yellow';
         return Components.summaryCard({
             icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
-            iconClass,
+            iconClass, key: 'health-score',
             value: hs.score,
             label: hs.grade,
             onClick: "Navigation.showHealthScore()",
@@ -77,70 +81,87 @@ const Renderer = {
         });
     },
 
-    serverSummaryCards() {
+    _reconcileSummaryCards(container) {
         const stats = State.getStats();
         const zfsStats = State.getZFSStats();
         const showZFS = zfsStats.totalPools > 0;
+        const htmls = [];
+        const keys = [];
 
-        return `
-            ${Components.summaryCard({
-                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
-                iconClass: 'blue',
-                value: stats.totalServers,
-                label: 'Servers',
-                onClick: "Navigation.showDashboard()",
-                active: !State.activeFilter && State.activeView === 'drives' && State.activeServerIndex === null,
-                title: 'Click to view dashboard'
-            })}
-            ${Components.summaryCard({
-                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
-                iconClass: 'purple',
-                value: stats.totalDrives,
-                label: `<span class="card-type-breakdown">${stats.nvmeCount} NVMe · ${stats.ssdCount} SSD · ${stats.hddCount} HDD</span>`,
-                onClick: "Navigation.showFilter('all')",
-                active: State.activeFilter === 'all',
-                title: 'Click to view all drives'
-            })}
-            ${Components.summaryCard({
-                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
-                iconClass: 'green',
-                value: stats.healthyDrives,
-                label: 'Healthy',
-                onClick: "Navigation.showFilter('healthy')",
-                active: State.activeFilter === 'healthy',
-                title: 'Click to view healthy drives'
-            })}
-            ${this._healthScoreCard()}
-            ${stats.warningDrives > 0 ? Components.summaryCard({
+        const add = (key, html) => { if (html) { keys.push(key); htmls.push(html); } };
+
+        add('servers', Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
+            iconClass: 'blue', key: 'servers',
+            value: stats.totalServers,
+            label: 'Servers',
+            onClick: "Navigation.showDashboard()",
+            active: !State.activeFilter && State.activeView === 'drives' && State.activeServerIndex === null,
+            title: 'Click to view dashboard'
+        }));
+        add('drives', Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
+            iconClass: 'purple', key: 'drives',
+            value: stats.totalDrives,
+            label: `<span class="card-type-breakdown">${stats.nvmeCount} NVMe · ${stats.ssdCount} SSD · ${stats.hddCount} HDD</span>`,
+            onClick: "Navigation.showFilter('all')",
+            active: State.activeFilter === 'all',
+            title: 'Click to view all drives'
+        }));
+        add('healthy', Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+            iconClass: 'green', key: 'healthy',
+            value: stats.healthyDrives,
+            label: 'Healthy',
+            onClick: "Navigation.showFilter('healthy')",
+            active: State.activeFilter === 'healthy',
+            title: 'Click to view healthy drives'
+        }));
+        add('health-score', this._healthScoreCard());
+        if (stats.warningDrives > 0) {
+            add('warning', Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-                iconClass: 'yellow',
+                iconClass: 'yellow', key: 'warning',
                 value: stats.warningDrives,
                 label: 'Warning',
                 onClick: "Navigation.showFilter('warning')",
                 active: State.activeFilter === 'warning',
                 title: 'Click to view drives with warnings'
-            }) : ''}
-            ${stats.criticalDrives > 0 ? Components.summaryCard({
+            }));
+        }
+        if (stats.criticalDrives > 0) {
+            add('critical', Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
-                iconClass: 'red',
+                iconClass: 'red', key: 'critical',
                 value: stats.criticalDrives,
                 label: 'Critical',
                 onClick: "Navigation.showFilter('critical')",
                 active: State.activeFilter === 'critical',
                 title: 'Click to view failing drives'
-            }) : ''}
-            ${showZFS ? Components.summaryCard({
+            }));
+        }
+        if (showZFS) {
+            add('zfs', Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="7" cy="6" r="1" fill="currentColor"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="7" cy="18" r="1" fill="currentColor"/></svg>`,
-                iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan',
+                iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan', key: 'zfs',
                 value: `${zfsStats.healthyPools}/${zfsStats.totalPools}`,
                 label: 'ZFS Pools',
                 onClick: "Navigation.showZFS()",
                 active: State.activeView === 'zfs',
-                title: zfsStats.attentionPools > 0 
-                    ? `${zfsStats.attentionPools} pool(s) need attention` 
+                title: zfsStats.attentionPools > 0
+                    ? `${zfsStats.attentionPools} pool(s) need attention`
                     : 'Click to view ZFS pools'
-            }) : ''}
-        `;
+            }));
+        }
+
+        Utils.reconcileChildren(container, htmls, keys);
+    },
+
+    // String version for one-shot renders (filtered views, health breakdown)
+    serverSummaryCards() {
+        const container = document.createElement('div');
+        this._reconcileSummaryCards(container);
+        return container.innerHTML;
     },
 
     serverDetailSummaryCards(server) {
@@ -231,7 +252,7 @@ const Renderer = {
 
         const gradeColor = (score) => {
             if (score >= 90) return 'var(--success)';
-            if (score >= 75) return '#10b981';
+            if (score >= 75) return Utils.getCSSVar('--success');
             if (score >= 60) return 'var(--warning)';
             if (score >= 40) return '#f97316';
             return 'var(--danger)';

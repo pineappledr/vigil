@@ -208,7 +208,9 @@ const Data = {
 
         const sortedData = State.getSortedData();
 
-        serverNav.innerHTML = sortedData.map((server, sortedIdx) => {
+        const htmls = [];
+        const keys = [];
+        sortedData.forEach((server, sortedIdx) => {
             const drives = server.details?.drives || [];
             const hasWarning = drives.some(d => Utils.getHealthStatus(d) === 'warning');
             const hasCritical = drives.some(d => Utils.getHealthStatus(d) === 'critical');
@@ -221,16 +223,19 @@ const Data = {
             else if (hasCritical) statusClass = 'critical';
             else if (hasWarning) statusClass = 'warning';
 
-            return `
+            keys.push(server.hostname);
+            htmls.push(`
                 <div class="server-nav-item ${isActive ? 'active' : ''} ${isOffline ? 'server-offline' : ''}"
+                     data-key="${Utils.escapeHtml(server.hostname)}"
                      onclick="navShowServer(${sortedIdx})"
                      title="${isOffline ? 'Not reporting — no data received in 5+ minutes' : 'Online — last update ' + timeSince}">
                     <span class="status-indicator ${statusClass}"></span>
                     <span class="server-name">${Utils.escapeHtml(server.hostname)}</span>
                     ${isOffline ? '<span class="offline-badge">NOT REPORTING</span>' : ''}
                 </div>
-            `;
-        }).join('');
+            `);
+        });
+        Utils.reconcileChildren(serverNav, htmls, keys);
     },
 
     updateSortIndicator() {

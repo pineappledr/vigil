@@ -44,7 +44,7 @@ jobs:
           go tool cover -func=coverage.out
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-report
@@ -108,7 +108,7 @@ jobs:
           cache-from: type=gha
 
       - name: Trivy scan - Server image
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: vigil-server:scan
           exit-code: '1'
@@ -116,7 +116,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan - Agent image
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: vigil-agent:scan
           exit-code: '1'
@@ -270,7 +270,7 @@ jobs:
           cd dist && sha256sum * > checksums.txt
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: vigil-agent-${{ steps.meta.outputs.version }}
           path: dist/

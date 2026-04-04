@@ -959,7 +959,7 @@ const SmartAttributes = {
                 datasets: [{
                     label: 'Temperature',
                     data: data,
-                    borderColor: '#3b82f6',
+                    borderColor: Utils.getCSSVar('--accent-primary'),
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     fill: true,
                     tension: 0.4,
@@ -980,7 +980,7 @@ const SmartAttributes = {
                     tooltip: {
                         backgroundColor: 'rgba(15, 23, 42, 0.9)',
                         titleColor: '#fff',
-                        bodyColor: '#94a3b8',
+                        bodyColor: Utils.getCSSVar('--text-secondary'),
                         borderColor: '#334155',
                         borderWidth: 1,
                         callbacks: {
@@ -994,14 +994,14 @@ const SmartAttributes = {
                         max: 70,
                         grid: { color: 'rgba(255, 255, 255, 0.06)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             callback: v => `${v}°C`
                         }
                     },
                     x: {
                         grid: { color: 'rgba(255, 255, 255, 0.03)' },
                         ticks: {
-                            color: '#64748b',
+                            color: Utils.getCSSVar('--text-muted'),
                             maxTicksLimit: 8
                         }
                     }
@@ -1017,7 +1017,7 @@ const SmartAttributes = {
                     // Warning line at 45°C
                     const warningY = yAxis.getPixelForValue(45);
                     ctx.save();
-                    ctx.strokeStyle = '#f59e0b';
+                    ctx.strokeStyle = Utils.getCSSVar('--warning');
                     ctx.lineWidth = 1;
                     ctx.setLineDash([5, 5]);
                     ctx.beginPath();
@@ -1027,7 +1027,7 @@ const SmartAttributes = {
 
                     // Critical line at 55°C
                     const criticalY = yAxis.getPixelForValue(55);
-                    ctx.strokeStyle = '#ef4444';
+                    ctx.strokeStyle = Utils.getCSSVar('--danger');
                     ctx.beginPath();
                     ctx.moveTo(xAxis.left, criticalY);
                     ctx.lineTo(xAxis.right, criticalY);

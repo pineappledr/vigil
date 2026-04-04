@@ -110,6 +110,11 @@ const Utils = {
         return 'HDD';
     },
 
+    // ── CSS variable helper ───────────────────────────────────────────
+    getCSSVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    },
+
     escapeHtml(str) {
         if (!str) return '';
         return String(str)
@@ -161,6 +166,78 @@ const Utils = {
             toast.classList.remove('toast-visible');
             setTimeout(() => toast.remove(), 300);
         }, 4000);
+    },
+
+    // ── Keyed DOM reconciliation ─────────────────────────────────────────
+    // Updates a container's children by data-key attribute, only touching
+    // elements that actually changed. Preserves scroll position and focus.
+    reconcileChildren(parent, newHTMLs, keys) {
+        if (!parent || !newHTMLs) return;
+        if (newHTMLs.length !== keys.length) return;
+
+        // Build map of existing children by key
+        const existingByKey = new Map();
+        for (const child of parent.children) {
+            const key = child.getAttribute('data-key');
+            if (key) existingByKey.set(key, child);
+        }
+
+        // Track which keys are in the new set
+        const newKeySet = new Set(keys);
+
+        // Remove children whose keys are no longer present
+        for (const [key, child] of existingByKey) {
+            if (!newKeySet.has(key)) {
+                child.remove();
+                existingByKey.delete(key);
+            }
+        }
+
+        // Create a temporary container to parse new HTML
+        const temp = document.createElement('div');
+
+        // Process each new item in order
+        let prevSibling = null;
+        for (let i = 0; i < newHTMLs.length; i++) {
+            const key = keys[i];
+            const existing = existingByKey.get(key);
+
+            if (existing) {
+                // Compare innerHTML (cheaper than outerHTML for large elements)
+                temp.innerHTML = newHTMLs[i];
+                const newEl = temp.firstElementChild;
+                if (newEl && existing.outerHTML !== newEl.outerHTML) {
+                    // Content changed — replace
+                    existing.replaceWith(newEl);
+                    existingByKey.set(key, newEl);
+                    prevSibling = newEl;
+                } else {
+                    // No change — just ensure correct position
+                    if (prevSibling) {
+                        if (existing.previousElementSibling !== prevSibling) {
+                            prevSibling.after(existing);
+                        }
+                    } else if (existing !== parent.firstElementChild) {
+                        parent.prepend(existing);
+                    }
+                    prevSibling = existing;
+                }
+            } else {
+                // New key — insert
+                temp.innerHTML = newHTMLs[i];
+                const newEl = temp.firstElementChild;
+                if (newEl) {
+                    newEl.setAttribute('data-key', key);
+                    if (prevSibling) {
+                        prevSibling.after(newEl);
+                    } else {
+                        parent.prepend(newEl);
+                    }
+                    existingByKey.set(key, newEl);
+                    prevSibling = newEl;
+                }
+            }
+        }
     },
 
     // ── Confirmation dialog ─────────────────────────────────────────────

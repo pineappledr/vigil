@@ -317,7 +317,7 @@
     padding: 4px 10px;
     border-radius: 6px;
     background: rgba(59, 130, 246, 0.15);
-    color: var(--primary, #3b82f6);
+    color: var(--accent-primary);
     animation: pulse-badge 2s ease-in-out infinite;
 }
 
@@ -1005,9 +1005,9 @@
 }
 
 .smart-page-active {
-    background: var(--accent-primary, #58a6ff);
-    color: #fff;
-    border-color: var(--accent-primary, #58a6ff);
+    background: var(--accent-primary);
+    color: var(--text-white);
+    border-color: var(--accent-primary);
 }
 
 .smart-page-ellipsis {
@@ -1104,7 +1104,7 @@
 .log-viewer-body {
     height: 500px;
     overflow-y: auto;
-    background: #0d1117;
+    background: var(--bg-code);
     font-family: var(--font-mono);
     font-size: 0.75rem;
     line-height: 1.6;
