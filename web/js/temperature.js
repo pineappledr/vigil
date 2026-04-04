@@ -1025,7 +1025,7 @@ const Temperature = {
      */
     async acknowledgeAlert(alertId) {
         try {
-            await fetch(`/api/alerts/temperature/${alertId}/acknowledge`, { method: 'POST' });
+            await fetch(`/api/alerts/temperature/${alertId}/acknowledge`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             this.loadData();
         } catch (error) {
             console.error('[Temperature] Failed to acknowledge:', error);

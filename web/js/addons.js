@@ -393,7 +393,7 @@ const Addons = {
         try {
             const resp = await fetch('/api/addons/register', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({ name, url, token })
             });
             const data = await resp.json().catch(() => ({}));
