@@ -18,6 +18,26 @@ import (
 // BackupDir is the directory where backups are stored. Set from main.go.
 var BackupDir string
 
+// safeBackupPath validates a backup filename and returns its absolute path
+// within BackupDir, or an error if the filename is invalid or escapes the directory.
+func safeBackupPath(filename string) (string, error) {
+	if filename == "" || strings.ContainsAny(filename, `/\`) || strings.Contains(filename, "..") {
+		return "", fmt.Errorf("invalid filename")
+	}
+	if !strings.HasPrefix(filename, "vigil-backup-") || !strings.HasSuffix(filename, ".db") {
+		return "", fmt.Errorf("invalid backup filename")
+	}
+	absDir, err := filepath.Abs(BackupDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve backup dir: %w", err)
+	}
+	resolved := filepath.Join(absDir, filepath.Clean(filename))
+	if !strings.HasPrefix(resolved, absDir+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path traversal detected")
+	}
+	return resolved, nil
+}
+
 // TriggerBackup runs an immediate database backup.
 // POST /api/backup
 func TriggerBackup(w http.ResponseWriter, r *http.Request) {
@@ -69,17 +89,13 @@ func DeleteBackupFile(w http.ResponseWriter, r *http.Request) {
 // GET /api/backups/{filename}/download
 func DownloadBackup(w http.ResponseWriter, r *http.Request) {
 	filename := r.PathValue("filename")
-	if filename == "" || strings.ContainsAny(filename, `/\`) || strings.Contains(filename, "..") {
+	safePath, err := safeBackupPath(filename)
+	if err != nil {
 		JSONError(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
-	if !strings.HasPrefix(filename, "vigil-backup-") || !strings.HasSuffix(filename, ".db") {
-		JSONError(w, "Invalid backup filename", http.StatusBadRequest)
-		return
-	}
 
-	path := filepath.Join(BackupDir, filename)
-	f, err := os.Open(path)
+	f, err := os.Open(safePath) // #nosec G304 — path validated by safeBackupPath
 	if err != nil {
 		if os.IsNotExist(err) {
 			JSONError(w, "Backup not found", http.StatusNotFound)

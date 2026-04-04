@@ -44,7 +44,7 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora,
 - **📈 Health Scoring:** Composite 0–100 health score combining SMART, wearout, and ZFS metrics. Grades from Excellent to Critical. Exportable HTML health reports.
 - **🔮 Wearout Prediction:** SSD/NVMe wear leveling tracking with end-of-life prediction and threshold alerts (warning at 60%, critical at 80%).
 - **📊 Built-in Metrics:** System stats endpoint (`GET /api/stats`) with uptime, report queue depth, processing latency, notification counts, and database size — no Prometheus needed.
-- **💾 Database Backups:** Scheduled and manual SQLite backups via `VACUUM INTO`. Configurable interval and retention. Manage from the settings page or API.
+- **💾 Database Backups:** Scheduled and manual SQLite backups via `VACUUM INTO`. Download, restore, and manage backups from the settings page. Upload a backup file to restore, with automatic safety backup before overwrite.
 - **🔍 Request Tracing:** `X-Request-ID` header on every request for log correlation across the agent → server → notification chain.
 - **⚙️ Configurable Retention:** Notification history, SMART data, and host history limits adjustable from the settings page.
 
@@ -660,6 +660,8 @@ Vigil automatically handles drives behind SAS HBA controllers (like LSI SAS3224,
 | `PUT` | `/api/settings/{category}/{key}` | Update a setting value |
 | `POST` | `/api/backup` | Trigger a manual database backup |
 | `GET` | `/api/backups` | List existing backup files |
+| `GET` | `/api/backups/{filename}/download` | Download a backup file |
+| `POST` | `/api/backups/restore` | Restore from uploaded `.db` file (multipart) |
 | `DELETE` | `/api/backups/{filename}` | Delete a backup file |
 | `GET` | `/api/stats` | Get system metrics (uptime, queue, latency, counts) |
 
