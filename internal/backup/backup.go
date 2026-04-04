@@ -42,7 +42,9 @@ func RunBackup(db *sql.DB, backupDir string, maxBackups int) (BackupInfo, error)
 		info, _ := os.Stat(rawDest)
 		return BackupInfo{Filename: rawName, SizeBytes: info.Size(), CreatedAt: info.ModTime().UTC()}, nil
 	}
-	os.Remove(rawDest) // remove uncompressed original
+	if err := os.Remove(rawDest); err != nil {
+		fmt.Printf("backup: warning: failed to remove raw file: %v\n", err)
+	}
 
 	info, err := os.Stat(gzDest)
 	if err != nil {
