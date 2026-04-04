@@ -7,10 +7,11 @@ const Data = {
         let historyOk = false;
 
         try {
-            const [historyResponse, zfsResponse, wearoutResponse] = await Promise.all([
+            const [historyResponse, zfsResponse, wearoutResponse, healthResponse] = await Promise.all([
                 API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); return null; }),
                 API.getZFSPools().catch(() => null),
-                API.get('/api/wearout/all').catch(() => null)
+                API.get('/api/wearout/all').catch(() => null),
+                API.get('/api/health/score').catch(() => null)
             ]);
 
             // ── History (critical path) ──────────────────────────────────
@@ -51,6 +52,15 @@ const Data = {
                 }
             } else {
                 State.wearoutMap = {};
+            }
+
+            // ── Health Score ────────────────────────────────────────────
+            if (healthResponse && healthResponse.ok) {
+                try {
+                    State.healthScore = await healthResponse.json();
+                } catch (e) {
+                    State.healthScore = null;
+                }
             }
         } catch (error) {
             console.error('[Data] Unexpected fetch error:', error);

@@ -60,12 +60,28 @@ const Renderer = {
         }).join('');
     },
 
+    _healthScoreCard() {
+        const hs = State.healthScore;
+        if (!hs) return '';
+        let iconClass = 'green';
+        if (hs.score < 40) iconClass = 'red';
+        else if (hs.score < 75) iconClass = 'yellow';
+        return Components.summaryCard({
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+            iconClass,
+            value: hs.score,
+            label: hs.grade,
+            title: 'Array Health Score'
+        });
+    },
+
     serverSummaryCards() {
         const stats = State.getStats();
         const zfsStats = State.getZFSStats();
         const showZFS = zfsStats.totalPools > 0;
-        
+
         return `
+            ${this._healthScoreCard()}
             ${Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
                 iconClass: 'blue',

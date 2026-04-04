@@ -262,6 +262,10 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// ─── Add-on Endpoints ────────────────────────────────────────────────
 	handlers.RegisterAddonRoutes(mux, protect)
 
+	// ─── Health & Report Endpoints ──────────────────────────────────────
+	handlers.RegisterHealthRoutes(mux, protect)
+	handlers.RegisterReportRoutes(mux, protect)
+
 	// ─── Notification Endpoints ──────────────────────────────────────────
 	handlers.RegisterNotificationRoutes(mux, protect)
 

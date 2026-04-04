@@ -11,6 +11,7 @@ const State = {
     currentUser: null,
     mustChangePassword: false,
 
+    healthScore: null,
     zfsPools: [],
     zfsDriveMap: {},
     wearoutMap: {},
