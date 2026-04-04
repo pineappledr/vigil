@@ -12,6 +12,7 @@ import (
 	"vigil/internal/db"
 	"vigil/internal/events"
 	"vigil/internal/notify"
+	"vigil/internal/settings"
 	"vigil/internal/validate"
 )
 
@@ -486,7 +487,7 @@ func TestNotificationURL(w http.ResponseWriter, r *http.Request) {
 // GetNotificationHistory returns recent notification records.
 // GET /api/notifications/history?limit=50
 func GetNotificationHistory(w http.ResponseWriter, r *http.Request) {
-	limit := 50
+	limit := settings.GetInt(db.DB, "retention", "notification_display_limit", 50)
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 500 {
 			limit = n

@@ -633,6 +633,115 @@ const Renderer = {
                 <div class="settings-section">
                     <div class="settings-section-header">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                        <h3>Data Retention</h3>
+                    </div>
+                    <div class="settings-card" id="retention-settings">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Notification History</div>
+                                <div class="settings-item-desc">Days to keep notification history</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-notification-days" min="1" max="3650" value="90"
+                                onchange="Settings.saveRetention('notification_history_days', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">SMART Data</div>
+                                <div class="settings-item-desc">Days to keep SMART attribute and temperature history</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-smart-days" min="1" max="3650" value="90"
+                                onchange="Settings.saveRetention('smart_data_days', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Host History Limit</div>
+                                <div class="settings-item-desc">Maximum report history entries per host</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-host-limit" min="10" max="1000" value="50"
+                                onchange="Settings.saveRetention('host_history_limit', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Notification Display Limit</div>
+                                <div class="settings-item-desc">Default number of notification records to show</div>
+                            </div>
+                            <input type="number" class="settings-input" id="retention-notify-limit" min="10" max="500" value="50"
+                                onchange="Settings.saveRetention('notification_display_limit', this.value)">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <h3>Database Backup</h3>
+                    </div>
+                    <div class="settings-card" id="backup-settings">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Automatic Backups</div>
+                                <div class="settings-item-desc">Enable scheduled database backups</div>
+                            </div>
+                            <input type="checkbox" class="settings-toggle" id="backup-enabled" checked
+                                onchange="Settings.saveBackupSetting('enabled', this.checked ? 'true' : 'false')">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Backup Interval</div>
+                                <div class="settings-item-desc">Hours between automatic backups</div>
+                            </div>
+                            <input type="number" class="settings-input" id="backup-interval" min="1" max="168" value="24"
+                                onchange="Settings.saveBackupSetting('interval_hours', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Max Backups</div>
+                                <div class="settings-item-desc">Maximum number of backup files to retain</div>
+                            </div>
+                            <input type="number" class="settings-input" id="backup-max" min="1" max="100" value="7"
+                                onchange="Settings.saveBackupSetting('max_backups', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Manual Backup</div>
+                                <div class="settings-item-desc">Create a backup now</div>
+                            </div>
+                            <button class="btn btn-secondary" id="backup-now-btn" onclick="Settings.triggerBackup()">Backup Now</button>
+                        </div>
+                        <div id="backup-list"></div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <path d="M3 9h18"/>
+                            <path d="M9 21V9"/>
+                        </svg>
+                        <h3>System Stats</h3>
+                    </div>
+                    <div class="settings-card" id="system-stats">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-desc">Loading stats...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"/>
                             <line x1="12" y1="16" x2="12" y2="12"/>
                             <line x1="12" y1="8" x2="12.01" y2="8"/>

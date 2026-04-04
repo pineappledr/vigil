@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+
 	"vigil/internal/agents"
 	"vigil/internal/audit"
 	"vigil/internal/auth"
 	"vigil/internal/db"
+	"vigil/internal/settings"
 	"vigil/internal/smart"
 	"vigil/internal/validate"
 	"vigil/internal/wearout"
@@ -31,6 +33,11 @@ type reportWork struct {
 // the HTTP handler never blocks; if it fills up we drop the work.
 var reportQueue = make(chan reportWork, 64)
 
+// ReportQueueDepth returns the current number of pending report jobs.
+func ReportQueueDepth() int {
+	return len(reportQueue)
+}
+
 func init() {
 	go reportWorker()
 }
@@ -38,6 +45,7 @@ func init() {
 func reportWorker() {
 	for w := range reportQueue {
 		func() {
+			start := time.Now()
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("⚠️  Report background processing panic for %s: %v", w.hostname, r)
@@ -56,6 +64,11 @@ func reportWorker() {
 
 			if _, ok := w.payload["zfs"].(map[string]interface{}); ok {
 				ProcessZFSFromReport(w.hostname, w.payload)
+			}
+
+			if Metrics != nil {
+				Metrics.ReportsProcessed.Add(1)
+				Metrics.RecordReportLatency(time.Since(start))
 			}
 		}()
 	}
@@ -125,6 +138,9 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	case reportQueue <- reportWork{hostname: hostname, agentID: session.AgentID, payload: payload}:
 	default:
 		log.Printf("⚠️  Report processing queue full, dropping background work for %s", hostname)
+		if Metrics != nil {
+			Metrics.ReportsDropped.Add(1)
+		}
 	}
 }
 
@@ -252,9 +268,10 @@ func HostHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limit := settings.GetInt(db.DB, "retention", "host_history_limit", 50)
 	rows, err := db.DB.Query(
-		"SELECT timestamp, data FROM reports WHERE hostname = ? ORDER BY timestamp DESC LIMIT 50",
-		hostname,
+		"SELECT timestamp, data FROM reports WHERE hostname = ? ORDER BY timestamp DESC LIMIT ?",
+		hostname, limit,
 	)
 	if err != nil {
 		JSONError(w, err.Error(), http.StatusInternalServerError)

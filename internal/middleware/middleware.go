@@ -1,12 +1,17 @@
 package middleware
 
 import (
+	"bufio"
+	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // CORS adds CORS headers to responses (reflects request origin instead of wildcard)
@@ -83,12 +88,68 @@ func MaxBodySize(maxBytes int64, next http.Handler) http.Handler {
 	})
 }
 
-// Logging logs request details
+// ─── Request ID ─────────────────────────────────────────────────────────────
+
+type contextKey string
+
+const RequestIDKey contextKey = "requestID"
+
+// GetRequestID returns the request ID from the request context.
+func GetRequestID(r *http.Request) string {
+	if id, ok := r.Context().Value(RequestIDKey).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// RequestID assigns a unique ID to each request. If the incoming request
+// already carries an X-Request-ID header (e.g. from a reverse proxy),
+// that value is reused; otherwise a new UUID is generated.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = uuid.New().String()[:8] // short ID for log readability
+		}
+		ctx := context.WithValue(r.Context(), RequestIDKey, id)
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// ─── Status-capturing response writer ───────────────────────────────────────
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (sr *statusRecorder) WriteHeader(code int) {
+	sr.status = code
+	sr.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack implements http.Hijacker for websocket support.
+func (sr *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := sr.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not support Hijack")
+}
+
+// Logging logs request details with request ID and response status.
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		id := GetRequestID(r)
+		dur := time.Since(start).Round(time.Millisecond)
+		if id != "" {
+			log.Printf("[%s] %s %s %d %s", id, r.Method, r.URL.Path, rec.status, dur)
+		} else {
+			log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, dur)
+		}
 	})
 }
 

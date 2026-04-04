@@ -23,6 +23,17 @@ var DefaultSettings = []Setting{
 	// System settings
 	{Category: "system", Key: "data_retention_days", Value: "365", ValueType: "int", Description: "Days to keep historical data"},
 	{Category: "system", Key: "timezone", Value: "UTC", ValueType: "string", Description: "Display timezone for timestamps"},
+
+	// Retention settings
+	{Category: "retention", Key: "notification_history_days", Value: "90", ValueType: "int", Description: "Days to keep notification history"},
+	{Category: "retention", Key: "smart_data_days", Value: "90", ValueType: "int", Description: "Days to keep SMART attribute and temperature history"},
+	{Category: "retention", Key: "host_history_limit", Value: "50", ValueType: "int", Description: "Maximum report history entries per host"},
+	{Category: "retention", Key: "notification_display_limit", Value: "50", ValueType: "int", Description: "Default number of notification history entries to display"},
+
+	// Backup settings
+	{Category: "backup", Key: "enabled", Value: "true", ValueType: "bool", Description: "Enable scheduled database backups"},
+	{Category: "backup", Key: "interval_hours", Value: "24", ValueType: "int", Description: "Hours between automatic backups"},
+	{Category: "backup", Key: "max_backups", Value: "7", ValueType: "int", Description: "Maximum number of backup files to retain"},
 }
 
 // validateSettingValue validates a value against its expected type

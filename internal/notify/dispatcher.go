@@ -37,6 +37,11 @@ type Dispatcher struct {
 	bus    *events.Bus
 	sender Sender
 
+	// OnSent is called after each successful send (for metrics).
+	OnSent func()
+	// OnFailed is called after each failed send (for metrics).
+	OnFailed func()
+
 	// cooldowns tracks the last dispatch time per (service_id, event_type).
 	mu        sync.Mutex
 	cooldowns map[string]time.Time
@@ -261,9 +266,15 @@ func (d *Dispatcher) dispatch(svc NotificationService, e events.Event) {
 		rec.Status = "failed"
 		rec.ErrorMessage = err.Error()
 		log.Printf("notify: send to %s failed: %v", svc.Name, err)
+		if d.OnFailed != nil {
+			d.OnFailed()
+		}
 	} else {
 		rec.Status = "sent"
 		rec.SentAt = time.Now().UTC()
+		if d.OnSent != nil {
+			d.OnSent()
+		}
 	}
 
 	if _, dbErr := RecordNotification(d.db, rec); dbErr != nil {

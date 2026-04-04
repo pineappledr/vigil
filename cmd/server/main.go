@@ -20,9 +20,11 @@ import (
 	"vigil/internal/db"
 	"vigil/internal/events"
 	"vigil/internal/handlers"
+	"vigil/internal/metrics"
 	"vigil/internal/middleware"
 	"vigil/internal/models"
 	"vigil/internal/notify"
+	"vigil/internal/settings"
 	"vigil/internal/smart"
 	"vigil/internal/wearout"
 )
@@ -116,6 +118,7 @@ func main() {
 		log.Fatalf("❌ Failed to initialise server keys: %v", err)
 	}
 	handlers.ServerKeys = keys
+	handlers.BackupDir = filepath.Join(dataDir, "backups")
 	log.Printf("✓ Server keys: %s", filepath.Join(dataDir, "vigil.key"))
 
 	// Auth initialisation
@@ -127,24 +130,29 @@ func main() {
 	}
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
-	if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
+	notifyDays := settings.GetInt(db.DB, "retention", "notification_history_days", 90)
+	if err := notify.PurgeOldHistory(db.DB, notifyDays); err != nil {
 		log.Printf("⚠️  Notification history purge: %v", err)
 	}
 
-	// Periodic cleanup (sessions, notification history, SMART data retention)
+	// Periodic cleanup (sessions, notification history, SMART data retention, backups)
 	go func() {
+		var lastBackupUnix int64
 		ticker := time.NewTicker(1 * time.Hour)
 		for range ticker.C {
 			auth.CleanupExpiredSessions()
 			agents.CleanupExpiredAgentSessions(db.DB)
-			if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
+			nd := settings.GetInt(db.DB, "retention", "notification_history_days", 90)
+			if err := notify.PurgeOldHistory(db.DB, nd); err != nil {
 				log.Printf("⚠️  Notification history purge: %v", err)
 			}
-			if deleted, err := smart.CleanupOldSmartData(db.DB, 90); err != nil {
+			sd := settings.GetInt(db.DB, "retention", "smart_data_days", 90)
+			if deleted, err := smart.CleanupOldSmartData(db.DB, sd); err != nil {
 				log.Printf("⚠️  SMART data cleanup: %v", err)
 			} else if deleted > 0 {
 				log.Printf("🧹 SMART data cleanup: removed %d old records", deleted)
 			}
+			handlers.RunScheduledBackup(&lastBackupUnix)
 		}
 	}()
 
@@ -191,13 +199,20 @@ func main() {
 	hbm.Start()
 	defer hbm.Stop()
 
+	// Initialize metrics collector
+	m := metrics.New()
+	handlers.Metrics = m
+	handlers.DBPath = cfg.DBPath
+
 	// Wire notification dispatch to event bus
 	dispatcher := notify.NewDispatcher(db.DB, eventBus, nil)
+	dispatcher.OnSent = func() { m.NotificationsSent.Add(1) }
+	dispatcher.OnFailed = func() { m.NotificationsFailed.Add(1) }
 	dispatcher.Start()
 	defer dispatcher.Stop()
 
 	mux := setupRoutes(cfg)
-	handler := middleware.MaxBodySize(1<<20, middleware.Logging(middleware.CORS(middleware.CSRFCheck(mux))))
+	handler := middleware.MaxBodySize(1<<20, middleware.RequestID(middleware.Logging(middleware.CORS(middleware.CSRFCheck(mux)))))
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -296,6 +311,15 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 
 	// ─── Notification Endpoints ──────────────────────────────────────────
 	handlers.RegisterNotificationRoutes(mux, protect)
+
+	// ─── Settings Endpoints ──────────────────────────────────────────────
+	handlers.RegisterSettingsRoutes(mux, protect)
+
+	// ─── Backup Endpoints ────────────────────────────────────────────────
+	handlers.RegisterBackupRoutes(mux, protect)
+
+	// ─── Stats Endpoints ─────────────────────────────────────────────────
+	handlers.RegisterStatsRoutes(mux, protect)
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))

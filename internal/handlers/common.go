@@ -8,11 +8,18 @@ import (
 
 	"vigil/internal/auth"
 	"vigil/internal/events"
+	"vigil/internal/metrics"
 	"vigil/internal/models"
 )
 
 // EventBus is the shared event bus, set from main.go during startup.
 var EventBus *events.Bus
+
+// Metrics is the shared metrics collector, set from main.go during startup.
+var Metrics *metrics.Collector
+
+// DBPath is the path to the database file, used for size reporting.
+var DBPath string
 
 // JSONResponse sends a JSON response
 func JSONResponse(w http.ResponseWriter, data interface{}) {

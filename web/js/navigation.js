@@ -255,6 +255,8 @@ const Navigation = {
 
         document.getElementById('page-title').textContent = 'Settings';
         document.getElementById('breadcrumbs')?.classList.add('hidden');
+
+        Settings.loadAll();
     },
 
     goBack() {
