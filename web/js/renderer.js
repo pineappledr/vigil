@@ -425,7 +425,8 @@ const Renderer = {
         if (pct > 80) barClass = 'wearout-critical';
         else if (pct > 50) barClass = 'wearout-warning';
         return `
-            <div class="wearout-bar-container" title="Wearout: ${pct}% used — ${remaining.toFixed(1)}% life remaining">
+            <div class="wearout-bar-container">
+                <span class="wearout-tooltip">${pct}% used · ${remaining.toFixed(1)}% remaining</span>
                 <div class="wearout-bar">
                     <div class="wearout-bar-fill ${barClass}" style="width:${Math.min(pct, 100)}%"></div>
                 </div>
