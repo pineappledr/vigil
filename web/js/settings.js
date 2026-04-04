@@ -106,7 +106,11 @@ const Settings = {
                         <div class="settings-item-title">${Utils.escapeHtml(b.filename)}</div>
                         <div class="settings-item-desc">${size} &middot; ${age}</div>
                     </div>
-                    <button class="btn btn-danger btn-sm" onclick="Settings.deleteBackup('${Utils.escapeJSString(b.filename)}')">Delete</button>
+                    <div class="backup-actions">
+                        <a class="btn btn-secondary btn-sm" href="/api/backups/${encodeURIComponent(b.filename)}/download" download title="Download">Download</a>
+                        <button class="btn btn-secondary btn-sm" onclick="Settings.restoreBackup('${Utils.escapeJSString(b.filename)}')" title="Restore">Restore</button>
+                        <button class="btn btn-danger btn-sm" onclick="Settings.deleteBackup('${Utils.escapeJSString(b.filename)}')">Delete</button>
+                    </div>
                 </div>`;
             }).join('');
         } catch { /* ignore */ }
@@ -125,6 +129,54 @@ const Settings = {
         } catch {
             Utils.toast('Failed to delete backup', 'error');
         }
+    },
+
+    async restoreBackup(filename) {
+        if (!confirm(`Restore database from "${filename}"?\n\nA safety backup of the current database will be created automatically.\n\nThe page will reload after restore.`)) return;
+        try {
+            // Download the backup file, then upload it to the restore endpoint
+            const dlResp = await fetch(`/api/backups/${encodeURIComponent(filename)}/download`);
+            if (!dlResp.ok) { Utils.toast('Failed to fetch backup file', 'error'); return; }
+            const blob = await dlResp.blob();
+            const form = new FormData();
+            form.append('backup', blob, filename);
+            const resp = await fetch('/api/backups/restore', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: form });
+            if (resp.ok) {
+                Utils.toast('Database restored. Reloading...', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                const err = await resp.json().catch(() => ({}));
+                Utils.toast(err.error || 'Restore failed', 'error');
+            }
+        } catch {
+            Utils.toast('Restore failed', 'error');
+        }
+    },
+
+    restoreFromFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.db';
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (!file) return;
+            if (!confirm(`Restore database from "${file.name}"?\n\nA safety backup of the current database will be created automatically.\n\nThe page will reload after restore.`)) return;
+            const form = new FormData();
+            form.append('backup', file);
+            try {
+                const resp = await fetch('/api/backups/restore', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: form });
+                if (resp.ok) {
+                    Utils.toast('Database restored. Reloading...', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    Utils.toast(err.error || 'Restore failed', 'error');
+                }
+            } catch {
+                Utils.toast('Restore failed', 'error');
+            }
+        };
+        input.click();
     },
 
     async loadStats() {

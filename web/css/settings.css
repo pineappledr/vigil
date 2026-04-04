@@ -108,6 +108,14 @@
 }
 .settings-toggle:checked::after { transform: translateX(20px); }
 
+.backup-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.backup-actions a.btn { text-decoration: none; }
+
 /* ============================================
    ANIMATIONS
    ============================================ */

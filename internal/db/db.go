@@ -106,6 +106,25 @@ func createSchema() error {
 	return nil
 }
 
+// OpenValidate opens a SQLite database file and runs a quick integrity check.
+// Returns the open *sql.DB on success so the caller can close it.
+func OpenValidate(path string) (*sql.DB, error) {
+	d, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=ro", path))
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	var result string
+	if err := d.QueryRow("PRAGMA integrity_check(1)").Scan(&result); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("integrity check: %w", err)
+	}
+	if result != "ok" {
+		d.Close()
+		return nil, fmt.Errorf("integrity check failed: %s", result)
+	}
+	return d, nil
+}
+
 func migrateSchema() {
 	// Add must_change_password column if it doesn't exist
 	DB.Exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")

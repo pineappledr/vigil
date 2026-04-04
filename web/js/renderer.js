@@ -715,7 +715,10 @@ const Renderer = {
                                 <div class="settings-item-title">Manual Backup</div>
                                 <div class="settings-item-desc">Create a backup now</div>
                             </div>
-                            <button class="btn btn-secondary" id="backup-now-btn" onclick="Settings.triggerBackup()">Backup Now</button>
+                            <div class="backup-actions">
+                                <button class="btn btn-secondary" id="backup-now-btn" onclick="Settings.triggerBackup()">Backup Now</button>
+                                <button class="btn btn-secondary" onclick="Settings.restoreFromFile()">Restore from File</button>
+                            </div>
                         </div>
                         <div id="backup-list"></div>
                     </div>

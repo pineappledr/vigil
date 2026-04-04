@@ -79,9 +79,10 @@ func CSRFCheck(next http.Handler) http.Handler {
 }
 
 // MaxBodySize limits request body size to prevent abuse.
+// The restore endpoint is exempted since it handles its own limit for file uploads.
 func MaxBodySize(maxBytes int64, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Body != nil {
+		if r.Body != nil && r.URL.Path != "/api/backups/restore" {
 			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 		}
 		next.ServeHTTP(w, r)
