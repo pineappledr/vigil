@@ -11,7 +11,7 @@ const API = {
     async post(endpoint, data) {
         return fetch(endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(data)
         });
     },
@@ -132,7 +132,7 @@ const API = {
     // ─── Agent Management ─────────────────────────────────────────────────────
 
     async delete(endpoint) {
-        return fetch(endpoint, { method: 'DELETE' });
+        return fetch(endpoint, { method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
     },
 
     async getServerPubKey() {
@@ -164,7 +164,7 @@ const API = {
     async put(endpoint, data) {
         return fetch(endpoint, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(data)
         });
     },

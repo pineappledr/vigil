@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -29,7 +31,33 @@ import (
 var version = "dev"
 
 func main() {
+	rotateKeys := flag.Bool("rotate-keys", false, "Rotate server Ed25519 keys and exit")
+	flag.Parse()
+
 	log.SetFlags(log.Ltime | log.Ldate)
+
+	// Handle key rotation before anything else
+	if *rotateKeys {
+		cfg := config.Load()
+		dataDir := filepath.Dir(cfg.DBPath)
+		if dataDir == "." {
+			if cwd, err := os.Getwd(); err == nil {
+				dataDir = cwd
+			}
+		}
+		keys, err := crypto.RotateKeys(dataDir)
+		if err != nil {
+			log.Fatalf("❌ Key rotation failed: %v", err)
+		}
+		fmt.Println("✅ Server keys rotated successfully.")
+		fmt.Printf("   New public key: %s\n", keys.PublicKeyBase64())
+		fmt.Printf("   Old keys backed up to %s/*.bak\n", dataDir)
+		fmt.Println("\nNext steps:")
+		fmt.Println("  1. Restart the Vigil server")
+		fmt.Println("  2. Re-register all agents (vigil-agent register)")
+		os.Exit(0)
+	}
+
 	log.Printf("🚀 Vigil Server v%s starting...", version)
 
 	// Set version for handlers
@@ -169,7 +197,7 @@ func main() {
 	defer dispatcher.Stop()
 
 	mux := setupRoutes(cfg)
-	handler := middleware.Logging(middleware.CORS(mux))
+	handler := middleware.MaxBodySize(1<<20, middleware.Logging(middleware.CORS(middleware.CSRFCheck(mux))))
 
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,

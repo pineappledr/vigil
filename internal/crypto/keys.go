@@ -56,6 +56,27 @@ func VerifyAgentSignature(publicKeyBase64 string, msg, sig []byte) bool {
 	return ed25519.Verify(ed25519.PublicKey(pubBytes), msg, sig)
 }
 
+// RotateKeys backs up the existing key pair and generates a new one.
+// Old keys are saved as vigil.key.bak / vigil.pub.bak.
+func RotateKeys(dataDir string) (*ServerKeys, error) {
+	privPath := filepath.Join(dataDir, privateKeyFile)
+	pubPath := filepath.Join(dataDir, publicKeyFile)
+
+	// Back up existing keys if they exist
+	if _, err := os.Stat(privPath); err == nil {
+		if err := os.Rename(privPath, privPath+".bak"); err != nil {
+			return nil, fmt.Errorf("backup private key: %w", err)
+		}
+	}
+	if _, err := os.Stat(pubPath); err == nil {
+		if err := os.Rename(pubPath, pubPath+".bak"); err != nil {
+			return nil, fmt.Errorf("backup public key: %w", err)
+		}
+	}
+
+	return generateAndSave(dataDir, privPath)
+}
+
 // ─── private helpers ─────────────────────────────────────────────────────────
 
 func loadKeys(privPath string) (*ServerKeys, error) {

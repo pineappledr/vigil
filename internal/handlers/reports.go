@@ -2,14 +2,18 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"vigil/internal/agents"
+	"vigil/internal/audit"
+	"vigil/internal/auth"
 	"vigil/internal/db"
 	"vigil/internal/smart"
+	"vigil/internal/validate"
 	"vigil/internal/wearout"
 )
 
@@ -211,8 +215,8 @@ func Hosts(w http.ResponseWriter, r *http.Request) {
 // DeleteHost removes a host and its data
 func DeleteHost(w http.ResponseWriter, r *http.Request) {
 	hostname := strings.TrimSpace(r.PathValue("hostname"))
-	if hostname == "" {
-		JSONError(w, "Missing hostname", http.StatusBadRequest)
+	if err := validate.Hostname(hostname); err != nil {
+		JSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -231,6 +235,9 @@ func DeleteHost(w http.ResponseWriter, r *http.Request) {
 	db.DB.Exec("DELETE FROM drive_aliases WHERE hostname = ?", hostname)
 
 	log.Printf("🗑️  Deleted host: %s (%d reports)", hostname, affected)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "host_delete", "host", hostname, fmt.Sprintf("%d reports deleted", affected), "success")
+	}
 	JSONResponse(w, map[string]interface{}{
 		"status":  "deleted",
 		"deleted": affected,

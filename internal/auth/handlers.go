@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"vigil/internal/audit"
 	"vigil/internal/db"
 	"vigil/internal/models"
+	"vigil/internal/validate"
 )
 
 // isSecureRequest checks if the request came over HTTPS (directly or via reverse proxy)
@@ -75,6 +77,7 @@ func Login(config models.Config) http.HandlerFunc {
 		).Scan(&user.ID, &user.Username, &user.PasswordHash, &mustChange, &createdAt)
 
 		if err != nil || !CheckPassword(user.PasswordHash, creds.Password) {
+			audit.LogEvent(db.DB, r, 0, creds.Username, "login_failed", "user", "", "invalid credentials", "failure")
 			jsonError(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
@@ -96,6 +99,7 @@ func Login(config models.Config) http.HandlerFunc {
 		})
 
 		log.Printf("🔓 Login: %s", user.Username)
+		audit.LogEvent(db.DB, r, user.ID, user.Username, "login", "user", "", "", "success")
 		jsonResponse(w, map[string]interface{}{
 			"success":              true,
 			"token":                token,
@@ -111,6 +115,7 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 	if session != nil {
 		DeleteSession(session.Token)
 		log.Printf("🔒 Logout: %s", session.Username)
+		audit.LogEvent(db.DB, r, session.UserID, session.Username, "logout", "user", "", "", "success")
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -177,6 +182,7 @@ func ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔑 Password changed: %s", session.Username)
+	audit.LogEvent(db.DB, r, session.UserID, session.Username, "password_change", "user", "", "", "success")
 	jsonResponse(w, map[string]string{"status": "password_changed"})
 }
 
@@ -195,8 +201,8 @@ func ChangeUsername(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.NewUsername = strings.TrimSpace(req.NewUsername)
-	if req.NewUsername == "" {
-		jsonError(w, "Username cannot be empty", http.StatusBadRequest)
+	if err := validate.Username(req.NewUsername); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -222,6 +228,7 @@ func ChangeUsername(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("👤 Username changed: %s -> %s", session.Username, req.NewUsername)
+	audit.LogEvent(db.DB, r, session.UserID, session.Username, "username_change", "user", "", "new_username="+req.NewUsername, "success")
 	jsonResponse(w, map[string]string{
 		"status":       "username_updated",
 		"new_username": req.NewUsername,
