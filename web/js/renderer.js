@@ -96,7 +96,7 @@ const Renderer = {
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
                 iconClass: 'purple',
                 value: stats.totalDrives,
-                label: 'Total Drives',
+                label: `<span class="card-type-breakdown">${stats.nvmeCount} NVMe · ${stats.ssdCount} SSD · ${stats.hddCount} HDD</span>`,
                 onClick: "Navigation.showFilter('all')",
                 active: State.activeFilter === 'all',
                 title: 'Click to view all drives'
@@ -391,7 +391,8 @@ const Renderer = {
         const serial = drive.serial_number || 'N/A';
         const hostname = drive._hostname || '';
         const wearoutData = State.getWearoutForDrive(hostname, serial);
-        const wearoutPct = wearoutData ? `${wearoutData.percentage}%` : '--';
+        const wearoutRaw = wearoutData ? wearoutData.percentage : null;
+        const wearoutPct = wearoutRaw !== null ? Math.round(wearoutRaw * 10) / 10 : null;
         const smartPassed = drive.smart_status?.passed;
         const alias = drive._alias || '';
         const displayName = alias || driveName;
@@ -405,10 +406,23 @@ const Renderer = {
                 <td>${Utils.formatSize(drive.user_capacity?.bytes)}</td>
                 <td>${drive.temperature?.current ?? '--'}°C</td>
                 <td>${Utils.formatAge(drive.power_on_time?.hours)}</td>
-                <td class="drive-table-wearout">${wearoutPct}</td>
+                <td class="drive-table-wearout">${wearoutPct !== null ? this._wearoutBar(wearoutPct) : '--'}</td>
                 <td><span class="smart-badge ${smartPassed ? 'passed' : 'failed'}">${smartPassed ? 'OK' : 'FAIL'}</span></td>
             </tr>
         `;
+    },
+
+    _wearoutBar(pct) {
+        const remaining = Math.max(0, Math.min(100, 100 - pct));
+        let barClass = 'wearout-good';
+        if (pct > 80) barClass = 'wearout-critical';
+        else if (pct > 50) barClass = 'wearout-warning';
+        return `
+            <div class="wearout-bar-container" title="Wearout: ${pct}% used — ${remaining.toFixed(1)}% life remaining">
+                <div class="wearout-bar">
+                    <div class="wearout-bar-fill ${barClass}" style="width:${Math.min(pct, 100)}%"></div>
+                </div>
+            </div>`;
     },
 
     driveDetails(serverIdx, driveIdx) {

@@ -107,6 +107,7 @@ const State = {
 
     getStats() {
         let totalDrives = 0, healthyDrives = 0, warningDrives = 0, criticalDrives = 0, offlineServers = 0;
+        let nvmeCount = 0, ssdCount = 0, hddCount = 0;
         this.data.forEach(s => {
             const drives = s.details?.drives || [];
             totalDrives += drives.length;
@@ -116,9 +117,13 @@ const State = {
                 if (status === 'critical') criticalDrives++;
                 else if (status === 'warning') warningDrives++;
                 else healthyDrives++;
+                const type = Utils.getDriveType(d);
+                if (type === 'NVMe') nvmeCount++;
+                else if (type === 'SSD') ssdCount++;
+                else hddCount++;
             });
         });
-        return { totalServers: this.data.length, totalDrives, healthyDrives, warningDrives, criticalDrives, attentionDrives: warningDrives + criticalDrives, offlineServers };
+        return { totalServers: this.data.length, totalDrives, healthyDrives, warningDrives, criticalDrives, attentionDrives: warningDrives + criticalDrives, offlineServers, nvmeCount, ssdCount, hddCount };
     },
 
     getZFSStats() {
