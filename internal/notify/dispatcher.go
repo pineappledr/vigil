@@ -154,9 +154,11 @@ func (d *Dispatcher) severityAllowed(svc NotificationService, sev events.Severit
 // severity filter in handle(), allowing specific event types to fire regardless
 // of the global Critical/Warning/Healthy threshold.
 func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed bool, explicit bool) {
-	// If the event's drive belongs to a group, check for group-specific rules first.
+	// If the event identifies a specific drive (both hostname and serial present),
+	// check for group-specific rules first. Events without a serial (e.g. SnapRAID,
+	// addon events) skip straight to service-level rules.
 	source := d.eventSource(e)
-	if source != ":" {
+	if e.Hostname != "" && e.SerialNumber != "" {
 		groupID, err := drivegroups.GetDriveGroup(d.db, e.Hostname, e.SerialNumber)
 		if err == nil && groupID != nil {
 			groupRules, err := drivegroups.GetGroupEventRules(d.db, serviceID, *groupID)
