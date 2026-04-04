@@ -129,13 +129,20 @@ func History(w http.ResponseWriter, r *http.Request) {
 	aliases := loadAliases()
 
 	query := `
-	SELECT r.hostname, r.timestamp, r.data
+	SELECT r.hostname, r.timestamp, r.data,
+	       COALESCE(ag.last_seen, r.timestamp) AS last_seen
 	FROM reports r
 	INNER JOIN (
 		SELECT hostname, MAX(id) AS max_id
 		FROM reports
 		GROUP BY hostname
 	) latest ON r.id = latest.max_id
+	LEFT JOIN (
+		SELECT hostname, MAX(last_seen_at) AS last_seen
+		FROM agent_registry
+		WHERE enabled = 1
+		GROUP BY hostname
+	) ag ON LOWER(ag.hostname) = LOWER(r.hostname)
 	ORDER BY r.timestamp DESC`
 
 	rows, err := db.DB.Query(query)
@@ -147,9 +154,9 @@ func History(w http.ResponseWriter, r *http.Request) {
 
 	history := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		var host, ts string
+		var host, ts, lastSeen string
 		var dataRaw []byte
-		if err := rows.Scan(&host, &ts, &dataRaw); err != nil {
+		if err := rows.Scan(&host, &ts, &dataRaw, &lastSeen); err != nil {
 			continue
 		}
 
@@ -163,6 +170,7 @@ func History(w http.ResponseWriter, r *http.Request) {
 		history = append(history, map[string]interface{}{
 			"hostname":  host,
 			"timestamp": ts,
+			"last_seen": lastSeen,
 			"details":   dataMap,
 		})
 	}

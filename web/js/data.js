@@ -4,6 +4,7 @@
 
 const Data = {
     _cacheKey: 'vigil_data_cache',
+    _lastHash: null,
 
     // Restore cached state and render immediately so the dashboard is never empty.
     restoreCache() {
@@ -46,6 +47,16 @@ const Data = {
                 history, zfs, wearout, health, ts: Date.now()
             }));
         } catch (_) {}
+    },
+
+    _dataFingerprint(history, zfs, wearout, health) {
+        const parts = [
+            history ? history.map(s => s.hostname + ':' + (s.last_seen || s.timestamp)).join(',') : '',
+            zfs ? zfs.map(p => (p.name || p.pool_name) + ':' + (p.status || p.health)).join(',') : '',
+            wearout ? JSON.stringify(wearout).length : 0,
+            health ? health.score : ''
+        ];
+        return parts.join('|');
     },
 
     async fetch() {
@@ -121,13 +132,19 @@ const Data = {
             console.error('[Data] Unexpected fetch error:', error);
         }
 
-        // Always render — even on failure we show stale data rather than
-        // freezing the dashboard on "Waiting for agents to connect..."
+        // Skip DOM updates if data hasn't changed (prevents flicker)
+        const fingerprint = this._dataFingerprint(historyData, zfsData, wearoutData, healthData);
+        const dataChanged = fingerprint !== this._lastHash;
+        this._lastHash = fingerprint;
+
         this.setOnlineStatus(historyOk || State.data.length > 0);
         this.updateLastRefresh();
-        try { this.updateCurrentView(); } catch (e) { console.error('[Data] View error:', e); }
-        try { this.updateSidebar(); } catch (e) { console.error('[Data] Sidebar error:', e); }
-        try { this.updateStats(); } catch (e) { console.error('[Data] Stats error:', e); }
+
+        if (dataChanged) {
+            try { this.updateCurrentView(); } catch (e) { console.error('[Data] View error:', e); }
+            try { this.updateSidebar(); } catch (e) { console.error('[Data] Sidebar error:', e); }
+            try { this.updateStats(); } catch (e) { console.error('[Data] Stats error:', e); }
+        }
     },
 
     updateCurrentView() {

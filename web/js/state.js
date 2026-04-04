@@ -19,8 +19,8 @@ const State = {
     serverSortOrder: 'asc',
 
     API_URL: '/api/history',
-    REFRESH_INTERVAL: 5000,
-    OFFLINE_THRESHOLD_MINUTES: 5,
+    REFRESH_INTERVAL: 30000,
+    OFFLINE_THRESHOLD_MINUTES: 10,
 
     init() {
         const savedSort = localStorage.getItem('vigil_server_sort');
