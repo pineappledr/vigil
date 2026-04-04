@@ -645,7 +645,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         try {
             const resp = await fetch(`/api/addons/${id}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({ password })
             });
             if (resp.ok) {
