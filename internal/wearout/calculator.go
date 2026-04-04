@@ -2,10 +2,12 @@ package wearout
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
 	agentsmart "vigil/cmd/agent/smart"
+	"vigil/internal/events"
 )
 
 // strategies is the registry of available wearout strategies.
@@ -16,10 +18,17 @@ var strategies = map[string]WearoutStrategy{
 }
 
 // CalculateAndStore runs the wearout calculation for a drive and persists the result.
-func CalculateAndStore(db *sql.DB, driveData *agentsmart.DriveSmartData) (*WearoutResult, error) {
+// When bus is non-nil, threshold-crossing events are published.
+func CalculateAndStore(db *sql.DB, bus *events.Bus, driveData *agentsmart.DriveSmartData) (*WearoutResult, error) {
 	strategy, ok := strategies[driveData.DriveType]
 	if !ok {
 		return nil, nil // unsupported drive type — skip silently
+	}
+
+	// Capture previous percentage before storing the new one.
+	var prevPct float64
+	if prev, err := GetLatestSnapshot(db, driveData.Hostname, driveData.SerialNumber); err == nil && prev != nil {
+		prevPct = prev.Percentage
 	}
 
 	input := buildInput(db, driveData)
@@ -45,11 +54,17 @@ func CalculateAndStore(db *sql.DB, driveData *agentsmart.DriveSmartData) (*Wearo
 		log.Printf("Warning: failed to store wearout snapshot for %s: %v", driveData.SerialNumber, err)
 	}
 
+	// Publish wearout threshold events on crossing boundaries.
+	if bus != nil {
+		publishWearoutEvents(bus, driveData, prevPct, result.Percentage, result.Prediction)
+	}
+
 	return &result, nil
 }
 
 // ProcessWearoutFromReport calculates and stores wearout for all drives in a report.
-func ProcessWearoutFromReport(db *sql.DB, hostname string, reportData map[string]interface{}) {
+// When bus is non-nil, threshold-crossing events are published.
+func ProcessWearoutFromReport(db *sql.DB, bus *events.Bus, hostname string, reportData map[string]interface{}) {
 	drives, ok := reportData["drives"].([]interface{})
 	if !ok {
 		return
@@ -66,9 +81,56 @@ func ProcessWearoutFromReport(db *sql.DB, hostname string, reportData map[string
 			continue
 		}
 
-		if _, err := CalculateAndStore(db, driveData); err != nil {
+		if _, err := CalculateAndStore(db, bus, driveData); err != nil {
 			log.Printf("Warning: wearout calculation failed for %s: %v", driveData.SerialNumber, err)
 		}
+	}
+}
+
+// publishWearoutEvents fires events when wearout crosses 60% or 80%, or when
+// failure is predicted within 3 months. Events only fire on the transition
+// (prevPct < threshold <= newPct) so they are not repeated every report cycle.
+func publishWearoutEvents(bus *events.Bus, d *agentsmart.DriveSmartData, prevPct, newPct float64, pred *TrendPrediction) {
+	label := d.ModelName
+	if label == "" {
+		label = d.SerialNumber
+	}
+
+	// Critical: crossed 80%
+	if newPct >= 80 && prevPct < 80 {
+		bus.Publish(events.Event{
+			Type:         events.WearoutCritical,
+			Severity:     events.SeverityCritical,
+			Hostname:     d.Hostname,
+			SerialNumber: d.SerialNumber,
+			Message:      fmt.Sprintf("Drive %s (%s) wearout reached %.0f%% on %s", label, d.SerialNumber, newPct, d.Hostname),
+			Timestamp:    time.Now(),
+		})
+		return // don't also fire warning for the same crossing
+	}
+
+	// Warning: crossed 60%
+	if newPct >= 60 && prevPct < 60 {
+		bus.Publish(events.Event{
+			Type:         events.WearoutWarning,
+			Severity:     events.SeverityWarning,
+			Hostname:     d.Hostname,
+			SerialNumber: d.SerialNumber,
+			Message:      fmt.Sprintf("Drive %s (%s) wearout reached %.0f%% on %s", label, d.SerialNumber, newPct, d.Hostname),
+			Timestamp:    time.Now(),
+		})
+	}
+
+	// Predicted failure within 3 months (only if confidence is not low)
+	if pred != nil && pred.MonthsRemaining != nil && *pred.MonthsRemaining < 3 && pred.Confidence != "low" {
+		bus.Publish(events.Event{
+			Type:         events.WearoutPredicted,
+			Severity:     events.SeverityWarning,
+			Hostname:     d.Hostname,
+			SerialNumber: d.SerialNumber,
+			Message:      fmt.Sprintf("Drive %s (%s) on %s predicted to fail in %.1f months", label, d.SerialNumber, d.Hostname, *pred.MonthsRemaining),
+			Timestamp:    time.Now(),
+		})
 	}
 }
 

@@ -288,9 +288,9 @@ const NotificationSettings = {
                                             onchange="NotificationSettings._updateRuleEnabled(${idx}, this.checked)">
                                     </td>
                                     <td>
-                                        <input type="number" class="form-input form-input-sm" value="${rule.cooldown_secs || 0}"
-                                            min="0" step="60" onchange="NotificationSettings._updateRuleCooldown(${idx}, this.value)">
-                                        <span class="form-hint">sec</span>
+                                        <select class="form-input form-input-sm" onchange="NotificationSettings._updateRuleCooldown(${idx}, this.value)">
+                                            ${NotificationSettings._cooldownOptions(rule.cooldown_secs)}
+                                        </select>
                                     </td>
                                 </tr>`;
                             }).join('')}
@@ -385,8 +385,36 @@ const NotificationSettings = {
         if (this.eventRules[idx]) this.eventRules[idx].enabled = enabled;
     },
 
+    _cooldownPresets: [
+        { value: 0,        label: 'No cooldown' },
+        { value: 300,      label: '5 minutes' },
+        { value: 600,      label: '10 minutes' },
+        { value: 3600,     label: '1 hour' },
+        { value: 86400,    label: '24 hours' },
+        { value: 604800,   label: '7 days' },
+        { value: 2592000,  label: '30 days' },
+        { value: 15552000, label: '6 months' },
+        { value: -1,       label: "Don't remind" },
+    ],
+
+    _cooldownOptions(currentVal) {
+        const presets = this._cooldownPresets;
+        const known = presets.some(p => p.value === currentVal);
+        let opts = '';
+        // If the current value isn't in the presets, show it first so it's not lost
+        if (!known && currentVal != null) {
+            const label = currentVal > 0 ? `${currentVal}s (custom)` : `${currentVal} (custom)`;
+            opts += `<option value="${currentVal}" selected>${label}</option>`;
+        }
+        for (const p of presets) {
+            const sel = (known && p.value === currentVal) ? ' selected' : '';
+            opts += `<option value="${p.value}"${sel}>${p.label}</option>`;
+        }
+        return opts;
+    },
+
     _updateRuleCooldown(idx, value) {
-        if (this.eventRules[idx]) this.eventRules[idx].cooldown_secs = parseInt(value) || 0;
+        if (this.eventRules[idx]) this.eventRules[idx].cooldown_secs = parseInt(value);
     },
 
     async saveEventRules() {

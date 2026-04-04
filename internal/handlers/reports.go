@@ -47,7 +47,7 @@ func reportWorker() {
 				log.Printf("⚠️  Failed to update agent status by hostname %s: %v", w.hostname, err)
 			}
 
-			wearout.ProcessWearoutFromReport(db.DB, w.hostname, w.payload)
+			wearout.ProcessWearoutFromReport(db.DB, EventBus, w.hostname, w.payload)
 			smart.ProcessReportWithEvents(db.DB, EventBus, w.hostname, w.payload)
 
 			if _, ok := w.payload["zfs"].(map[string]interface{}); ok {

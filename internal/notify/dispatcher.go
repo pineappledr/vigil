@@ -167,15 +167,27 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed 
 			return false, true
 		}
 
-		// Cooldown check
-		if r.Cooldown > 0 {
-			key := fmt.Sprintf("%d:%s", serviceID, e.Type)
+		// Cooldown check.
+		// -1 = permanent (fire once, never again until server restart).
+		//  0 = no cooldown (fire every time).
+		// >0 = cooldown in seconds.
+		if r.Cooldown != 0 {
+			// Per-drive cooldown: include hostname + serial so each drive
+			// gets its own independent cooldown window.
+			key := fmt.Sprintf("%d:%s:%s:%s", serviceID, e.Type, e.Hostname, e.SerialNumber)
 			d.mu.Lock()
-			last, ok := d.cooldowns[key]
+			last, seen := d.cooldowns[key]
 			now := time.Now()
-			if ok && now.Sub(last) < time.Duration(r.Cooldown)*time.Second {
-				d.mu.Unlock()
-				return false, true
+			if seen {
+				if r.Cooldown < 0 {
+					// Permanent: already fired once — suppress forever.
+					d.mu.Unlock()
+					return false, true
+				}
+				if now.Sub(last) < time.Duration(r.Cooldown)*time.Second {
+					d.mu.Unlock()
+					return false, true
+				}
 			}
 			d.cooldowns[key] = now
 			d.mu.Unlock()
