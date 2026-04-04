@@ -175,12 +175,17 @@ const Utils = {
         if (!parent || !newHTMLs) return;
         if (newHTMLs.length !== keys.length) return;
 
-        // Build map of existing children by key
+        // Build map of existing children by key; collect unkeyed children
         const existingByKey = new Map();
+        const unkeyed = [];
         for (const child of parent.children) {
             const key = child.getAttribute('data-key');
             if (key) existingByKey.set(key, child);
+            else unkeyed.push(child);
         }
+
+        // Remove unkeyed children (e.g. leftover from a different view)
+        for (const child of unkeyed) child.remove();
 
         // Track which keys are in the new set
         const newKeySet = new Set(keys);
