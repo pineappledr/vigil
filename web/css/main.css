@@ -844,6 +844,42 @@
     background: var(--danger);
 }
 
+/* Table alias button */
+.drive-table-actions {
+    width: 32px;
+    text-align: center;
+}
+
+.alias-btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.alias-btn-sm svg {
+    width: 14px;
+    height: 14px;
+}
+
+.drive-table-row:hover .alias-btn-sm {
+    opacity: 1;
+}
+
+.alias-btn-sm:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
 /* Card type breakdown label */
 .card-type-breakdown {
     font-size: 11px;

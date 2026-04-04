@@ -275,6 +275,7 @@ const Renderer = {
                                 <th>Temp</th>
                                 <th>Age</th>
                                 <th>SMART</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -365,6 +366,7 @@ const Renderer = {
                                     <th>Age</th>
                                     <th>Wearout</th>
                                     <th>SMART</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -408,6 +410,11 @@ const Renderer = {
                 <td>${Utils.formatAge(drive.power_on_time?.hours)}</td>
                 <td class="drive-table-wearout">${wearoutPct !== null ? this._wearoutBar(wearoutPct) : '--'}</td>
                 <td><span class="smart-badge ${smartPassed ? 'passed' : 'failed'}">${smartPassed ? 'OK' : 'FAIL'}</span></td>
+                <td class="drive-table-actions">
+                    <button class="alias-btn-sm" onclick="event.stopPropagation(); Modals.showAlias('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(serial)}', '${Utils.escapeJSString(alias)}', '${Utils.escapeJSString(driveName)}')" title="Set alias">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                </td>
             </tr>
         `;
     },
