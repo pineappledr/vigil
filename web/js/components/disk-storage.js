@@ -274,7 +274,7 @@ const DiskStorageComponent = {
         try {
             const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent('/api/config')}&method=POST`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(body)
             });
             if (!resp.ok) {

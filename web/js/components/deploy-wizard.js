@@ -557,7 +557,7 @@ services:
         try {
             const resp = await fetch(`/api/addons/${wiz.addonId}/action`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify({
                     action: action,
                     data: { confirm: 'ROTATE' }
