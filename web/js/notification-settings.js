@@ -98,7 +98,7 @@ const NotificationSettings = {
             ${this.services.map(s => `
                 <div class="notif-service-item ${s.id === this.activeServiceId ? 'active' : ''} ${s.enabled ? '' : 'disabled'}"
                      onclick="NotificationSettings.selectService(${s.id})">
-                    <div class="notif-service-name">${this._escape(s.name)}</div>
+                    <div class="notif-service-name">${Utils.escapeHtml(s.name)}</div>
                     <div class="notif-service-type">${this._providerLabel(s.service_type)}</div>
                     <span class="notif-service-badge ${s.enabled ? 'enabled' : 'disabled'}">
                         ${s.enabled ? 'Active' : 'Disabled'}
@@ -154,7 +154,7 @@ const NotificationSettings = {
         return `
             <div class="notif-detail">
                 <div class="notif-detail-header">
-                    <h3>${this._escape(s.name)}</h3>
+                    <h3>${Utils.escapeHtml(s.name)}</h3>
                     <div class="notif-detail-actions">
                         <button class="btn btn-secondary" onclick="NotificationSettings.editProviderConfig(${s.id})">
                             ${this._icons.edit} Edit Config
@@ -257,11 +257,11 @@ const NotificationSettings = {
             ${sortedCategories.map(cat => `
                 <div class="notif-rules-category">
                     <div class="notif-rules-category-header">
-                        <h5>${this._escape(cat)}</h5>
+                        <h5>${Utils.escapeHtml(cat)}</h5>
                         <label class="addon-checkbox notif-category-toggle">
                             <input type="checkbox"
                                 ${groups[cat].every(g => g.rule.enabled) ? 'checked' : ''}
-                                onchange="NotificationSettings._toggleCategory('${this._escape(cat)}', this.checked)">
+                                onchange="NotificationSettings._toggleCategory('${Utils.escapeHtml(cat)}', this.checked)">
                             All
                         </label>
                     </div>
@@ -281,10 +281,10 @@ const NotificationSettings = {
                                 const sevClass = sev ? `notif-severity-${sev}` : '';
                                 return `
                                 <tr>
-                                    <td>${this._escape(label)}</td>
+                                    <td>${Utils.escapeHtml(label)}</td>
                                     <td><span class="notif-severity-badge ${sevClass}">${sev || '--'}</span></td>
                                     <td>
-                                        <input type="checkbox" data-rule-category="${this._escape(cat)}" ${rule.enabled ? 'checked' : ''}
+                                        <input type="checkbox" data-rule-category="${Utils.escapeHtml(cat)}" ${rule.enabled ? 'checked' : ''}
                                             onchange="NotificationSettings._updateRuleEnabled(${idx}, this.checked)">
                                     </td>
                                     <td>
@@ -505,7 +505,7 @@ const NotificationSettings = {
                                 onchange="NotificationSettings._onProviderChange()">
                             ${types.map(t => {
                                 const def = this.providerDefs[t];
-                                return `<option value="${t}">${this._escape(def.label)}</option>`;
+                                return `<option value="${t}">${Utils.escapeHtml(def.label)}</option>`;
                             }).join('')}
                         </select>
                     </div>
@@ -571,8 +571,8 @@ const NotificationSettings = {
                     input = `
                         <div class="form-input-password-wrap">
                             <input type="password" id="${id}" class="form-input"
-                                   placeholder="${this._escape(f.placeholder || '')}"
-                                   value="${this._escape(prefillVal)}"
+                                   placeholder="${Utils.escapeHtml(f.placeholder || '')}"
+                                   value="${Utils.escapeHtml(prefillVal)}"
                                    data-field-key="${f.key}" ${f.required ? 'required' : ''}>
                             <button type="button" class="btn-eye-toggle"
                                     onclick="NotificationSettings._togglePasswordVisibility('${id}')" title="Toggle visibility">
@@ -586,8 +586,8 @@ const NotificationSettings = {
                             const selected = prefillVal
                                 ? o.value === prefillVal
                                 : o.value === (f.default || '');
-                            return `<option value="${this._escape(o.value)}" ${selected ? 'selected' : ''}>
-                                ${this._escape(o.label)}
+                            return `<option value="${Utils.escapeHtml(o.value)}" ${selected ? 'selected' : ''}>
+                                ${Utils.escapeHtml(o.label)}
                             </option>`;
                         }).join('')}
                     </select>`;
@@ -596,28 +596,28 @@ const NotificationSettings = {
                     input = `<label class="addon-checkbox">
                         <input type="checkbox" id="${id}" data-field-key="${f.key}"
                                ${prefillVal === 'true' ? 'checked' : ''}>
-                        ${this._escape(f.label)}
+                        ${Utils.escapeHtml(f.label)}
                     </label>`;
                     break;
                 case 'number':
                     input = `<input type="number" id="${id}" class="form-input"
-                               placeholder="${this._escape(f.placeholder || '')}"
-                               value="${this._escape(prefillVal || f.default || '')}"
+                               placeholder="${Utils.escapeHtml(f.placeholder || '')}"
+                               value="${Utils.escapeHtml(prefillVal || f.default || '')}"
                                data-field-key="${f.key}" ${f.required ? 'required' : ''}>`;
                     break;
                 default:
                     input = `<input type="text" id="${id}" class="form-input"
-                               placeholder="${this._escape(f.placeholder || '')}"
-                               value="${this._escape(prefillVal)}"
+                               placeholder="${Utils.escapeHtml(f.placeholder || '')}"
+                               value="${Utils.escapeHtml(prefillVal)}"
                                data-field-key="${f.key}" ${f.required ? 'required' : ''}>`;
             }
 
             const labelHtml = f.type === 'checkbox' ? '' :
-                `<label>${this._escape(f.label)}${req}</label>`;
+                `<label>${Utils.escapeHtml(f.label)}${req}</label>`;
             const docsLink = f.docs_url ?
-                ` <a href="${this._escape(f.docs_url)}" target="_blank" rel="noopener noreferrer">Shoutrrr Services</a>` : '';
+                ` <a href="${Utils.escapeHtml(f.docs_url)}" target="_blank" rel="noopener noreferrer">Shoutrrr Services</a>` : '';
             const helpHtml = f.help_text ?
-                `<span class="form-hint">${this._escape(f.help_text)}${docsLink}</span>` : '';
+                `<span class="form-hint">${Utils.escapeHtml(f.help_text)}${docsLink}</span>` : '';
 
             return `<div class="form-group">${labelHtml}${input}${helpHtml}</div>`;
         }).join('');
@@ -754,13 +754,13 @@ const NotificationSettings = {
                         <select id="prov-type" class="form-input" disabled>
                             ${types.map(t => {
                                 const def = this.providerDefs[t];
-                                return `<option value="${t}" ${t === s.service_type ? 'selected' : ''}>${this._escape(def.label)}</option>`;
+                                return `<option value="${t}" ${t === s.service_type ? 'selected' : ''}>${Utils.escapeHtml(def.label)}</option>`;
                             }).join('')}
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Friendly Name</label>
-                        <input type="text" id="prov-name" class="form-input" value="${this._escape(s.name)}">
+                        <input type="text" id="prov-name" class="form-input" value="${Utils.escapeHtml(s.name)}">
                     </div>
                     <div id="prov-fields-container"></div>
 
@@ -859,14 +859,14 @@ const NotificationSettings = {
                     ${records.map(r => `
                         <tr class="notif-history-${r.status}">
                             <td class="notif-time">${this._formatTime(r.created_at)}</td>
-                            <td>${this._escape(r.event_type)}</td>
-                            <td>${this._escape(r.hostname || '--')}</td>
-                            <td class="notif-msg">${this._escape(r.message)}</td>
+                            <td>${Utils.escapeHtml(r.event_type)}</td>
+                            <td>${Utils.escapeHtml(r.hostname || '--')}</td>
+                            <td class="notif-msg">${Utils.escapeHtml(r.message)}</td>
                             <td>
                                 <span class="notif-status-badge ${r.status}">
-                                    ${r.status === 'sent' ? 'Sent' : r.status === 'failed' ? 'Failed' : this._escape(r.status)}
+                                    ${r.status === 'sent' ? 'Sent' : r.status === 'failed' ? 'Failed' : Utils.escapeHtml(r.status)}
                                 </span>
-                                ${r.error_message ? `<span class="notif-error-hint" title="${this._escape(r.error_message)}">!</span>` : ''}
+                                ${r.error_message ? `<span class="notif-error-hint" title="${Utils.escapeHtml(r.error_message)}">!</span>` : ''}
                             </td>
                         </tr>
                     `).join('')}
@@ -878,8 +878,8 @@ const NotificationSettings = {
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     _providerLabel(type) {
-        if (this.providerDefs?.[type]) return this._escape(this.providerDefs[type].label);
-        return this._escape(type);
+        if (this.providerDefs?.[type]) return Utils.escapeHtml(this.providerDefs[type].label);
+        return Utils.escapeHtml(type);
     },
 
     _showStatus(msg, isError) {
@@ -897,13 +897,6 @@ const NotificationSettings = {
         const opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
         if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
         return d.toLocaleString('en-US', opts);
-    },
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
     },
 
     _icons: {

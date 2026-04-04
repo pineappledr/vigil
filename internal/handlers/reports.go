@@ -154,7 +154,10 @@ func History(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var dataMap map[string]interface{}
-		json.Unmarshal(dataRaw, &dataMap)
+		if err := json.Unmarshal(dataRaw, &dataMap); err != nil {
+			log.Printf("reports: unmarshal history data for %s: %v", host, err)
+			continue
+		}
 		enrichDrivesWithAliases(dataMap, host, aliases)
 
 		history = append(history, map[string]interface{}{
@@ -253,7 +256,10 @@ func HostHistory(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var dataMap map[string]interface{}
-		json.Unmarshal(dataRaw, &dataMap)
+		if err := json.Unmarshal(dataRaw, &dataMap); err != nil {
+			log.Printf("reports: unmarshal host history data: %v", err)
+			continue
+		}
 
 		history = append(history, map[string]interface{}{
 			"timestamp": ts,
@@ -268,7 +274,11 @@ func HostHistory(w http.ResponseWriter, r *http.Request) {
 
 func loadAliases() map[string]string {
 	aliases := make(map[string]string)
-	rows, _ := db.DB.Query("SELECT hostname, serial_number, alias FROM drive_aliases")
+	rows, err := db.DB.Query("SELECT hostname, serial_number, alias FROM drive_aliases")
+	if err != nil {
+		log.Printf("reports: load aliases: %v", err)
+		return aliases
+	}
 	if rows == nil {
 		return aliases
 	}

@@ -355,7 +355,7 @@ const DiskStorageComponent = {
                 <div class="disk-storage-card-header">
                     <div class="disk-storage-card-name" id="ds-name-${this._escapeAttr(compId)}-${this._escapeAttr(name)}">
                         <div class="disk-storage-name-row">
-                            <span class="disk-storage-disk-name">${this._escape(displayName)}</span>
+                            <span class="disk-storage-disk-name">${Utils.escapeHtml(displayName)}</span>
                             <button class="ds-edit-alias-btn" title="Edit alias"
                                     onclick="DiskStorageComponent._startEditAlias('${this._escapeJS(compId)}','${this._escapeJS(name)}')">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
@@ -364,7 +364,7 @@ const DiskStorageComponent = {
                                 </svg>
                             </button>
                         </div>
-                        ${subtitle ? `<span class="disk-storage-disk-id">${this._escape(subtitle)}</span>` : ''}
+                        ${subtitle ? `<span class="disk-storage-disk-id">${Utils.escapeHtml(subtitle)}</span>` : ''}
                     </div>
                     <span class="disk-storage-card-pct ${colorClass}">${pct.toFixed(1)}%</span>
                 </div>
@@ -386,11 +386,11 @@ const DiskStorageComponent = {
                     </span>
                     ${disk.mount_path ? `<span class="disk-storage-detail disk-storage-detail-mount">
                         <span class="disk-storage-detail-label">Mount</span>
-                        <span class="disk-storage-detail-value disk-storage-mount-path">${this._escape(disk.mount_path)}</span>
+                        <span class="disk-storage-detail-value disk-storage-mount-path">${Utils.escapeHtml(disk.mount_path)}</span>
                     </span>` : ''}
                     ${disk.filesystem ? `<span class="disk-storage-detail">
                         <span class="disk-storage-detail-label">FS</span>
-                        <span class="disk-storage-detail-value">${this._escape(disk.filesystem)}</span>
+                        <span class="disk-storage-detail-value">${Utils.escapeHtml(disk.filesystem)}</span>
                     </span>` : ''}
                 </div>
             </div>
@@ -400,7 +400,7 @@ const DiskStorageComponent = {
     _showError(compId, message) {
         const grid = document.getElementById(`disk-storage-grid-${compId}`);
         if (!grid) return;
-        grid.innerHTML = `<div class="disk-storage-loading disk-storage-error">${this._escape(message)}</div>`;
+        grid.innerHTML = `<div class="disk-storage-loading disk-storage-error">${Utils.escapeHtml(message)}</div>`;
     },
 
     // ─── Helpers ──────────────────────────────────────────────────────────
@@ -418,15 +418,8 @@ const DiskStorageComponent = {
         return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
     },
 
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
-    },
-
     _escapeAttr(str) {
-        return this._escape(str);
+        return Utils.escapeHtml(str);
     },
 
     _escapeJS(str) {

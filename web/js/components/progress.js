@@ -306,7 +306,7 @@ const ProgressComponent = {
         const isIndeterminate = job.indeterminate && !done;
 
         const cancelBtn = !done && this._addonId
-            ? `<button class="btn-cancel-job" onclick="ProgressComponent.cancelJob('${this._escape(jobId)}')" title="Cancel job">
+            ? `<button class="btn-cancel-job" onclick="ProgressComponent.cancelJob('${Utils.escapeHtml(jobId)}')" title="Cancel job">
                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                    Cancel
                </button>`
@@ -324,7 +324,7 @@ const ProgressComponent = {
 
         card.innerHTML = `
             <div class="progress-job-header">
-                <span class="progress-job-id">${this._escape(jobId)}</span>
+                <span class="progress-job-id">${Utils.escapeHtml(jobId)}</span>
                 <div class="progress-job-header-actions">
                     ${cancelBtn}
                     <span class="progress-job-status ${done ? 'complete' : 'running'}">
@@ -338,10 +338,10 @@ const ProgressComponent = {
                 </div>
                 <span class="progress-percent">${pctDisplay}</span>
             </div>
-            ${current.message ? `<div class="progress-message">${this._escape(current.message)}</div>` : ''}
+            ${current.message ? `<div class="progress-message">${Utils.escapeHtml(current.message)}</div>` : ''}
             <div class="progress-meta">
                 ${this._speedDisplay(current, job)}
-                ${etaStr ? `<span class="progress-eta">ETA: ${this._escape(etaStr)}</span>` : ''}
+                ${etaStr ? `<span class="progress-eta">ETA: ${Utils.escapeHtml(etaStr)}</span>` : ''}
                 ${job.tempC > 0 ? `<span class="progress-temp">${job.tempC}°C</span>` : ''}
                 <span class="progress-elapsed">${elapsedStr}</span>
             </div>
@@ -417,7 +417,7 @@ const ProgressComponent = {
 
         return `<div class="progress-phase ${status}">
                     <span class="progress-phase-dot"></span>
-                    <span class="progress-phase-name">${this._escape(name)}</span>
+                    <span class="progress-phase-name">${Utils.escapeHtml(name)}</span>
                     <span class="progress-phase-pct">${pctLabel}</span>
                 </div>`;
     },
@@ -467,10 +467,4 @@ const ProgressComponent = {
         return String(str).replace(/[^a-zA-Z0-9_-]/g, '_');
     },
 
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
-    }
 };

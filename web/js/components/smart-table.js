@@ -56,11 +56,11 @@ const SmartTableComponent = {
                     const arrow = sortState && sortState.key === c.key
                         ? (sortState.dir === 'asc' ? ' &#9650;' : ' &#9660;')
                         : '';
-                    return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${this._escape(c.label || c.key)}${arrow}</th>`;
+                    return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${Utils.escapeHtml(c.label || c.key)}${arrow}</th>`;
                 }
-                return `<th>${this._escape(c.label || c.key)}</th>`;
+                return `<th>${Utils.escapeHtml(c.label || c.key)}</th>`;
             }).join('')
-            : columns.map(c => `<th>${this._escape(c)}</th>`).join('');
+            : columns.map(c => `<th>${Utils.escapeHtml(c)}</th>`).join('');
 
         const colCount = columns.length;
 
@@ -132,7 +132,7 @@ const SmartTableComponent = {
         return `<select class="smart-time-filter" id="smart-time-filter-${compId}"
                         onchange="SmartTableComponent._onTimeFilterChange('${this._escapeJS(compId)}')">
                     ${options.map(opt =>
-                        `<option value="${this._escape(opt.value)}"${opt.value === defaultVal ? ' selected' : ''}>${this._escape(opt.label)}</option>`
+                        `<option value="${Utils.escapeHtml(opt.value)}"${opt.value === defaultVal ? ' selected' : ''}>${Utils.escapeHtml(opt.label)}</option>`
                     ).join('')}
                 </select>`;
     },
@@ -329,7 +329,7 @@ const SmartTableComponent = {
     _showTableError(compId, entry, message) {
         const tbody = document.getElementById(`smart-tbody-${compId}`);
         if (!tbody) return;
-        tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty smart-table-error">${this._escape(message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty smart-table-error">${Utils.escapeHtml(message)}</td></tr>`;
     },
 
     // ─── Telemetry Updates ───────────────────────────────────────────────
@@ -440,7 +440,7 @@ const SmartTableComponent = {
             case 'bytes':
                 return this._formatBytes(val);
             case 'percent':
-                return typeof val === 'number' ? val.toFixed(1) + '%' : this._escape(String(val));
+                return typeof val === 'number' ? val.toFixed(1) + '%' : Utils.escapeHtml(String(val));
             case 'duration':
                 return this._formatDuration(val);
             case 'datetime':
@@ -448,8 +448,8 @@ const SmartTableComponent = {
             case 'relative_time':
                 return this._formatRelativeTime(val);
             default:
-                if (Array.isArray(val)) return this._escape(val.join(', '));
-                return this._escape(String(val));
+                if (Array.isArray(val)) return Utils.escapeHtml(val.join(', '));
+                return Utils.escapeHtml(String(val));
         }
     },
 
@@ -476,7 +476,7 @@ const SmartTableComponent = {
             if (action.type === 'delete') {
                 const idKey = action.id_key || 'id';
                 const idVal = row[idKey] || '';
-                return `<button class="btn-table-action btn-table-delete" title="${this._escape(action.label || 'Delete')}"
+                return `<button class="btn-table-action btn-table-delete" title="${Utils.escapeHtml(action.label || 'Delete')}"
                             onclick="SmartTableComponent._handleAction('delete','${this._escapeJS(idVal)}',this)">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                 <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -534,9 +534,9 @@ const SmartTableComponent = {
                     const arrow = entry.sort && entry.sort.key === c.key
                         ? (entry.sort.dir === 'asc' ? ' &#9650;' : ' &#9660;')
                         : '';
-                    return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${this._escape(c.label || c.key)}${arrow}</th>`;
+                    return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${Utils.escapeHtml(c.label || c.key)}${arrow}</th>`;
                 }
-                return `<th>${this._escape(c.label || c.key)}</th>`;
+                return `<th>${Utils.escapeHtml(c.label || c.key)}</th>`;
             }).join('');
         }
 
@@ -625,7 +625,7 @@ const SmartTableComponent = {
 
             return `<tr class="${this._rowClass(attr)}">
                 <td class="smart-col-id">${attr.id ?? ''}</td>
-                <td class="smart-col-name">${this._escape(attr.name || attr.attribute || '')}</td>
+                <td class="smart-col-name">${Utils.escapeHtml(attr.name || attr.attribute || '')}</td>
                 <td class="smart-col-value">${attr.value ?? ''}</td>
                 <td class="smart-col-worst">${attr.worst ?? ''}</td>
                 <td class="smart-col-thresh">${attr.threshold ?? attr.thresh ?? ''}</td>
@@ -659,13 +659,6 @@ const SmartTableComponent = {
         if (delta === 0) return '';
         if (threshold > 0 && Math.abs(delta) >= threshold) return 'smart-delta-high';
         return delta > 0 ? 'smart-delta-up' : 'smart-delta-down';
-    },
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
     },
 
     _escapeJS(str) {

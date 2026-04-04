@@ -102,14 +102,7 @@ const State = {
     getTimeSinceUpdate(server) {
         const ts = server?.last_seen || server?.timestamp;
         if (!ts) return 'Unknown';
-        const date = Utils.parseUTC(ts);
-        if (!date || isNaN(date)) return 'Unknown';
-        const mins = Math.floor((Date.now() - date) / 60000);
-        if (mins < 1) return 'Just now';
-        if (mins < 60) return `${mins}m ago`;
-        const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}h ago`;
-        return `${Math.floor(hrs / 24)}d ago`;
+        return Utils.timeAgo(ts);
     },
 
     getStats() {

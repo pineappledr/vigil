@@ -64,7 +64,7 @@ const Agents = {
     _agentCard(agent) {
         // Use the most recent activity timestamp (report or auth)
         const lastActivity = this._mostRecent(agent.last_seen_at, agent.last_auth_at);
-        const lastSeen = lastActivity ? this._timeAgo(lastActivity) : null;
+        const lastSeen = lastActivity ? Utils.timeAgo(lastActivity) : null;
         const lastDate = lastActivity ? Utils.parseUTC(lastActivity) : null;
         const isOnline = lastDate && (Date.now() - lastDate.getTime()) < 5 * 60 * 1000;
         const statusClass = isOnline ? 'online' : 'not-reporting';
@@ -78,7 +78,7 @@ const Agents = {
         if (lastSeen) {
             timeText = 'Last seen ' + lastSeen;
         } else if (agent.registered_at) {
-            timeText = 'Registered ' + this._timeAgo(agent.registered_at);
+            timeText = 'Registered ' + Utils.timeAgo(agent.registered_at);
         } else {
             timeText = 'Never connected';
         }
@@ -103,9 +103,9 @@ const Agents = {
                             </svg>
                         </div>
                         <div class="agent-info">
-                            <h4>${this._escape(displayName)}</h4>
+                            <h4>${Utils.escapeHtml(displayName)}</h4>
                             <div class="agent-info-meta">
-                                ${showHostname ? `<span>${this._escape(agent.hostname)}</span><span class="dot"></span>` : ''}
+                                ${showHostname ? `<span>${Utils.escapeHtml(agent.hostname)}</span><span class="dot"></span>` : ''}
                                 <span>${fp}</span>
                                 <span class="dot"></span>
                                 <span>${timeText}</span>
@@ -117,7 +117,7 @@ const Agents = {
                             <span class="agent-status ${statusClass}">${statusLabel}</span>
                             ${statusHint ? `<span class="agent-status-tooltip">${statusHint}</span>` : ''}
                         </span>
-                        <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${this._escape(agent.hostname)}')" title="Remove agent">
+                        <button class="btn-agent-delete" onclick="Agents.deleteAgent(${agent.id}, '${Utils.escapeHtml(agent.hostname)}')" title="Remove agent">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3 6 5 6 21 6"/>
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -147,7 +147,7 @@ const Agents = {
                 <span class="token-value">${truncated}</span>
                 <div class="token-meta">
                     <span class="token-badge ${badgeClass}">${badgeLabel}</span>
-                    <span>${this._timeAgo(token.created_at)}</span>
+                    <span>${Utils.timeAgo(token.created_at)}</span>
                     <button class="btn-agent-delete" onclick="Agents.deleteToken(${token.id})" title="Delete token">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -173,21 +173,23 @@ const Agents = {
     },
 
     async deleteAgent(id, hostname) {
-        if (!confirm(`Remove agent "${hostname}"? It will need to re-register.`)) return;
+        if (!await Utils.confirm(`Remove agent "${hostname}"? It will need to re-register.`)) return;
         try {
             await API.deleteAgent(id);
+            Utils.toast(`Agent "${hostname}" removed`, 'info');
             this.render();
         } catch (e) {
-            console.error('Failed to delete agent:', e);
+            Utils.toast('Failed to delete agent', 'error');
         }
     },
 
     async deleteToken(id) {
+        if (!await Utils.confirm('Delete this registration token?')) return;
         try {
             await API.deleteRegistrationToken(id);
             this.render();
         } catch (e) {
-            console.error('Failed to delete token:', e);
+            Utils.toast('Failed to delete token', 'error');
         }
     },
 
@@ -204,26 +206,4 @@ const Agents = {
         return best ? best.toISOString() : null;
     },
 
-    _timeAgo(dateStr) {
-        if (!dateStr) return 'never';
-        const date = Utils.parseUTC(dateStr);
-        if (!date || isNaN(date)) return 'never';
-        // Guard against Go zero-time
-        if (date.getFullYear() < 2000) return 'never';
-        const diff = Date.now() - date.getTime();
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) return 'just now';
-        if (mins < 60) return `${mins}m ago`;
-        const hours = Math.floor(mins / 60);
-        if (hours < 24) return `${hours}h ago`;
-        const days = Math.floor(hours / 24);
-        return `${days}d ago`;
-    },
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    }
 };

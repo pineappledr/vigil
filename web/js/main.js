@@ -2,6 +2,15 @@
  * Vigil Dashboard - Application Initialization
  */
 
+window.onerror = (msg) => {
+    console.error('[Global]', msg);
+    if (typeof Utils !== 'undefined') Utils.toast(String(msg), 'error');
+};
+window.onunhandledrejection = (e) => {
+    console.error('[Global] Unhandled rejection:', e.reason);
+    if (typeof Utils !== 'undefined') Utils.toast('Unexpected error: ' + (e.reason?.message || e.reason), 'error');
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize state first
     if (typeof State !== 'undefined' && State.init) {

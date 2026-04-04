@@ -28,7 +28,7 @@ const ConfigCardComponent = {
         }
 
         return `
-            <div class="config-card-container" id="config-card-${this._escape(compId)}">
+            <div class="config-card-container" id="config-card-${Utils.escapeHtml(compId)}">
                 <div class="config-card-toolbar">
                     <button class="config-card-edit-btn" title="Edit configuration"
                             onclick="ConfigCardComponent._onEdit('${this._escapeJS(compId)}')">
@@ -38,7 +38,7 @@ const ConfigCardComponent = {
                         </svg>
                     </button>
                 </div>
-                <div class="config-card-grid" id="config-card-grid-${this._escape(compId)}">
+                <div class="config-card-grid" id="config-card-grid-${Utils.escapeHtml(compId)}">
                     <span class="config-card-loading">Loading configuration...</span>
                 </div>
             </div>
@@ -91,8 +91,8 @@ const ConfigCardComponent = {
             const display = this._formatValue(key, raw);
             return `
                 <div class="config-card-item">
-                    <span class="config-card-label">${this._escape(label)}</span>
-                    <span class="config-card-value">${this._escape(display)}</span>
+                    <span class="config-card-label">${Utils.escapeHtml(label)}</span>
+                    <span class="config-card-value">${Utils.escapeHtml(display)}</span>
                 </div>
             `;
         }).join('');
@@ -108,7 +108,7 @@ const ConfigCardComponent = {
     _showError(compId, message) {
         const grid = document.getElementById(`config-card-grid-${compId}`);
         if (!grid) return;
-        grid.innerHTML = `<span class="config-card-loading config-card-error">${this._escape(message)}</span>`;
+        grid.innerHTML = `<span class="config-card-loading config-card-error">${Utils.escapeHtml(message)}</span>`;
     },
 
     _onEdit(compId) {
@@ -121,13 +121,6 @@ const ConfigCardComponent = {
 
     refresh(compId) {
         this._fetchConfig(compId);
-    },
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
     },
 
     _escapeJS(str) {

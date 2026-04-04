@@ -64,8 +64,8 @@ const ManifestRenderer = {
                         Add-ons
                     </button>
                     <div class="manifest-title-row">
-                        <h2>${this._escape(a.name)}</h2>
-                        <span class="manifest-version">v${this._escape(m.version)}</span>
+                        <h2>${Utils.escapeHtml(a.name)}</h2>
+                        <span class="manifest-version">v${Utils.escapeHtml(m.version)}</span>
                         <span class="addon-status-badge addon-${a.status}">${this._capitalize(a.status)}</span>
                         <span class="addon-update-badge" id="addon-update-badge" style="display:none;">
                             Update available
@@ -80,7 +80,7 @@ const ManifestRenderer = {
                             Check for updates
                         </button>
                     </div>
-                    ${m.description ? `<p class="manifest-desc">${this._escape(m.description)}</p>` : ''}
+                    ${m.description ? `<p class="manifest-desc">${Utils.escapeHtml(m.description)}</p>` : ''}
                 </div>
                 ${tabs ? `<div class="manifest-tabs">${tabs}</div>` : ''}
                 <div class="manifest-page" id="manifest-page-container"></div>
@@ -90,9 +90,9 @@ const ManifestRenderer = {
 
     _tabButton(page) {
         const active = page.id === this.activePage ? 'active' : '';
-        return `<button class="manifest-tab ${active}" data-page="${this._escape(page.id)}"
+        return `<button class="manifest-tab ${active}" data-page="${Utils.escapeHtml(page.id)}"
                     onclick="ManifestRenderer.switchPage('${this._escapeJS(page.id)}')">
-                    ${this._escape(page.title)}
+                    ${Utils.escapeHtml(page.title)}
                 </button>`;
     },
 
@@ -116,11 +116,11 @@ const ManifestRenderer = {
         const refreshToolbar = this._buildRefreshToolbar(page);
 
         container.innerHTML = refreshToolbar + page.components.map(comp => {
-            const title = comp.title ? `<h3 class="component-title">${this._escape(comp.title)}</h3>` : '';
+            const title = comp.title ? `<h3 class="component-title">${Utils.escapeHtml(comp.title)}</h3>` : '';
             return `
-                <div class="manifest-component" id="mc-${this._escape(comp.id)}" data-type="${comp.type}" data-source="${comp.source || ''}">
+                <div class="manifest-component" id="mc-${Utils.escapeHtml(comp.id)}" data-type="${comp.type}" data-source="${comp.source || ''}">
                     ${title}
-                    <div class="component-body" id="mc-body-${this._escape(comp.id)}">
+                    <div class="component-body" id="mc-body-${Utils.escapeHtml(comp.id)}">
                         ${this._renderComponent(comp)}
                     </div>
                 </div>
@@ -177,7 +177,7 @@ const ManifestRenderer = {
                     : '<p class="component-unavailable">Config Card component not loaded</p>';
 
             default:
-                return `<p class="component-unavailable">Unknown component type: ${this._escape(comp.type)}</p>`;
+                return `<p class="component-unavailable">Unknown component type: ${Utils.escapeHtml(comp.type)}</p>`;
         }
     },
 
@@ -200,7 +200,7 @@ const ManifestRenderer = {
             ? `<select class="manifest-refresh-auto" id="manifest-auto-refresh"
                        onchange="ManifestRenderer._onAutoRefreshChange(this.value)">
                    <option value="0">Auto-refresh: Off</option>
-                   ${autoOptions.map(o => `<option value="${o.value}">${this._escape(o.label)}</option>`).join('')}
+                   ${autoOptions.map(o => `<option value="${o.value}">${Utils.escapeHtml(o.label)}</option>`).join('')}
                </select>`
             : '';
 
@@ -551,13 +551,6 @@ const ManifestRenderer = {
     },
 
     // ─── Helpers ──────────────────────────────────────────────────────────
-
-    _escape(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    },
 
     _escapeJS(str) {
         if (!str) return '';

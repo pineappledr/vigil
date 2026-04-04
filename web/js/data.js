@@ -54,7 +54,7 @@ const Data = {
 
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthResponse] = await Promise.all([
-                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); return null; }),
+                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); return null; }),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
                 API.get('/api/health/score').catch(() => null)

@@ -110,5 +110,64 @@ const Utils = {
             .replace(/"/g, '\\"')
             .replace(/\n/g, '\\n')
             .replace(/\r/g, '\\r');
+    },
+
+    // ── Time-ago formatting ─────────────────────────────────────────────
+    timeAgo(dateStr) {
+        if (!dateStr) return 'never';
+        const date = this.parseUTC(dateStr);
+        if (!date || isNaN(date)) return 'never';
+        if (date.getFullYear() < 2000) return 'never';
+        const mins = Math.floor((Date.now() - date.getTime()) / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `${hours}h ago`;
+        return `${Math.floor(hours / 24)}d ago`;
+    },
+
+    // ── Toast notifications ─────────────────────────────────────────────
+    toast(message, type = 'info') {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('toast-visible'));
+        setTimeout(() => {
+            toast.classList.remove('toast-visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    },
+
+    // ── Confirmation dialog ─────────────────────────────────────────────
+    confirm(message) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-dialog">
+                    <p>${this.escapeHtml(message)}</p>
+                    <div class="confirm-actions">
+                        <button class="btn btn-secondary confirm-cancel">Cancel</button>
+                        <button class="btn btn-danger confirm-ok">Confirm</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => overlay.classList.add('confirm-visible'));
+            const close = (result) => {
+                overlay.classList.remove('confirm-visible');
+                setTimeout(() => overlay.remove(), 200);
+                resolve(result);
+            };
+            overlay.querySelector('.confirm-cancel').onclick = () => close(false);
+            overlay.querySelector('.confirm-ok').onclick = () => close(true);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+        });
     }
 };
