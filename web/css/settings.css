@@ -116,6 +116,57 @@
 }
 .backup-actions a.btn { text-decoration: none; }
 
+/* Backup list table */
+.backup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+.backup-table thead th {
+    text-align: left;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #94a3b8);
+    border-bottom: 1px solid var(--border-color, #334155);
+}
+.backup-table thead th:last-child { text-align: right; }
+.backup-table tbody tr { border-bottom: 1px solid var(--border-color, #334155); }
+.backup-table tbody tr:last-child { border-bottom: none; }
+.backup-table tbody td {
+    padding: 10px 16px;
+    white-space: nowrap;
+}
+.backup-link {
+    color: var(--accent-primary, #6366f1);
+    text-decoration: none;
+}
+.backup-link:hover { text-decoration: underline; }
+.backup-row-actions {
+    text-align: right;
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+}
+.backup-icon-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+}
+.backup-icon-btn:hover {
+    color: var(--text-primary, #f1f5f9);
+    background: var(--hover-bg, rgba(255,255,255,0.05));
+}
+.backup-icon-btn.danger:hover { color: #ef4444; }
+
 /* ============================================
    ANIMATIONS
    ============================================ */

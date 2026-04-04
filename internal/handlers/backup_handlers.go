@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
@@ -24,7 +25,10 @@ func safeBackupPath(filename string) (string, error) {
 	if filename == "" || strings.ContainsAny(filename, `/\`) || strings.Contains(filename, "..") {
 		return "", fmt.Errorf("invalid filename")
 	}
-	if !strings.HasPrefix(filename, "vigil-backup-") || !strings.HasSuffix(filename, ".db") {
+	if !strings.HasPrefix(filename, "vigil-backup-") {
+		return "", fmt.Errorf("invalid backup filename")
+	}
+	if !strings.HasSuffix(filename, ".db") && !strings.HasSuffix(filename, ".db.gz") {
 		return "", fmt.Errorf("invalid backup filename")
 	}
 	absDir, err := filepath.Abs(BackupDir)
@@ -131,8 +135,9 @@ func RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	if !strings.HasSuffix(header.Filename, ".db") {
-		JSONError(w, "File must be a .db file", http.StatusBadRequest)
+	isGz := strings.HasSuffix(header.Filename, ".db.gz")
+	if !strings.HasSuffix(header.Filename, ".db") && !isGz {
+		JSONError(w, "File must be a .db or .db.gz file", http.StatusBadRequest)
 		return
 	}
 
@@ -148,7 +153,22 @@ func RestoreBackup(w http.ResponseWriter, r *http.Request) {
 		JSONError(w, "Failed to save upload", http.StatusInternalServerError)
 		return
 	}
-	if _, err := io.Copy(out, file); err != nil {
+
+	// Decompress gzip on the fly if needed
+	var reader io.Reader = file
+	if isGz {
+		gz, err := gzip.NewReader(file)
+		if err != nil {
+			out.Close()
+			os.Remove(tmpPath)
+			JSONError(w, "Invalid gzip file", http.StatusBadRequest)
+			return
+		}
+		defer gz.Close()
+		reader = gz
+	}
+
+	if _, err := io.Copy(out, reader); err != nil {
 		out.Close()
 		os.Remove(tmpPath)
 		JSONError(w, "Failed to save upload", http.StatusInternalServerError)

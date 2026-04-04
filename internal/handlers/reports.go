@@ -38,6 +38,21 @@ func ReportQueueDepth() int {
 	return len(reportQueue)
 }
 
+// CleanupOldReports trims all hosts to the configured history limit.
+// Returns the total number of deleted rows.
+func CleanupOldReports(limit int) (int64, error) {
+	result, err := db.DB.Exec(`DELETE FROM reports WHERE id NOT IN (
+		SELECT id FROM (
+			SELECT id, ROW_NUMBER() OVER (PARTITION BY hostname ORDER BY timestamp DESC) AS rn
+			FROM reports
+		) WHERE rn <= ?
+	)`, limit)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func init() {
 	go reportWorker()
 }
@@ -109,6 +124,12 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		JSONError(w, "Database Error", http.StatusInternalServerError)
 		return
 	}
+
+	// Trim old reports for this host to stay within the retention limit.
+	limit := settings.GetInt(db.DB, "retention", "host_history_limit", 50)
+	db.DB.Exec(`DELETE FROM reports WHERE hostname = ? AND id NOT IN (
+		SELECT id FROM reports WHERE hostname = ? ORDER BY timestamp DESC LIMIT ?
+	)`, hostname, hostname, limit)
 
 	// Count drives and pools for logging.
 	driveCount := 0

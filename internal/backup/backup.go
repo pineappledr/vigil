@@ -1,8 +1,10 @@
 package backup
 
 import (
+	"compress/gzip"
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,27 +19,38 @@ type BackupInfo struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// RunBackup creates a database backup using VACUUM INTO (safe with WAL mode).
-// It rotates old backups, keeping at most maxBackups files.
+// RunBackup creates a database backup using VACUUM INTO (safe with WAL mode),
+// then gzip-compresses the result. It rotates old backups, keeping at most maxBackups files.
 func RunBackup(db *sql.DB, backupDir string, maxBackups int) (BackupInfo, error) {
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		return BackupInfo{}, fmt.Errorf("create backup dir: %w", err)
 	}
 
-	filename := fmt.Sprintf("vigil-backup-%s.db", time.Now().UTC().Format("20060102-150405"))
-	dest := filepath.Join(backupDir, filename)
+	ts := time.Now().UTC().Format("20060102-150405")
+	rawName := fmt.Sprintf("vigil-backup-%s.db", ts)
+	rawDest := filepath.Join(backupDir, rawName)
 
-	if _, err := db.Exec("VACUUM INTO ?", dest); err != nil {
+	if _, err := db.Exec("VACUUM INTO ?", rawDest); err != nil {
 		return BackupInfo{}, fmt.Errorf("VACUUM INTO: %w", err)
 	}
 
-	info, err := os.Stat(dest)
+	// Compress the raw backup
+	gzName := rawName + ".gz"
+	gzDest := filepath.Join(backupDir, gzName)
+	if err := compressFile(rawDest, gzDest); err != nil {
+		// If compression fails, keep the raw file
+		info, _ := os.Stat(rawDest)
+		return BackupInfo{Filename: rawName, SizeBytes: info.Size(), CreatedAt: info.ModTime().UTC()}, nil
+	}
+	os.Remove(rawDest) // remove uncompressed original
+
+	info, err := os.Stat(gzDest)
 	if err != nil {
 		return BackupInfo{}, fmt.Errorf("stat backup: %w", err)
 	}
 
 	result := BackupInfo{
-		Filename:  filename,
+		Filename:  gzName,
 		SizeBytes: info.Size(),
 		CreatedAt: info.ModTime().UTC(),
 	}
@@ -45,12 +58,35 @@ func RunBackup(db *sql.DB, backupDir string, maxBackups int) (BackupInfo, error)
 	// Rotate old backups
 	if maxBackups > 0 {
 		if err := rotate(backupDir, maxBackups); err != nil {
-			// Non-fatal: backup succeeded, rotation failed
 			fmt.Printf("backup: rotation warning: %v\n", err)
 		}
 	}
 
 	return result, nil
+}
+
+func compressFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	gz, err := gzip.NewWriterLevel(out, gzip.BestCompression)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(gz, in); err != nil {
+		gz.Close()
+		return err
+	}
+	return gz.Close()
 }
 
 // ListBackups returns all backup files in the directory, newest first.
@@ -65,7 +101,11 @@ func ListBackups(backupDir string) ([]BackupInfo, error) {
 
 	var backups []BackupInfo
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "vigil-backup-") || !strings.HasSuffix(e.Name(), ".db") {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "vigil-backup-") {
+			continue
+		}
+		if !strings.HasSuffix(name, ".db") && !strings.HasSuffix(name, ".db.gz") {
 			continue
 		}
 		info, err := e.Info()
@@ -92,7 +132,10 @@ func DeleteBackup(backupDir, filename string) error {
 	if strings.ContainsAny(filename, `/\`) || strings.Contains(filename, "..") {
 		return fmt.Errorf("invalid filename")
 	}
-	if !strings.HasPrefix(filename, "vigil-backup-") || !strings.HasSuffix(filename, ".db") {
+	if !strings.HasPrefix(filename, "vigil-backup-") {
+		return fmt.Errorf("invalid backup filename")
+	}
+	if !strings.HasSuffix(filename, ".db") && !strings.HasSuffix(filename, ".db.gz") {
 		return fmt.Errorf("invalid backup filename")
 	}
 	return os.Remove(filepath.Join(backupDir, filename))

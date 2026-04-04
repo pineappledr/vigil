@@ -158,6 +158,12 @@ func main() {
 			} else if deleted > 0 {
 				log.Printf("🧹 SMART data cleanup: removed %d old records", deleted)
 			}
+			rl := settings.GetInt(db.DB, "retention", "host_history_limit", 50)
+			if deleted, err := handlers.CleanupOldReports(rl); err != nil {
+				log.Printf("⚠️  Report cleanup: %v", err)
+			} else if deleted > 0 {
+				log.Printf("🧹 Report cleanup: removed %d old records", deleted)
+			}
 			handlers.RunScheduledBackup(&lastBackupUnix)
 		}
 	}()

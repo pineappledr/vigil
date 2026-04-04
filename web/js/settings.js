@@ -98,21 +98,36 @@ const Settings = {
                 container.innerHTML = '<div class="settings-item"><div class="settings-item-info"><div class="settings-item-desc">No backups yet</div></div></div>';
                 return;
             }
-            container.innerHTML = backups.map(b => {
-                const size = Utils.formatSize(b.size_bytes);
-                const age = Utils.timeAgo(b.created_at);
-                return `<div class="settings-item">
-                    <div class="settings-item-info">
-                        <div class="settings-item-title">${Utils.escapeHtml(b.filename)}</div>
-                        <div class="settings-item-desc">${size} &middot; ${age}</div>
-                    </div>
-                    <div class="backup-actions">
-                        <a class="btn btn-secondary btn-sm" href="/api/backups/${encodeURIComponent(b.filename)}/download" download title="Download">Download</a>
-                        <button class="btn btn-secondary btn-sm" onclick="Settings.restoreBackup('${Utils.escapeJSString(b.filename)}')" title="Restore">Restore</button>
-                        <button class="btn btn-danger btn-sm" onclick="Settings.deleteBackup('${Utils.escapeJSString(b.filename)}')">Delete</button>
-                    </div>
-                </div>`;
-            }).join('');
+            container.innerHTML = `
+                <table class="backup-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Size</th>
+                            <th>Date</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${backups.map(b => {
+                            const size = Utils.formatSize(b.size_bytes);
+                            const date = new Date(b.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                            return `<tr>
+                                <td><a class="backup-link" href="/api/backups/${encodeURIComponent(b.filename)}/download" download title="Download">${Utils.escapeHtml(b.filename)}</a></td>
+                                <td>${size}</td>
+                                <td>${date}</td>
+                                <td class="backup-row-actions">
+                                    <button class="backup-icon-btn" onclick="Settings.restoreBackup('${Utils.escapeJSString(b.filename)}')" title="Restore">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                                    </button>
+                                    <button class="backup-icon-btn danger" onclick="Settings.deleteBackup('${Utils.escapeJSString(b.filename)}')" title="Delete">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    </button>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
         } catch { /* ignore */ }
     },
 
