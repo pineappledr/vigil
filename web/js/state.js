@@ -106,16 +106,19 @@ const State = {
     },
 
     getStats() {
-        let totalDrives = 0, healthyDrives = 0, attentionDrives = 0, offlineServers = 0;
+        let totalDrives = 0, healthyDrives = 0, warningDrives = 0, criticalDrives = 0, offlineServers = 0;
         this.data.forEach(s => {
             const drives = s.details?.drives || [];
             totalDrives += drives.length;
             if (this.isServerOffline(s)) offlineServers++;
             drives.forEach(d => {
-                Utils.getHealthStatus(d) === 'healthy' ? healthyDrives++ : attentionDrives++;
+                const status = Utils.getHealthStatus(d);
+                if (status === 'critical') criticalDrives++;
+                else if (status === 'warning') warningDrives++;
+                else healthyDrives++;
             });
         });
-        return { totalServers: this.data.length, totalDrives, healthyDrives, attentionDrives, offlineServers };
+        return { totalServers: this.data.length, totalDrives, healthyDrives, warningDrives, criticalDrives, attentionDrives: warningDrives + criticalDrives, offlineServers };
     },
 
     getZFSStats() {

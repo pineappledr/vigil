@@ -17,7 +17,7 @@ const Components = {
         const idAttr = id ? `id="${id}"` : '';
 
         return `
-            <div class="summary-card ${clickable} ${activeClass}" ${onClickAttr} ${idAttr} title="${title}">
+            <div class="summary-card ${clickable} ${activeClass} card-${iconClass}" ${onClickAttr} ${idAttr} title="${title}">
                 <div class="icon ${iconClass}">${icon}</div>
                 <div class="summary-card-value value">${value}</div>
                 <div class="label">${label}</div>

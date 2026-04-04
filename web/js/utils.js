@@ -43,17 +43,35 @@ const Utils = {
     },
 
     getHealthStatus(drive) {
+        // SMART self-test failed → critical
         if (!drive.smart_status?.passed) return 'critical';
-        
+
         const attrs = drive.ata_smart_attributes?.table || [];
-        const criticalIds = [5, 187, 197, 198];
-        
-        for (const attr of attrs) {
-            if (criticalIds.includes(attr.id) && attr.raw?.value > 0) {
-                return 'warning';
-            }
+        const attrMap = {};
+        for (const a of attrs) attrMap[a.id] = a.raw?.value || 0;
+
+        const reallocated = attrMap[5] || 0;     // Reallocated Sectors
+        const pending = attrMap[197] || 0;        // Current Pending Sectors
+        const uncorrectable = attrMap[198] || 0;  // Offline Uncorrectable
+        const reported = attrMap[187] || 0;       // Reported Uncorrectable Errors
+
+        // Critical: drive is actively failing
+        if (reallocated > 100 || pending > 0 || uncorrectable > 10) return 'critical';
+
+        // Warning: worth monitoring, not urgent
+        if (reallocated > 0 || reported > 0 || uncorrectable > 0) {
+            // Also check wearout if available
+            return 'warning';
         }
-        
+
+        // Check wearout percentage from State
+        if (typeof State !== 'undefined') {
+            const serial = drive.serial_number;
+            const hostname = drive._hostname || '';
+            const w = State.getWearoutForDrive(hostname, serial);
+            if (w && w.percentage > 80) return 'warning';
+        }
+
         return 'healthy';
     },
 

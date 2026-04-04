@@ -114,16 +114,36 @@
 }
 
 .summary-card.clickable:hover {
-    border-color: var(--danger);
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    border-color: var(--border-hover);
     transform: translateY(-2px);
 }
 
-.summary-card.active {
-    border-color: var(--danger);
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-    background: rgba(239, 68, 68, 0.05);
-}
+.summary-card.active { border-color: var(--border-hover); }
+
+/* Color-matched hover/active per card type */
+.summary-card.card-blue.clickable:hover,
+.summary-card.card-blue.active { border-color: var(--accent-primary); box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
+.summary-card.card-blue.active { background: rgba(59, 130, 246, 0.05); }
+
+.summary-card.card-purple.clickable:hover,
+.summary-card.card-purple.active { border-color: #8b5cf6; box-shadow: 0 0 20px rgba(139, 92, 246, 0.2); }
+.summary-card.card-purple.active { background: rgba(139, 92, 246, 0.05); }
+
+.summary-card.card-green.clickable:hover,
+.summary-card.card-green.active { border-color: var(--success); box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
+.summary-card.card-green.active { background: rgba(16, 185, 129, 0.05); }
+
+.summary-card.card-yellow.clickable:hover,
+.summary-card.card-yellow.active { border-color: var(--warning); box-shadow: 0 0 20px rgba(245, 158, 11, 0.2); }
+.summary-card.card-yellow.active { background: rgba(245, 158, 11, 0.05); }
+
+.summary-card.card-red.clickable:hover,
+.summary-card.card-red.active { border-color: var(--danger); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+.summary-card.card-red.active { background: rgba(239, 68, 68, 0.05); }
+
+.summary-card.card-cyan.clickable:hover,
+.summary-card.card-cyan.active { border-color: #06b6d4; box-shadow: 0 0 20px rgba(6, 182, 212, 0.2); }
+.summary-card.card-cyan.active { background: rgba(6, 182, 212, 0.05); }
 
 .summary-card .icon {
     width: 40px;
@@ -639,6 +659,175 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+}
+
+/* ─── Filtered Drives Table ───────────────────────────────────────────────── */
+
+.filtered-drives-view {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.drive-table-section {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.drive-table-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.drive-table-header .section-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+}
+
+.drive-table-count {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 4px;
+}
+
+.drive-table-wrapper {
+    overflow-x: auto;
+}
+
+.drive-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.drive-table thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.drive-table tbody tr {
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.drive-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.drive-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.drive-table td {
+    padding: 10px 14px;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.drive-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+}
+
+.drive-status-dot.warning {
+    background: var(--warning);
+}
+
+.drive-status-dot.critical {
+    background: var(--danger);
+}
+
+.drive-table-name {
+    font-weight: 500;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.drive-table-serial {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.drive-table-host {
+    color: var(--text-secondary);
+}
+
+.drive-table-wearout {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+}
+
+.smart-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.smart-badge.passed {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.smart-badge.failed {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+/* Row status highlight (subtle left border) */
+.drive-table-row.warning td:first-child {
+    box-shadow: inset 3px 0 0 var(--warning);
+}
+
+.drive-table-row.critical td:first-child {
+    box-shadow: inset 3px 0 0 var(--danger);
+}
+
+@media (max-width: 768px) {
+    .drive-table td,
+    .drive-table thead th {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+    .drive-table-name {
+        max-width: 140px;
+    }
+    /* Hide less critical columns on mobile */
+    .drive-table td:nth-child(4),
+    .drive-table th:nth-child(4),
+    .drive-table td:nth-child(8),
+    .drive-table th:nth-child(8) {
+        display: none;
+    }
 }
 
 /* ─── Health Breakdown View ────────────────────────────────────────────────── */

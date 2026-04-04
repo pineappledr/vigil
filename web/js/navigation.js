@@ -135,6 +135,8 @@ const Navigation = {
         this._switchView('dashboard-view');
 
         const titles = {
+            critical: 'Critical Drives',
+            warning: 'Warning Drives',
             attention: 'Drives Needing Attention',
             healthy: 'Healthy Drives',
             all: 'All Drives'
@@ -147,6 +149,8 @@ const Navigation = {
         Renderer.ensureDashboardStructure();
 
         const filterFns = {
+            critical: d => Utils.getHealthStatus(d) === 'critical',
+            warning: d => Utils.getHealthStatus(d) === 'warning',
             attention: d => Utils.getHealthStatus(d) !== 'healthy',
             healthy: d => Utils.getHealthStatus(d) === 'healthy',
             all: () => true

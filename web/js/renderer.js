@@ -88,7 +88,9 @@ const Renderer = {
                 iconClass: 'blue',
                 value: stats.totalServers,
                 label: 'Servers',
-                onClick: null
+                onClick: "Navigation.showDashboard()",
+                active: !State.activeFilter && State.activeView === 'drives' && State.activeServerIndex === null,
+                title: 'Click to view dashboard'
             })}
             ${Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>`,
@@ -109,15 +111,24 @@ const Renderer = {
                 title: 'Click to view healthy drives'
             })}
             ${this._healthScoreCard()}
-            ${Components.summaryCard({
+            ${stats.warningDrives > 0 ? Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+                iconClass: 'yellow',
+                value: stats.warningDrives,
+                label: 'Warning',
+                onClick: "Navigation.showFilter('warning')",
+                active: State.activeFilter === 'warning',
+                title: 'Click to view drives with warnings'
+            }) : ''}
+            ${stats.criticalDrives > 0 ? Components.summaryCard({
+                icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
                 iconClass: 'red',
-                value: stats.attentionDrives,
-                label: 'Need Attention',
-                onClick: stats.attentionDrives > 0 ? "Navigation.showFilter('attention')" : null,
-                active: State.activeFilter === 'attention',
-                title: stats.attentionDrives > 0 ? 'Click to view drives needing attention' : 'All drives healthy'
-            })}
+                value: stats.criticalDrives,
+                label: 'Critical',
+                onClick: "Navigation.showFilter('critical')",
+                active: State.activeFilter === 'critical',
+                title: 'Click to view failing drives'
+            }) : ''}
             ${showZFS ? Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="7" cy="6" r="1" fill="currentColor"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="7" cy="18" r="1" fill="currentColor"/></svg>`,
                 iconClass: zfsStats.attentionPools > 0 ? 'red' : 'cyan',
@@ -252,7 +263,25 @@ const Renderer = {
         });
 
         const drivesHtml = issuesDrives.length > 0
-            ? `<div class="drives-grid">${issuesDrives.map(d => Components.driveCard(d, d._serverIdx)).join('')}</div>`
+            ? `<div class="drive-table-wrapper">
+                    <table class="drive-table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Name</th>
+                                <th>Serial</th>
+                                <th>Host</th>
+                                <th>Type</th>
+                                <th>Temp</th>
+                                <th>Age</th>
+                                <th>SMART</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${issuesDrives.map(d => this._driveTableRow(d)).join('')}
+                        </tbody>
+                    </table>
+                </div>`
             : '<p style="color:var(--text-muted)">All drives are healthy.</p>';
 
         serverList.innerHTML = `
@@ -279,17 +308,17 @@ const Renderer = {
     filteredDrives(filterFn, filterType) {
         // Restore structure first
         this.ensureDashboardStructure();
-        
+
         const serverList = document.getElementById('server-list');
         const summaryCards = document.getElementById('summary-cards');
-        
+
         if (!serverList || !summaryCards) return;
-        
+
         summaryCards.innerHTML = this.serverSummaryCards();
-        
+
         const matchingDrives = [];
         const sortedServers = State.getSortedData();
-        
+
         sortedServers.forEach((server) => {
             const actualIdx = State.data.findIndex(s => s.hostname === server.hostname);
             (server.details?.drives || []).forEach((drive, driveIdx) => {
@@ -304,38 +333,81 @@ const Renderer = {
                 }
             });
         });
-        
+
         if (matchingDrives.length === 0) {
             serverList.innerHTML = Components.emptyState(filterType === 'attention' ? 'attention' : 'noDrives');
             return;
         }
-        
+
         const nvme = matchingDrives.filter(d => Utils.getDriveType(d) === 'NVMe');
         const ssd = matchingDrives.filter(d => Utils.getDriveType(d) === 'SSD');
         const hdd = matchingDrives.filter(d => !['NVMe', 'SSD'].includes(Utils.getDriveType(d)));
-        
-        const renderFilteredSection = (title, icon, drives) => {
+
+        const renderTableSection = (title, icon, drives) => {
             if (drives.length === 0) return '';
             return `
-                <div class="drive-type-section">
-                    <div class="drive-type-header">
+                <div class="drive-table-section">
+                    <div class="drive-table-header">
                         ${icon}
                         <span>${title}</span>
-                        <span class="drive-type-count">${drives.length}</span>
+                        <span class="drive-table-count">${drives.length}</span>
                     </div>
-                    <div class="drives-grid">
-                        ${drives.map(d => Components.driveCard(d, d._serverIdx)).join('')}
+                    <div class="drive-table-wrapper">
+                        <table class="drive-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Name</th>
+                                    <th>Serial</th>
+                                    <th>Host</th>
+                                    <th>Capacity</th>
+                                    <th>Temp</th>
+                                    <th>Age</th>
+                                    <th>Wearout</th>
+                                    <th>SMART</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${drives.map(d => this._driveTableRow(d)).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             `;
         };
-        
+
         serverList.innerHTML = `
             <div class="filtered-drives-view">
-                ${renderFilteredSection('NVMe Drives', Components.icons.nvme, nvme)}
-                ${renderFilteredSection('Solid State Drives', Components.icons.ssd, ssd)}
-                ${renderFilteredSection('Hard Disk Drives', Components.icons.hdd, hdd)}
+                ${renderTableSection('NVMe Drives', Components.icons.nvme, nvme)}
+                ${renderTableSection('Solid State Drives', Components.icons.ssd, ssd)}
+                ${renderTableSection('Hard Disk Drives', Components.icons.hdd, hdd)}
             </div>
+        `;
+    },
+
+    _driveTableRow(drive) {
+        const status = Utils.getHealthStatus(drive);
+        const driveName = Utils.getDriveName(drive);
+        const serial = drive.serial_number || 'N/A';
+        const hostname = drive._hostname || '';
+        const wearoutData = State.getWearoutForDrive(hostname, serial);
+        const wearoutPct = wearoutData ? `${wearoutData.percentage}%` : '--';
+        const smartPassed = drive.smart_status?.passed;
+        const alias = drive._alias || '';
+        const displayName = alias || driveName;
+
+        return `
+            <tr class="drive-table-row ${status}" onclick="Navigation.showDriveDetails(${drive._serverIdx}, ${drive._driveIdx})">
+                <td><span class="drive-status-dot ${status}"></span></td>
+                <td class="drive-table-name" title="${Utils.escapeHtml(driveName)}">${Utils.escapeHtml(displayName)}</td>
+                <td class="drive-table-serial">${Utils.escapeHtml(serial)}</td>
+                <td class="drive-table-host">${Utils.escapeHtml(hostname)}</td>
+                <td>${Utils.formatSize(drive.user_capacity?.bytes)}</td>
+                <td>${drive.temperature?.current ?? '--'}°C</td>
+                <td>${Utils.formatAge(drive.power_on_time?.hours)}</td>
+                <td class="drive-table-wearout">${wearoutPct}</td>
+                <td><span class="smart-badge ${smartPassed ? 'passed' : 'failed'}">${smartPassed ? 'OK' : 'FAIL'}</span></td>
+            </tr>
         `;
     },
 

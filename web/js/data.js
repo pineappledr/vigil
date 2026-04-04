@@ -162,12 +162,14 @@ const Data = {
         } else if (State.activeFilter === 'health') {
             Renderer.healthBreakdown();
         } else if (State.activeFilter) {
-            const filterFn = State.activeFilter === 'attention'
-                ? d => Utils.getHealthStatus(d) !== 'healthy'
-                : State.activeFilter === 'healthy'
-                ? d => Utils.getHealthStatus(d) === 'healthy'
-                : () => true;
-            Renderer.filteredDrives(filterFn, State.activeFilter);
+            const filterFns = {
+                critical: d => Utils.getHealthStatus(d) === 'critical',
+                warning: d => Utils.getHealthStatus(d) === 'warning',
+                attention: d => Utils.getHealthStatus(d) !== 'healthy',
+                healthy: d => Utils.getHealthStatus(d) === 'healthy',
+                all: () => true,
+            };
+            Renderer.filteredDrives(filterFns[State.activeFilter] || (() => true), State.activeFilter);
         } else {
             Renderer.dashboard(State.data);
         }
