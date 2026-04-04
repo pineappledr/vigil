@@ -41,6 +41,7 @@ var csrfExemptPrefixes = []string{
 	"/api/v1/agents/auth",
 	"/api/v1/server/pubkey",
 	"/api/addons/webhook/",
+	"/api/addons/connect",
 	"/health",
 	"/api/version",
 }
