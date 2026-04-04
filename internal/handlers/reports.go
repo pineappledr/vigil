@@ -13,6 +13,50 @@ import (
 	"vigil/internal/wearout"
 )
 
+// reportWork is a unit of background processing enqueued after the HTTP
+// response has been sent.  Processing is serialised through a single worker
+// goroutine so concurrent SMART / wearout / ZFS writes never compete for
+// the SQLite write lock and cannot starve dashboard reads.
+type reportWork struct {
+	hostname string
+	agentID  int64
+	payload  map[string]interface{}
+}
+
+// reportQueue buffers pending background work.  The buffer is generous so
+// the HTTP handler never blocks; if it fills up we drop the work.
+var reportQueue = make(chan reportWork, 64)
+
+func init() {
+	go reportWorker()
+}
+
+func reportWorker() {
+	for w := range reportQueue {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("⚠️  Report background processing panic for %s: %v", w.hostname, r)
+				}
+			}()
+
+			if err := agents.UpdateAgentLastSeen(db.DB, w.agentID); err != nil {
+				log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", w.agentID, err)
+			}
+			if err := agents.UpdateAgentLastSeenByHostname(db.DB, w.hostname); err != nil {
+				log.Printf("⚠️  Failed to update agent status by hostname %s: %v", w.hostname, err)
+			}
+
+			wearout.ProcessWearoutFromReport(db.DB, w.hostname, w.payload)
+			smart.ProcessReportWithEvents(db.DB, EventBus, w.hostname, w.payload)
+
+			if _, ok := w.payload["zfs"].(map[string]interface{}); ok {
+				ProcessZFSFromReport(w.hostname, w.payload)
+			}
+		}()
+	}
+}
+
 // Report handles incoming agent reports.
 // Requires a valid agent session token: Authorization: Bearer <token>
 func Report(w http.ResponseWriter, r *http.Request) {
@@ -49,34 +93,16 @@ func Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update agent status: by ID (fast path) and by hostname (authoritative sync).
-	// The hostname-based update covers edge cases where the session's agent_id
-	// doesn't match the current agent_registry row (e.g., after re-registration).
-	if err := agents.UpdateAgentLastSeen(db.DB, session.AgentID); err != nil {
-		log.Printf("⚠️  Failed to update last_seen_at for agent %d: %v", session.AgentID, err)
-	}
-	if err := agents.UpdateAgentLastSeenByHostname(db.DB, hostname); err != nil {
-		log.Printf("⚠️  Failed to update agent status by hostname %s: %v", hostname, err)
-	}
-
+	// Count drives and pools for logging.
 	driveCount := 0
 	if drives, ok := payload["drives"].([]interface{}); ok {
 		driveCount = len(drives)
 	}
-
-	// Process SMART-based wearout calculations
-	wearout.ProcessWearoutFromReport(db.DB, hostname, payload)
-
-	// Process SMART health analysis with event publishing
-	smart.ProcessReportWithEvents(db.DB, EventBus, hostname, payload)
-
-	// Process ZFS data if present
 	poolCount := 0
 	if zfsData, ok := payload["zfs"].(map[string]interface{}); ok {
 		if pools, ok := zfsData["pools"].([]interface{}); ok {
 			poolCount = len(pools)
 		}
-		ProcessZFSFromReport(hostname, payload)
 	}
 
 	if poolCount > 0 {
@@ -84,7 +110,18 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("💾 Report: %s (%d drives)", hostname, driveCount)
 	}
+
+	// Respond immediately — heavy processing is serialised through a single
+	// background worker so it never holds the SQLite write lock while the
+	// dashboard is trying to read /api/history.
 	JSONResponse(w, map[string]string{"status": "ok"})
+
+	// Enqueue background work (non-blocking; drops if queue is full).
+	select {
+	case reportQueue <- reportWork{hostname: hostname, agentID: session.AgentID, payload: payload}:
+	default:
+		log.Printf("⚠️  Report processing queue full, dropping background work for %s", hostname)
+	}
 }
 
 // History returns latest reports for all hosts with aliases
@@ -92,10 +129,14 @@ func History(w http.ResponseWriter, r *http.Request) {
 	aliases := loadAliases()
 
 	query := `
-	SELECT hostname, timestamp, data 
-	FROM reports 
-	WHERE id IN (SELECT MAX(id) FROM reports GROUP BY hostname)
-	ORDER BY timestamp DESC`
+	SELECT r.hostname, r.timestamp, r.data
+	FROM reports r
+	INNER JOIN (
+		SELECT hostname, MAX(id) AS max_id
+		FROM reports
+		GROUP BY hostname
+	) latest ON r.id = latest.max_id
+	ORDER BY r.timestamp DESC`
 
 	rows, err := db.DB.Query(query)
 	if err != nil {

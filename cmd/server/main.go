@@ -103,7 +103,7 @@ func main() {
 		log.Printf("⚠️  Notification history purge: %v", err)
 	}
 
-	// Periodic session cleanup
+	// Periodic cleanup (sessions, notification history, SMART data retention)
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		for range ticker.C {
@@ -111,6 +111,11 @@ func main() {
 			agents.CleanupExpiredAgentSessions(db.DB)
 			if err := notify.PurgeOldHistory(db.DB, 90); err != nil {
 				log.Printf("⚠️  Notification history purge: %v", err)
+			}
+			if deleted, err := smart.CleanupOldSmartData(db.DB, 90); err != nil {
+				log.Printf("⚠️  SMART data cleanup: %v", err)
+			} else if deleted > 0 {
+				log.Printf("🧹 SMART data cleanup: removed %d old records", deleted)
 			}
 		}
 	}()

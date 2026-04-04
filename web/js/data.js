@@ -4,45 +4,65 @@
 
 const Data = {
     async fetch() {
+        let historyOk = false;
+
         try {
             const [historyResponse, zfsResponse, wearoutResponse] = await Promise.all([
-                API.getHistory(),
+                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); return null; }),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null)
             ]);
 
-            if (!historyResponse.ok) {
-                throw new Error(`HTTP ${historyResponse.status}`);
+            // ── History (critical path) ──────────────────────────────────
+            if (historyResponse && historyResponse.ok) {
+                try {
+                    const parsed = await historyResponse.json();
+                    if (Array.isArray(parsed)) {
+                        State.data = parsed;
+                        historyOk = true;
+                    }
+                } catch (e) {
+                    console.error('[Data] History parse error:', e);
+                }
             }
-
-            State.data = await historyResponse.json() || [];
             State.resolveActiveServer();
 
+            // ── ZFS ──────────────────────────────────────────────────────
             if (zfsResponse && zfsResponse.ok) {
-                State.zfsPools = await zfsResponse.json() || [];
-                State.buildZFSDriveMap();
+                try {
+                    State.zfsPools = await zfsResponse.json() || [];
+                    State.buildZFSDriveMap();
+                } catch (e) {
+                    State.zfsPools = [];
+                    State.zfsDriveMap = {};
+                }
             } else {
                 State.zfsPools = [];
                 State.zfsDriveMap = {};
             }
 
+            // ── Wearout ──────────────────────────────────────────────────
             if (wearoutResponse && wearoutResponse.ok) {
-                const wData = await wearoutResponse.json();
-                State.buildWearoutMap(wData?.drives);
+                try {
+                    const wData = await wearoutResponse.json();
+                    State.buildWearoutMap(wData?.drives);
+                } catch (e) {
+                    State.wearoutMap = {};
+                }
             } else {
                 State.wearoutMap = {};
             }
-
-            this.updateCurrentView();
-            this.updateSidebar();
-            this.updateStats();
-            this.setOnlineStatus(true);
-            this.updateLastRefresh();
-
         } catch (error) {
-            console.error('Fetch error:', error);
-            this.setOnlineStatus(false);
+            console.error('[Data] Unexpected fetch error:', error);
         }
+
+        // Always render — even on failure we show stale data rather than
+        // freezing the dashboard on "Waiting for agents to connect..."
+        this.setOnlineStatus(historyOk || State.data.length > 0);
+        this.updateLastRefresh();
+        try { this.updateCurrentView(); } catch (e) { console.error('[Data] View error:', e); }
+        try { this.updateSidebar(); } catch (e) { console.error('[Data] Sidebar error:', e); }
+        try { this.updateStats(); } catch (e) { console.error('[Data] Stats error:', e); }
     },
 
     updateCurrentView() {
