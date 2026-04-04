@@ -724,6 +724,27 @@ const Renderer = {
                 <div class="settings-section">
                     <div class="settings-section-header">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                            <line x1="6" y1="6" x2="6.01" y2="6"/>
+                            <line x1="6" y1="18" x2="6.01" y2="18"/>
+                        </svg>
+                        <h3>Drive Groups</h3>
+                    </div>
+                    <div class="settings-card" id="drive-groups-settings">
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-desc">Organize drives into groups with per-group notification rules</div>
+                            </div>
+                        </div>
+                        <div id="drive-groups-list"></div>
+                        <div id="drive-groups-create"></div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="18" height="18" rx="2"/>
                             <path d="M3 9h18"/>
                             <path d="M9 21V9"/>

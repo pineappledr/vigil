@@ -198,6 +198,12 @@ const Settings = {
     },
 
     async loadAll() {
-        await Promise.all([this.loadRetention(), this.loadBackup(), this.loadBackupList(), this.loadStats()]);
+        await Promise.all([
+            this.loadRetention(),
+            this.loadBackup(),
+            this.loadBackupList(),
+            this.loadStats(),
+            typeof DriveGroups !== 'undefined' ? DriveGroups.load() : Promise.resolve()
+        ]);
     }
 };

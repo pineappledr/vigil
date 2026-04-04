@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"vigil/internal/drivegroups"
 	"vigil/internal/events"
 
 	_ "modernc.org/sqlite"
@@ -330,6 +331,161 @@ func TestParseHHMM(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("parseHHMM(%q) = %d, want %d", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestDispatcherGroupRuleOverridesServiceRule(t *testing.T) {
+	db, bus, sender, d := setupDispatcherTest(t)
+
+	// Add drivegroups tables
+	if err := drivegroups.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+
+	svcID, _ := CreateService(db, &NotificationService{
+		Name:             "group-test",
+		ServiceType:      "generic",
+		ConfigJSON:       `{"shoutrrr_url":"generic://example.com"}`,
+		Enabled:          true,
+		NotifyOnCritical: true,
+	})
+
+	// Service-level rule: 10s cooldown for smart_critical
+	UpsertEventRule(db, &EventRule{
+		ServiceID: svcID,
+		EventType: "smart_critical",
+		Enabled:   true,
+		Cooldown:  10,
+	})
+
+	// Create a group and assign a drive
+	gid, _ := drivegroups.CreateGroup(db, &drivegroups.DriveGroup{Name: "Production"})
+	drivegroups.AssignDrive(db, gid, "host1", "serial1")
+
+	// Group-level rule: 0s cooldown (fire every time)
+	drivegroups.UpsertGroupEventRule(db, &drivegroups.GroupEventRule{
+		ServiceID: svcID,
+		GroupID:   gid,
+		EventType: "smart_critical",
+		Enabled:   true,
+		Cooldown:  0,
+	})
+
+	d.Start()
+	defer d.Stop()
+
+	evt := events.Event{
+		Type:         events.SmartCritical,
+		Severity:     events.SeverityCritical,
+		Hostname:     "host1",
+		SerialNumber: "serial1",
+		Message:      "Critical error on grouped drive",
+	}
+
+	// Fire twice — group rule has 0 cooldown, so both should send
+	bus.Publish(evt)
+	time.Sleep(50 * time.Millisecond)
+	bus.Publish(evt)
+	time.Sleep(100 * time.Millisecond)
+
+	if sender.callCount() != 2 {
+		t.Errorf("expected 2 sends (group rule: no cooldown), got %d", sender.callCount())
+	}
+}
+
+func TestDispatcherGroupRuleDisablesEvent(t *testing.T) {
+	db, bus, sender, d := setupDispatcherTest(t)
+
+	if err := drivegroups.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+
+	svcID, _ := CreateService(db, &NotificationService{
+		Name:             "group-disable",
+		ServiceType:      "generic",
+		ConfigJSON:       `{"shoutrrr_url":"generic://example.com"}`,
+		Enabled:          true,
+		NotifyOnCritical: true,
+	})
+
+	// Service-level: allow smart_critical
+	UpsertEventRule(db, &EventRule{
+		ServiceID: svcID,
+		EventType: "smart_critical",
+		Enabled:   true,
+		Cooldown:  0,
+	})
+
+	// Group disables this event type
+	gid, _ := drivegroups.CreateGroup(db, &drivegroups.DriveGroup{Name: "Backup"})
+	drivegroups.AssignDrive(db, gid, "bak1", "sn1")
+	drivegroups.UpsertGroupEventRule(db, &drivegroups.GroupEventRule{
+		ServiceID: svcID,
+		GroupID:   gid,
+		EventType: "smart_critical",
+		Enabled:   false,
+		Cooldown:  0,
+	})
+
+	d.Start()
+	defer d.Stop()
+
+	bus.Publish(events.Event{
+		Type:         events.SmartCritical,
+		Severity:     events.SeverityCritical,
+		Hostname:     "bak1",
+		SerialNumber: "sn1",
+		Message:      "Should be suppressed by group rule",
+	})
+
+	time.Sleep(100 * time.Millisecond)
+
+	if sender.callCount() != 0 {
+		t.Errorf("expected 0 sends (group rule disabled), got %d", sender.callCount())
+	}
+}
+
+func TestDispatcherUngroupedDriveFallsBackToServiceRules(t *testing.T) {
+	db, bus, sender, d := setupDispatcherTest(t)
+
+	if err := drivegroups.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+
+	svcID, _ := CreateService(db, &NotificationService{
+		Name:             "fallback-test",
+		ServiceType:      "generic",
+		ConfigJSON:       `{"shoutrrr_url":"generic://example.com"}`,
+		Enabled:          true,
+		NotifyOnCritical: true,
+	})
+
+	// Service-level rule: 10s cooldown
+	UpsertEventRule(db, &EventRule{
+		ServiceID: svcID,
+		EventType: "smart_critical",
+		Enabled:   true,
+		Cooldown:  10,
+	})
+
+	d.Start()
+	defer d.Stop()
+
+	evt := events.Event{
+		Type:         events.SmartCritical,
+		Severity:     events.SeverityCritical,
+		Hostname:     "ungrouped-host",
+		SerialNumber: "ungrouped-sn",
+		Message:      "Ungrouped drive event",
+	}
+
+	bus.Publish(evt)
+	time.Sleep(50 * time.Millisecond)
+	bus.Publish(evt) // should be throttled by service-level 10s cooldown
+	time.Sleep(100 * time.Millisecond)
+
+	if sender.callCount() != 1 {
+		t.Errorf("expected 1 send (ungrouped: service cooldown), got %d", sender.callCount())
 	}
 }
 

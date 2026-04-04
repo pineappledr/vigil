@@ -18,6 +18,7 @@ import (
 	"vigil/internal/config"
 	"vigil/internal/crypto"
 	"vigil/internal/db"
+	"vigil/internal/drivegroups"
 	"vigil/internal/events"
 	"vigil/internal/handlers"
 	"vigil/internal/metrics"
@@ -104,6 +105,11 @@ func main() {
 	// Run notification services migration
 	if err := notify.Migrate(db.DB); err != nil {
 		log.Printf("⚠️  Notification migration warning: %v", err)
+	}
+
+	// Run drive groups migration
+	if err := drivegroups.Migrate(db.DB); err != nil {
+		log.Printf("⚠️  Drive groups migration warning: %v", err)
 	}
 
 	// Load or generate server Ed25519 key pair
@@ -320,6 +326,9 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 
 	// ─── Stats Endpoints ─────────────────────────────────────────────────
 	handlers.RegisterStatsRoutes(mux, protect)
+
+	// ─── Drive Group Endpoints ───────────────────────────────────────────
+	handlers.RegisterDriveGroupRoutes(mux, protect)
 
 	// Static files
 	mux.HandleFunc("/", handlers.StaticFiles(cfg))

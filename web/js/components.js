@@ -42,6 +42,12 @@ const Components = {
         const wearoutData = State.getWearoutForDrive(hostname, serial);
         const wearoutBar = (typeof Wearout !== 'undefined' && wearoutData) ? Wearout.miniProgressBar(wearoutData.percentage) : '';
 
+        // Drive group badge
+        const driveGroup = State.getDriveGroup(hostname, serial);
+        const groupBadge = driveGroup
+            ? `<span class="drive-group-badge" style="--group-color: ${Utils.escapeHtml(driveGroup.color)}" title="Group: ${Utils.escapeHtml(driveGroup.name)}">${Utils.escapeHtml(driveGroup.name)}</span>`
+            : '';
+
         return `
             <div class="drive-card ${status}" onclick="Navigation.showDriveDetails(${serverIdx}, ${drive._idx})">
                 <div class="drive-card-header">
@@ -69,6 +75,7 @@ const Components = {
                 </div>
                 ${wearoutBar}
                 ${zfsBadge}
+                ${groupBadge}
                 <div class="drive-card-stats">
                     <div class="drive-card-stat">
                         <span class="stat-value">${Utils.formatSize(drive.user_capacity?.bytes)}</span>

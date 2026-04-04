@@ -64,11 +64,13 @@ const Data = {
         let historyData = null, zfsData = null, wearoutData = null, healthData = null;
 
         try {
-            const [historyResponse, zfsResponse, wearoutResponse, healthResponse] = await Promise.all([
+            const [historyResponse, zfsResponse, wearoutResponse, healthResponse, groupsResponse, assignResponse] = await Promise.all([
                 API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); return null; }),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
-                API.get('/api/health/score').catch(() => null)
+                API.get('/api/health/score').catch(() => null),
+                API.getDriveGroups().catch(() => null),
+                API.getDriveGroupAssignments().catch(() => null)
             ]);
 
             // ── History (critical path) ──────────────────────────────────
@@ -123,6 +125,19 @@ const Data = {
                     State.healthScore = null;
                 }
             }
+
+            // ── Drive Groups ───────────────────────────────────────────
+            if (groupsResponse && groupsResponse.ok) {
+                try { State.driveGroups = await groupsResponse.json() || []; } catch (_) { State.driveGroups = []; }
+            } else {
+                State.driveGroups = [];
+            }
+            if (assignResponse && assignResponse.ok) {
+                try { State.driveGroupAssignments = await assignResponse.json() || {}; } catch (_) { State.driveGroupAssignments = {}; }
+            } else {
+                State.driveGroupAssignments = {};
+            }
+            State.buildDriveGroupMap();
 
             // Cache successful data for instant restore on next page load
             if (historyOk) {

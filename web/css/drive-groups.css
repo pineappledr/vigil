@@ -1,0 +1,216 @@
+/* Drive Groups */
+
+/* Badge on drive cards */
+.drive-group-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--group-color, #6366f1) 18%, transparent);
+    color: var(--group-color, #6366f1);
+    border: 1px solid color-mix(in srgb, var(--group-color, #6366f1) 30%, transparent);
+    margin: 4px 8px 0;
+    max-width: calc(100% - 16px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Group management in Settings ────────────────────────────────── */
+
+.drive-groups-section { margin-top: 1.5rem; }
+
+.group-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+
+.group-card {
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+}
+
+.group-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.group-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.group-card-name {
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.group-member-count {
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+}
+
+.group-card-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-left: auto;
+}
+
+.group-card-actions button {
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.group-card-actions button:hover {
+    color: var(--text-primary, #f1f5f9);
+    background: var(--hover-bg, rgba(255,255,255,0.05));
+}
+
+.group-card-actions button.danger:hover {
+    color: #ef4444;
+}
+
+/* Members list (expandable) */
+.group-members {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color, #334155);
+}
+
+.group-member-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 0.8rem;
+}
+
+.group-member-item .member-drive {
+    color: var(--text-secondary, #cbd5e1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.group-member-item .remove-member {
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.group-member-item .remove-member:hover { color: #ef4444; }
+
+/* Create group form */
+.create-group-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.create-group-form input[type="text"] {
+    flex: 1;
+    min-width: 120px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #334155);
+    background: var(--input-bg, #0f172a);
+    color: var(--text-primary, #f1f5f9);
+    font-size: 0.85rem;
+}
+
+.create-group-form input[type="color"] {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 0;
+    background: none;
+}
+
+/* Assign drive dropdown */
+.assign-drive-select {
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #334155);
+    background: var(--input-bg, #0f172a);
+    color: var(--text-primary, #f1f5f9);
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+/* ── Per-group notification overrides ──────────────────────────── */
+
+.group-rules-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color, #334155);
+}
+
+.group-rules-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.group-rules-header h4 {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.group-override-card {
+    background: var(--card-bg, #1e293b);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.group-override-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.group-override-header .group-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    flex: 1;
+}
+
+.group-override-header .remove-override {
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.group-override-header .remove-override:hover { color: #ef4444; }

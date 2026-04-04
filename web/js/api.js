@@ -265,5 +265,51 @@ const API = {
 
     async getNotificationHistory(limit = 50) {
         return this.get(`/api/notifications/history?limit=${limit}`);
+    },
+
+    // ─── Drive Group Endpoints ──────────────────────────────────────────────
+
+    async getDriveGroups() {
+        return this.get('/api/drive-groups');
+    },
+
+    async createDriveGroup(name, color) {
+        return this.post('/api/drive-groups', { name, color });
+    },
+
+    async getDriveGroup(id) {
+        return this.get(`/api/drive-groups/${id}`);
+    },
+
+    async updateDriveGroup(id, name, color) {
+        return this.put(`/api/drive-groups/${id}`, { name, color });
+    },
+
+    async deleteDriveGroup(id) {
+        return this.delete(`/api/drive-groups/${id}`);
+    },
+
+    async assignDriveToGroup(groupId, hostname, serialNumber) {
+        return this.post(`/api/drive-groups/${groupId}/members`, { hostname, serial_number: serialNumber });
+    },
+
+    async unassignDrive(hostname, serial) {
+        return this.delete(`/api/drive-groups/members/${encodeURIComponent(hostname)}/${encodeURIComponent(serial)}`);
+    },
+
+    async getDriveGroupAssignments() {
+        return this.get('/api/drive-groups/assignments');
+    },
+
+    async getGroupEventRulesForService(serviceId) {
+        return this.get(`/api/notifications/services/${serviceId}/group-rules`);
+    },
+
+    async updateGroupEventRules(serviceId, groupId, rules) {
+        return this.put(`/api/notifications/services/${serviceId}/group-rules/${groupId}`, rules);
+    },
+
+    async deleteGroupEventRules(serviceId, groupId) {
+        return this.delete(`/api/notifications/services/${serviceId}/group-rules/${groupId}`);
     }
 };

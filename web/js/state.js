@@ -15,6 +15,9 @@ const State = {
     zfsPools: [],
     zfsDriveMap: {},
     wearoutMap: {},
+    driveGroups: [],
+    driveGroupAssignments: {},
+    driveGroupMap: {},
     activeView: 'drives',
     serverSortOrder: 'asc',
 
@@ -195,5 +198,22 @@ const State = {
 
     getWearoutForDrive(hostname, serial) {
         return this.wearoutMap[`${hostname}:${serial}`] || null;
+    },
+
+    buildDriveGroupMap() {
+        this.driveGroupMap = {};
+        const groupById = {};
+        (this.driveGroups || []).forEach(g => { groupById[g.id] = g; });
+        const assignments = this.driveGroupAssignments || {};
+        Object.keys(assignments).forEach(key => {
+            const group = groupById[assignments[key]];
+            if (group) {
+                this.driveGroupMap[key] = { id: group.id, name: group.name, color: group.color };
+            }
+        });
+    },
+
+    getDriveGroup(hostname, serial) {
+        return this.driveGroupMap[`${hostname}:${serial}`] || null;
     }
 };

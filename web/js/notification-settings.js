@@ -144,7 +144,10 @@ const NotificationSettings = {
             el.classList.toggle('active', el.querySelector('.notif-service-name')?.textContent === this.activeService?.name);
         });
 
-        if (content) content.innerHTML = this._serviceDetail();
+        if (content) {
+            content.innerHTML = this._serviceDetail();
+            this._loadGroupOverrides(id);
+        }
     },
 
     _serviceDetail() {
@@ -206,6 +209,14 @@ const NotificationSettings = {
                 <div class="notif-section">
                     <h4>Event Rules</h4>
                     ${this._eventRulesTable()}
+                </div>
+
+                <div class="notif-section group-rules-section">
+                    <div class="group-rules-header">
+                        <h4>Group Overrides</h4>
+                    </div>
+                    <p class="notif-hint">Override event rules for specific drive groups. Drives in a group with overrides use the group settings instead of the defaults above.</p>
+                    <div id="group-overrides-container"></div>
                 </div>
 
                 <div class="notif-section">
@@ -897,6 +908,175 @@ const NotificationSettings = {
         const opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
         if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
         return d.toLocaleString('en-US', opts);
+    },
+
+    // ─── Group Override Rules ──────────────────────────────────────────────
+
+    _groupOverrides: {},  // groupId -> [rules]
+
+    async _loadGroupOverrides(serviceId) {
+        const container = document.getElementById('group-overrides-container');
+        if (!container) return;
+
+        try {
+            const resp = await API.getGroupEventRulesForService(serviceId);
+            this._groupOverrides = resp.ok ? await resp.json() : {};
+        } catch (_) {
+            this._groupOverrides = {};
+        }
+
+        this._renderGroupOverrides(serviceId, container);
+    },
+
+    _renderGroupOverrides(serviceId, container) {
+        const groups = State.driveGroups || [];
+        const overrideGroupIds = Object.keys(this._groupOverrides).map(Number);
+
+        // Build event type meta lookup
+        const metaMap = {};
+        if (this.eventTypeMeta) {
+            for (const m of this.eventTypeMeta) metaMap[m.type] = m;
+        }
+
+        let html = '';
+
+        // Render existing group overrides
+        overrideGroupIds.forEach(gid => {
+            const group = groups.find(g => g.id === gid);
+            if (!group) return;
+            const rules = this._groupOverrides[gid] || [];
+
+            html += `
+                <div class="group-override-card">
+                    <div class="group-override-header">
+                        <span class="group-color-dot" style="background:${Utils.escapeHtml(group.color)}"></span>
+                        <span class="group-name">${Utils.escapeHtml(group.name)}</span>
+                        <button class="remove-override" onclick="NotificationSettings._removeGroupOverride(${serviceId}, ${gid})" title="Remove override">Remove</button>
+                    </div>
+                    <table class="notif-rules-table">
+                        <thead><tr><th>Event</th><th>Enabled</th><th>Cooldown</th></tr></thead>
+                        <tbody>
+                            ${this._groupRuleRows(serviceId, gid, rules, metaMap)}
+                        </tbody>
+                    </table>
+                    <button class="btn btn-secondary btn-sm" style="margin-top:0.5rem" onclick="NotificationSettings._saveGroupOverride(${serviceId}, ${gid})">Save Group Rules</button>
+                </div>
+            `;
+        });
+
+        // Add group dropdown (only groups without existing overrides)
+        const available = groups.filter(g => !overrideGroupIds.includes(g.id));
+        if (available.length > 0) {
+            html += `
+                <select class="assign-drive-select" onchange="NotificationSettings._addGroupOverride(${serviceId}, Number(this.value)); this.value=''">
+                    <option value="">+ Add group override...</option>
+                    ${available.map(g => `<option value="${g.id}">${Utils.escapeHtml(g.name)}</option>`).join('')}
+                </select>
+            `;
+        }
+
+        if (!html) {
+            html = '<p class="notif-hint" style="opacity:0.6">No drive groups created yet. Create groups in Settings to configure per-group rules.</p>';
+        }
+
+        container.innerHTML = html;
+    },
+
+    _groupRuleRows(serviceId, groupId, existingRules, metaMap) {
+        // Show all event types from service rules, with group overrides if they exist
+        const ruleMap = {};
+        existingRules.forEach(r => { ruleMap[r.event_type] = r; });
+
+        // Use the service's event rules as the template
+        const eventTypes = this.eventRules.map(r => r.event_type);
+        if (eventTypes.length === 0) return '<tr><td colspan="3" style="opacity:0.6">No event rules configured</td></tr>';
+
+        return eventTypes.map(et => {
+            const override = ruleMap[et];
+            const meta = metaMap[et];
+            const label = meta ? meta.label : et;
+            const enabled = override ? override.enabled : true;
+            const cooldown = override ? override.cooldown_secs : 300;
+
+            return `
+                <tr>
+                    <td>${Utils.escapeHtml(label)}</td>
+                    <td><input type="checkbox" data-group-rule="${groupId}" data-event-type="${Utils.escapeHtml(et)}" ${enabled ? 'checked' : ''}></td>
+                    <td>
+                        <select class="form-input form-input-sm" data-group-cooldown="${groupId}" data-event-type="${Utils.escapeHtml(et)}">
+                            ${this._cooldownOptions(cooldown)}
+                        </select>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    async _addGroupOverride(serviceId, groupId) {
+        if (!groupId) return;
+        // Initialize with default rules (all enabled, 5m cooldown)
+        const rules = this.eventRules.map(r => ({
+            event_type: r.event_type,
+            enabled: true,
+            cooldown_secs: 300
+        }));
+
+        try {
+            const resp = await API.updateGroupEventRules(serviceId, groupId, rules);
+            if (resp.ok) {
+                Utils.toast('Group override added', 'success');
+                await this._loadGroupOverrides(serviceId);
+            } else {
+                Utils.toast('Failed to add override', 'error');
+            }
+        } catch (_) {
+            Utils.toast('Failed to add override', 'error');
+        }
+    },
+
+    async _saveGroupOverride(serviceId, groupId) {
+        const checkboxes = document.querySelectorAll(`input[data-group-rule="${groupId}"]`);
+        const cooldowns = document.querySelectorAll(`select[data-group-cooldown="${groupId}"]`);
+
+        const rules = [];
+        checkboxes.forEach(cb => {
+            const eventType = cb.dataset.eventType;
+            const cooldownEl = document.querySelector(`select[data-group-cooldown="${groupId}"][data-event-type="${eventType}"]`);
+            rules.push({
+                event_type: eventType,
+                enabled: cb.checked,
+                cooldown_secs: parseInt(cooldownEl?.value || '300', 10)
+            });
+        });
+
+        try {
+            const resp = await API.updateGroupEventRules(serviceId, groupId, rules);
+            if (resp.ok) {
+                this._showStatus('Group rules saved');
+            } else {
+                this._showStatus('Failed to save group rules', true);
+            }
+        } catch (_) {
+            this._showStatus('Failed to save group rules', true);
+        }
+    },
+
+    async _removeGroupOverride(serviceId, groupId) {
+        const group = (State.driveGroups || []).find(g => g.id === groupId);
+        const name = group ? group.name : `#${groupId}`;
+        if (!confirm(`Remove override for "${name}"? Drives in this group will use the default service rules.`)) return;
+
+        try {
+            const resp = await API.deleteGroupEventRules(serviceId, groupId);
+            if (resp.ok) {
+                Utils.toast('Group override removed', 'success');
+                await this._loadGroupOverrides(serviceId);
+            } else {
+                Utils.toast('Failed to remove override', 'error');
+            }
+        } catch (_) {
+            Utils.toast('Failed to remove override', 'error');
+        }
     },
 
     _icons: {
