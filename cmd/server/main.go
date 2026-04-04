@@ -77,6 +77,11 @@ func main() {
 	defer db.DB.Close()
 	log.Printf("✓ Database: %s", cfg.DBPath)
 
+	// Initialise settings table (must run before anything that reads settings)
+	if err := settings.InitSettingsTable(db.DB); err != nil {
+		log.Printf("⚠️  Settings table warning: %v", err)
+	}
+
 	// Run SMART attributes migration
 	if err := smart.MigrateSmartAttributes(db.DB); err != nil {
 		log.Printf("⚠️  SMART migration warning: %v", err)
