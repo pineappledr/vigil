@@ -167,6 +167,36 @@
 }
 .backup-icon-btn.danger:hover { color: #ef4444; }
 
+/* Backup progress bar */
+.backup-progress {
+    padding: 12px 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.backup-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.backup-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+.backup-progress-fill.error {
+    background: #ef4444;
+}
+.backup-progress-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
 /* ============================================
    ANIMATIONS
    ============================================ */

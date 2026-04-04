@@ -720,6 +720,10 @@ const Renderer = {
                                 <button class="btn btn-secondary" onclick="Settings.restoreFromFile()">Restore from File</button>
                             </div>
                         </div>
+                        <div id="backup-progress" class="backup-progress" style="display:none">
+                            <div class="backup-progress-bar"><div class="backup-progress-fill"></div></div>
+                            <span class="backup-progress-text">Creating backup…</span>
+                        </div>
                         <div id="backup-list"></div>
                     </div>
                 </div>

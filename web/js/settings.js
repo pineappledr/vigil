@@ -69,21 +69,48 @@ const Settings = {
 
     async triggerBackup() {
         const btn = document.getElementById('backup-now-btn');
+        const progress = document.getElementById('backup-progress');
+        const fill = progress?.querySelector('.backup-progress-fill');
+        const text = progress?.querySelector('.backup-progress-text');
+
         if (btn) { btn.disabled = true; btn.textContent = 'Backing up...'; }
+        if (progress) { progress.style.display = ''; }
+        if (fill) { fill.style.width = '0%'; }
+
+        // Animate progress bar (indeterminate-style ramp)
+        let pct = 0;
+        const ticker = setInterval(() => {
+            pct += (95 - pct) * 0.08;
+            if (fill) fill.style.width = Math.min(pct, 95) + '%';
+        }, 200);
+
         try {
             const resp = await API.post('/api/backup', {});
+            clearInterval(ticker);
             if (resp.ok) {
                 const info = await resp.json();
+                if (fill) fill.style.width = '100%';
+                if (text) text.textContent = `Backup created: ${info.filename}`;
                 Utils.toast(`Backup created: ${info.filename}`, 'success');
-                this.loadBackupList();
+                setTimeout(() => this.loadBackupList(), 800);
             } else {
                 const data = await resp.json().catch(() => ({}));
+                if (text) text.textContent = data.error || 'Backup failed';
+                if (fill) { fill.style.width = '100%'; fill.classList.add('error'); }
                 Utils.toast(data.error || 'Backup failed', 'error');
             }
         } catch {
+            clearInterval(ticker);
+            if (text) text.textContent = 'Backup failed';
+            if (fill) { fill.style.width = '100%'; fill.classList.add('error'); }
             Utils.toast('Backup failed', 'error');
         } finally {
             if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
+            setTimeout(() => {
+                if (progress) progress.style.display = 'none';
+                if (fill) { fill.style.width = '0%'; fill.classList.remove('error'); }
+                if (text) text.textContent = 'Creating backup…';
+            }, 2000);
         }
     },
 
