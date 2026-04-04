@@ -172,9 +172,17 @@ func (d *Dispatcher) eventRuleAllowed(serviceID int64, e events.Event) (allowed 
 		//  0 = no cooldown (fire every time).
 		// >0 = cooldown in seconds.
 		if r.Cooldown != 0 {
-			// Per-drive cooldown: include hostname + serial so each drive
-			// gets its own independent cooldown window.
-			key := fmt.Sprintf("%d:%s:%s:%s", serviceID, e.Type, e.Hostname, e.SerialNumber)
+			// Per-source cooldown: include hostname + serial so each drive
+			// gets its own independent cooldown window. For events without
+			// host/serial (e.g. addon_degraded), fall back to addon_name
+			// so each add-on gets its own cooldown.
+			source := e.Hostname + ":" + e.SerialNumber
+			if source == ":" && e.Metadata != nil {
+				if name := e.Metadata["addon_name"]; name != "" {
+					source = "addon:" + name
+				}
+			}
+			key := fmt.Sprintf("%d:%s:%s", serviceID, e.Type, source)
 			d.mu.Lock()
 			last, seen := d.cooldowns[key]
 			now := time.Now()
