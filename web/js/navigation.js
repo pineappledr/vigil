@@ -109,6 +109,23 @@ const Navigation = {
         Data.updateSidebar();
     },
 
+    showHealthScore() {
+        State.activeServerIndex = null;
+        State.activeServerHostname = null;
+        State.activeFilter = 'health';
+        State.activeView = 'drives';
+
+        this._switchView('dashboard-view');
+
+        document.getElementById('page-title').textContent = 'Health Score Breakdown';
+        document.getElementById('breadcrumbs')?.classList.add('hidden');
+
+        this._clearNavSelection();
+
+        Renderer.ensureDashboardStructure();
+        Renderer.healthBreakdown();
+    },
+
     showFilter(filter) {
         State.activeServerIndex = null;
         State.activeServerHostname = null;

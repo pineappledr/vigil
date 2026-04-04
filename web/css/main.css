@@ -640,3 +640,87 @@
     justify-content: flex-end;
     gap: 10px;
 }
+
+/* ─── Health Breakdown View ────────────────────────────────────────────────── */
+
+.health-breakdown-view {
+    max-width: 900px;
+}
+
+.health-score-banner {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px 32px;
+    margin-bottom: 28px;
+}
+
+.health-score-big {
+    font-size: 3.5rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    line-height: 1;
+}
+
+.health-score-grade {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.health-score-sub {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+.health-section-title {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.health-components-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.health-component-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.health-component-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.health-component-icon {
+    display: flex;
+    color: var(--text-muted);
+}
+
+.health-component-deduction {
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    margin-bottom: 4px;
+}
+
+.health-component-details {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}

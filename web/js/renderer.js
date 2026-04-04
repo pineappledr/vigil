@@ -66,15 +66,14 @@ const Renderer = {
         let iconClass = 'green';
         if (hs.score < 40) iconClass = 'red';
         else if (hs.score < 75) iconClass = 'yellow';
-        const hasIssues = hs.score < 100;
         return Components.summaryCard({
             icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
             iconClass,
             value: hs.score,
             label: hs.grade,
-            onClick: hasIssues ? "Navigation.showFilter('attention')" : null,
-            active: State.activeFilter === 'attention' && hasIssues,
-            title: hasIssues ? 'Click to view drives needing attention' : 'All systems healthy'
+            onClick: "Navigation.showHealthScore()",
+            active: State.activeFilter === 'health',
+            title: 'Click to view health score breakdown'
         });
     },
 
@@ -201,6 +200,78 @@ const Renderer = {
                 ${Components.driveSection('NVMe Drives', Components.icons.nvme, nvme, serverIdx)}
                 ${Components.driveSection('Solid State Drives', Components.icons.ssd, ssd, serverIdx)}
                 ${Components.driveSection('Hard Disk Drives', Components.icons.hdd, hdd, serverIdx)}
+            </div>
+        `;
+    },
+
+    healthBreakdown() {
+        this.ensureDashboardStructure();
+        const serverList = document.getElementById('server-list');
+        const summaryCards = document.getElementById('summary-cards');
+        if (!serverList || !summaryCards) return;
+
+        summaryCards.innerHTML = this.serverSummaryCards();
+
+        const hs = State.healthScore;
+        if (!hs) {
+            serverList.innerHTML = '<p style="color:var(--text-muted);padding:20px">Health score not available.</p>';
+            return;
+        }
+
+        const gradeColor = (score) => {
+            if (score >= 90) return 'var(--success)';
+            if (score >= 75) return '#10b981';
+            if (score >= 60) return 'var(--warning)';
+            if (score >= 40) return '#f97316';
+            return 'var(--danger)';
+        };
+
+        const componentCard = (label, comp, icon) => {
+            const ded = Math.round(comp.deduction);
+            return `
+                <div class="health-component-card">
+                    <div class="health-component-header">
+                        <span class="health-component-icon">${icon}</span>
+                        <span class="health-component-label">${label}</span>
+                    </div>
+                    <div class="health-component-deduction" style="color:${ded > 0 ? 'var(--danger)' : 'var(--success)'}">
+                        ${ded > 0 ? '−' + ded : '0'}
+                    </div>
+                    <div class="health-component-details">${Utils.escapeHtml(comp.details)}</div>
+                </div>`;
+        };
+
+        // Build drive list for drives with issues
+        const issuesDrives = [];
+        State.data.forEach((server, serverIdx) => {
+            (server.details?.drives || []).forEach((drive, driveIdx) => {
+                if (Utils.getHealthStatus(drive) !== 'healthy') {
+                    issuesDrives.push({ ...drive, _serverIdx: serverIdx, _driveIdx: driveIdx, _hostname: server.hostname, _idx: driveIdx });
+                }
+            });
+        });
+
+        const drivesHtml = issuesDrives.length > 0
+            ? `<div class="drives-grid">${issuesDrives.map(d => Components.driveCard(d, d._serverIdx)).join('')}</div>`
+            : '<p style="color:var(--text-muted)">All drives are healthy.</p>';
+
+        serverList.innerHTML = `
+            <div class="health-breakdown-view">
+                <div class="health-score-banner" style="border-color:${gradeColor(hs.score)}">
+                    <div class="health-score-big" style="color:${gradeColor(hs.score)}">${hs.score}</div>
+                    <div class="health-score-info">
+                        <div class="health-score-grade" style="color:${gradeColor(hs.score)}">${Utils.escapeHtml(hs.grade)}</div>
+                        <div class="health-score-sub">out of 100</div>
+                    </div>
+                </div>
+                <h3 class="health-section-title">Score Components</h3>
+                <div class="health-components-grid">
+                    ${componentCard('SMART', hs.components.smart, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="12" r="2"/></svg>')}
+                    ${componentCard('Wearout', hs.components.wearout, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>')}
+                    ${componentCard('ZFS', hs.components.zfs, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M4 6h16M4 12h16M4 18h16"/></svg>')}
+                </div>
+                <h3 class="health-section-title">Drives Needing Attention</h3>
+                ${drivesHtml}
             </div>
         `;
     },

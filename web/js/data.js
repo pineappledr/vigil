@@ -159,6 +159,8 @@ const Data = {
 
         if (State.activeServerIndex !== null && State.data[State.activeServerIndex]) {
             Renderer.serverDetail(State.data[State.activeServerIndex], State.activeServerIndex);
+        } else if (State.activeFilter === 'health') {
+            Renderer.healthBreakdown();
         } else if (State.activeFilter) {
             const filterFn = State.activeFilter === 'attention'
                 ? d => Utils.getHealthStatus(d) !== 'healthy'
