@@ -66,12 +66,15 @@ const Renderer = {
         let iconClass = 'green';
         if (hs.score < 40) iconClass = 'red';
         else if (hs.score < 75) iconClass = 'yellow';
+        const hasIssues = hs.score < 100;
         return Components.summaryCard({
             icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
             iconClass,
             value: hs.score,
             label: hs.grade,
-            title: 'Array Health Score'
+            onClick: hasIssues ? "Navigation.showFilter('attention')" : null,
+            active: State.activeFilter === 'attention' && hasIssues,
+            title: hasIssues ? 'Click to view drives needing attention' : 'All systems healthy'
         });
     },
 
@@ -81,7 +84,6 @@ const Renderer = {
         const showZFS = zfsStats.totalPools > 0;
 
         return `
-            ${this._healthScoreCard()}
             ${Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>`,
                 iconClass: 'blue',
@@ -107,6 +109,7 @@ const Renderer = {
                 active: State.activeFilter === 'healthy',
                 title: 'Click to view healthy drives'
             })}
+            ${this._healthScoreCard()}
             ${Components.summaryCard({
                 icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
                 iconClass: 'red',
