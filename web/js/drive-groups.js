@@ -84,12 +84,15 @@ const DriveGroups = {
             if (members.length === 0) {
                 html = '<div class="group-member-item"><span class="member-drive" style="opacity:0.6">No drives assigned</span></div>';
             } else {
-                html = members.map(m => `
+                html = members.map(m => {
+                    const alias = this._driveAlias(m.hostname, m.serial_number);
+                    const display = alias ? `${m.hostname} / ${alias} (${m.serial_number})` : `${m.hostname} / ${m.serial_number}`;
+                    return `
                     <div class="group-member-item">
-                        <span class="member-drive">${Utils.escapeHtml(m.hostname)} / ${Utils.escapeHtml(m.serial_number)}</span>
+                        <span class="member-drive">${Utils.escapeHtml(display)}</span>
                         <button class="remove-member" onclick="DriveGroups.unassign('${Utils.escapeJSString(m.hostname)}', '${Utils.escapeJSString(m.serial_number)}')">Remove</button>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
             }
 
             // Add assign dropdown
@@ -108,8 +111,10 @@ const DriveGroups = {
             (server.details?.drives || []).forEach(d => {
                 const serial = d.serial_number || '';
                 if (serial && !assigned.has(`${server.hostname}:${serial}`)) {
+                    const alias = d._alias || '';
                     const model = d.model_name || d.device?.name || serial;
-                    drives.push({ hostname: server.hostname, serial, label: `${server.hostname} / ${model} (${serial})` });
+                    const name = alias || model;
+                    drives.push({ hostname: server.hostname, serial, label: `${server.hostname} / ${name} (${serial})` });
                 }
             });
         });
@@ -219,5 +224,17 @@ const DriveGroups = {
         } catch (_) {
             Utils.toast('Failed to remove drive', 'error');
         }
+    },
+
+    _driveAlias(hostname, serial) {
+        for (const server of (State.data || [])) {
+            if (server.hostname !== hostname) continue;
+            for (const d of (server.details?.drives || [])) {
+                if (d.serial_number === serial) {
+                    return d._alias || '';
+                }
+            }
+        }
+        return '';
     }
 };

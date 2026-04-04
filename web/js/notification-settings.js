@@ -919,6 +919,7 @@ const NotificationSettings = {
         if (!container) return;
 
         try {
+            await this._ensureEventTypeMeta();
             const resp = await API.getGroupEventRulesForService(serviceId);
             this._groupOverrides = resp.ok ? await resp.json() : {};
         } catch (_) {
@@ -983,40 +984,52 @@ const NotificationSettings = {
     },
 
     _groupRuleRows(serviceId, groupId, existingRules, metaMap) {
-        // Show all event types from service rules, with group overrides if they exist
+        // Show all available event types, with group overrides if they exist
         const ruleMap = {};
         existingRules.forEach(r => { ruleMap[r.event_type] = r; });
 
-        // Use the service's event rules as the template
-        const eventTypes = this.eventRules.map(r => r.event_type);
-        if (eventTypes.length === 0) return '<tr><td colspan="3" style="opacity:0.6">No event rules configured</td></tr>';
+        // Use all known event types from metadata (not just service-level rules)
+        const allTypes = this.eventTypeMeta || [];
+        if (allTypes.length === 0) return '<tr><td colspan="3" style="opacity:0.6">No event types available</td></tr>';
 
-        return eventTypes.map(et => {
-            const override = ruleMap[et];
-            const meta = metaMap[et];
-            const label = meta ? meta.label : et;
-            const enabled = override ? override.enabled : true;
-            const cooldown = override ? override.cooldown_secs : 300;
+        // Group by category for readability
+        const categories = {};
+        allTypes.forEach(m => {
+            const cat = m.category || 'Other';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(m);
+        });
 
-            return `
-                <tr>
-                    <td>${Utils.escapeHtml(label)}</td>
-                    <td><input type="checkbox" data-group-rule="${groupId}" data-event-type="${Utils.escapeHtml(et)}" ${enabled ? 'checked' : ''}></td>
-                    <td>
-                        <select class="form-input form-input-sm" data-group-cooldown="${groupId}" data-event-type="${Utils.escapeHtml(et)}">
-                            ${this._cooldownOptions(cooldown)}
-                        </select>
-                    </td>
-                </tr>
-            `;
+        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'System', 'Other'];
+        const sorted = categoryOrder.filter(c => categories[c]);
+
+        return sorted.map(cat => {
+            const rows = categories[cat].map(m => {
+                const override = ruleMap[m.type];
+                const enabled = override ? override.enabled : true;
+                const cooldown = override ? override.cooldown_secs : 300;
+
+                return `
+                    <tr>
+                        <td>${Utils.escapeHtml(m.label)}</td>
+                        <td><input type="checkbox" data-group-rule="${groupId}" data-event-type="${Utils.escapeHtml(m.type)}" ${enabled ? 'checked' : ''}></td>
+                        <td>
+                            <select class="form-input form-input-sm" data-group-cooldown="${groupId}" data-event-type="${Utils.escapeHtml(m.type)}">
+                                ${this._cooldownOptions(cooldown)}
+                            </select>
+                        </td>
+                    </tr>`;
+            }).join('');
+            return `<tr><td colspan="3" style="font-weight:600;padding-top:0.5rem;opacity:0.7">${Utils.escapeHtml(cat)}</td></tr>${rows}`;
         }).join('');
     },
 
     async _addGroupOverride(serviceId, groupId) {
         if (!groupId) return;
-        // Initialize with default rules (all enabled, 5m cooldown)
-        const rules = this.eventRules.map(r => ({
-            event_type: r.event_type,
+        // Initialize with default rules for all event types (all enabled, 5m cooldown)
+        const allTypes = this.eventTypeMeta || [];
+        const rules = allTypes.map(m => ({
+            event_type: m.type,
             enabled: true,
             cooldown_secs: 300
         }));
