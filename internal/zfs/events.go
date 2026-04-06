@@ -27,6 +27,7 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 		return nil
 	}
 
+	poolIDs := make(map[string]int64) // pool name -> pool ID
 	for _, pool := range report.Pools {
 		// Fetch previous pool state before ingest overwrites it
 		var prevPool *ZFSPool
@@ -39,6 +40,7 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 			log.Printf("⚠️  Failed to process pool %s: %v", pool.Name, err)
 			continue
 		}
+		poolIDs[pool.Name] = poolID
 
 		if bus != nil {
 			publishPoolEvents(bus, hostname, pool)
@@ -48,6 +50,14 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 			publishScrubOverdueEvents(bus, db, hostname, pool, poolID)
 			publishScanTransitionEvents(bus, hostname, pool, prevPool)
 		}
+	}
+
+	// Process datasets
+	processDatasets(db, hostname, report.Datasets, poolIDs)
+
+	// Publish dataset quota events
+	if bus != nil {
+		publishDatasetQuotaEvents(bus, db, hostname, report.Datasets, poolIDs)
 	}
 
 	return nil
@@ -287,6 +297,36 @@ func publishScanTransitionEvents(bus *events.Bus, hostname string, pool ZFSAgent
 					"pool_name":     pool.Name,
 					"errors_found":  fmt.Sprintf("%d", pool.Scan.ErrorsFound),
 					"duration_secs": fmt.Sprintf("%d", pool.Scan.Duration),
+				},
+			})
+		}
+	}
+}
+
+// publishDatasetQuotaEvents fires warnings when a dataset with a quota
+// approaches its limit.
+func publishDatasetQuotaEvents(bus *events.Bus, db *sql.DB, hostname string, datasets []ZFSAgentDataset, poolIDs map[string]int64) {
+	quotaWarningPct := settings.GetInt(db, "zfs", "dataset_quota_warning_pct", 85)
+
+	for _, ds := range datasets {
+		if ds.QuotaBytes <= 0 {
+			continue
+		}
+
+		usedPct := int(float64(ds.UsedBytes) / float64(ds.QuotaBytes) * 100)
+		if usedPct >= quotaWarningPct {
+			bus.Publish(events.Event{
+				Type:     events.ZFSDatasetQuotaWarning,
+				Severity: events.SeverityWarning,
+				Hostname: hostname,
+				Message:  fmt.Sprintf("ZFS dataset %q is %d%% of quota", ds.Name, usedPct),
+				Metadata: map[string]string{
+					"dataset_name": ds.Name,
+					"pool_name":    ds.PoolName,
+					"used_pct":     fmt.Sprintf("%d", usedPct),
+					"used_bytes":   fmt.Sprintf("%d", ds.UsedBytes),
+					"quota_bytes":  fmt.Sprintf("%d", ds.QuotaBytes),
+					"threshold":    fmt.Sprintf("%d", quotaWarningPct),
 				},
 			})
 		}

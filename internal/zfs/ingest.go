@@ -12,10 +12,11 @@ import (
 
 // ZFSAgentReport matches the agent's ZFS report structure
 type ZFSAgentReport struct {
-	Hostname  string         `json:"hostname"`
-	Timestamp time.Time      `json:"timestamp"`
-	Available bool           `json:"zfs_available"`
-	Pools     []ZFSAgentPool `json:"pools"`
+	Hostname  string            `json:"hostname"`
+	Timestamp time.Time         `json:"timestamp"`
+	Available bool              `json:"zfs_available"`
+	Pools     []ZFSAgentPool    `json:"pools"`
+	Datasets  []ZFSAgentDataset `json:"datasets,omitempty"`
 }
 
 // ZFSAgentPool represents a pool from the agent report
@@ -34,8 +35,21 @@ type ZFSAgentPool struct {
 	ReadErrors     int64            `json:"read_errors"`
 	WriteErrors    int64            `json:"write_errors"`
 	ChecksumErrors int64            `json:"checksum_errors"`
+	CompressRatio  float64          `json:"compress_ratio"`
 	Scan           *ZFSAgentScan    `json:"scan"`
 	Devices        []ZFSAgentDevice `json:"devices"`
+}
+
+// ZFSAgentDataset represents a dataset from the agent report
+type ZFSAgentDataset struct {
+	Name            string  `json:"name"`
+	PoolName        string  `json:"pool_name"`
+	UsedBytes       int64   `json:"used_bytes"`
+	AvailableBytes  int64   `json:"available_bytes"`
+	ReferencedBytes int64   `json:"referenced_bytes"`
+	Mountpoint      string  `json:"mountpoint"`
+	CompressRatio   float64 `json:"compress_ratio"`
+	QuotaBytes      int64   `json:"quota_bytes"`
 }
 
 // ZFSAgentScan represents scan info from the agent report
@@ -94,11 +108,18 @@ func ProcessZFSReport(db *sql.DB, hostname string, zfsData json.RawMessage) erro
 		return nil
 	}
 
+	poolIDs := make(map[string]int64) // pool name -> pool ID
 	for _, pool := range report.Pools {
-		if _, err := processPool(db, hostname, pool); err != nil {
+		poolID, err := processPool(db, hostname, pool)
+		if err != nil {
 			log.Printf("⚠️  Failed to process pool %s: %v", pool.Name, err)
+			continue
 		}
+		poolIDs[pool.Name] = poolID
 	}
+
+	// Process datasets
+	processDatasets(db, hostname, report.Datasets, poolIDs)
 
 	return nil
 }
@@ -118,6 +139,7 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) (int64, error) 
 		Fragmentation:  pool.Fragmentation,
 		CapacityPct:    pool.CapacityPct,
 		DedupRatio:     pool.DedupRatio,
+		CompressRatio:  pool.CompressRatio,
 		Altroot:        pool.Altroot,
 		ReadErrors:     pool.ReadErrors,
 		WriteErrors:    pool.WriteErrors,
@@ -265,6 +287,50 @@ func shouldRecordScrub(lastScrub *ZFSScrubHistory, scan *ZFSAgentScan) bool {
 	return false
 }
 
+// processDatasets handles incoming dataset data from an agent report
+func processDatasets(db *sql.DB, hostname string, datasets []ZFSAgentDataset, poolIDs map[string]int64) {
+	for _, ds := range datasets {
+		poolID, ok := poolIDs[ds.PoolName]
+		if !ok {
+			// Try to resolve pool name from dataset name (e.g. "tank/data" → "tank")
+			parts := splitDatasetPool(ds.Name)
+			if parts != "" {
+				poolID, ok = poolIDs[parts]
+			}
+			if !ok {
+				continue
+			}
+		}
+
+		dbDS := &ZFSDataset{
+			PoolID:          poolID,
+			Hostname:        hostname,
+			PoolName:        ds.PoolName,
+			DatasetName:     ds.Name,
+			UsedBytes:       ds.UsedBytes,
+			AvailableBytes:  ds.AvailableBytes,
+			ReferencedBytes: ds.ReferencedBytes,
+			Mountpoint:      ds.Mountpoint,
+			CompressRatio:   ds.CompressRatio,
+			QuotaBytes:      ds.QuotaBytes,
+		}
+
+		if _, err := UpsertZFSDataset(db, dbDS); err != nil {
+			log.Printf("⚠️  Failed to upsert dataset %s: %v", ds.Name, err)
+		}
+	}
+}
+
+// splitDatasetPool extracts the pool name from a dataset path (e.g. "tank/data" → "tank")
+func splitDatasetPool(name string) string {
+	for i, c := range name {
+		if c == '/' {
+			return name[:i]
+		}
+	}
+	return name
+}
+
 // ─── Batch Operations ────────────────────────────────────────────────────────
 
 // CleanupStaleZFSData removes old ZFS data not seen in the specified duration
@@ -282,6 +348,12 @@ func CleanupStaleZFSData(db *sql.DB, hostname string, staleDuration time.Duratio
 			log.Printf("⚠️  Failed to cleanup stale devices for pool %s: %v", pool.PoolName, err)
 		} else if deleted > 0 {
 			log.Printf("🧹 Removed %d stale devices from pool %s", deleted, pool.PoolName)
+		}
+
+		if deleted, err := DeleteStaleDatasets(db, pool.ID, cutoff); err != nil {
+			log.Printf("⚠️  Failed to cleanup stale datasets for pool %s: %v", pool.PoolName, err)
+		} else if deleted > 0 {
+			log.Printf("🧹 Removed %d stale datasets from pool %s", deleted, pool.PoolName)
 		}
 	}
 

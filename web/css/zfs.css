@@ -272,6 +272,7 @@
 }
 
 .zfs-frag-info,
+.zfs-compress-info,
 .zfs-dedup-info {
     font-variant-numeric: tabular-nums;
 }
@@ -393,6 +394,97 @@
 .scrub-staleness-fresh { color: var(--success); font-weight: 500; }
 .scrub-staleness-aging { color: var(--warning); font-weight: 500; }
 .scrub-staleness-overdue { color: var(--danger); font-weight: 500; }
+
+/* Datasets Tab */
+
+.zfs-datasets-list {
+    font-size: 0.8rem;
+}
+
+.zfs-datasets-header,
+.zfs-dataset-row {
+    display: grid;
+    grid-template-columns: 2fr 1.2fr 1fr 1fr 0.7fr 1.2fr;
+    gap: 8px;
+    padding: 8px 12px;
+    align-items: center;
+}
+
+.zfs-datasets-header {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.zfs-dataset-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.zfs-dataset-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.zfs-dataset-row.warning {
+    background: rgba(255, 193, 7, 0.05);
+}
+
+.zfs-dataset-row.critical {
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.zfs-ds-col-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.zfs-ds-col-mount {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.zfs-ds-col-used {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.zfs-ds-bar-bg {
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.zfs-ds-bar-fill {
+    display: block;
+    height: 100%;
+    background: var(--primary);
+    border-radius: 2px;
+}
+
+.zfs-ds-quota {
+    display: inline-block;
+    font-size: 0.65rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 4px;
+    background: rgba(255, 193, 7, 0.15);
+    color: var(--warning);
+}
+
+.zfs-dataset-row.critical .zfs-ds-quota {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+}
 
 /* ─── Empty State ─────────────────────────────────────────────────────────── */
 

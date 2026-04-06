@@ -103,6 +103,12 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 		scrubHistory = []zfs.ZFSScrubHistory{}
 	}
 
+	datasets, err := zfs.GetDatasetsByPool(db.DB, pool.ID)
+	if err != nil {
+		log.Printf("⚠️  Failed to get datasets: %v", err)
+		datasets = []zfs.ZFSDataset{}
+	}
+
 	daysSinceLastScrub := -1
 	if !pool.LastScanTime.IsZero() {
 		daysSinceLastScrub = int(time.Since(pool.LastScanTime).Hours() / 24)
@@ -111,6 +117,7 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"pool":                   pool,
 		"devices":               devices,
+		"datasets":              datasets,
 		"scrub_history":         scrubHistory,
 		"days_since_last_scrub": daysSinceLastScrub,
 	}
@@ -496,6 +503,25 @@ func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 	}
 }
 
+// ZFSDatasets returns datasets for a host or pool
+// GET /api/zfs/datasets?hostname=server1
+func ZFSDatasets(w http.ResponseWriter, r *http.Request) {
+	hostname := r.URL.Query().Get("hostname")
+	if hostname == "" {
+		JSONError(w, "hostname parameter required", http.StatusBadRequest)
+		return
+	}
+
+	datasets, err := zfs.GetDatasetsByHostname(db.DB, hostname)
+	if err != nil {
+		log.Printf("❌ Failed to get datasets: %v", err)
+		JSONError(w, "Failed to retrieve datasets", http.StatusInternalServerError)
+		return
+	}
+
+	JSONResponse(w, datasets)
+}
+
 // ─── Route Registration ──────────────────────────────────────────────────────
 
 // RegisterZFSRoutes registers all ZFS API routes
@@ -509,6 +535,8 @@ func RegisterZFSRoutes(mux *http.ServeMux, authMiddleware func(http.HandlerFunc)
 
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}/scrubs", authMiddleware(ZFSScrubHistory))
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}/scrubs/last", authMiddleware(ZFSLastScrub))
+
+	mux.HandleFunc("GET /api/zfs/datasets", authMiddleware(ZFSDatasets))
 
 	mux.HandleFunc("GET /api/zfs/summary", authMiddleware(ZFSPoolSummary))
 	mux.HandleFunc("GET /api/zfs/health", authMiddleware(ZFSHealthCheck))

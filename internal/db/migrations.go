@@ -154,6 +154,30 @@ func MigrateSchemaExtensions(db *sql.DB) error {
 			CREATE INDEX IF NOT EXISTS idx_zfs_dev_serial  ON zfs_pool_devices(serial_number);
 			CREATE INDEX IF NOT EXISTS idx_zfs_dev_state   ON zfs_pool_devices(state);`},
 
+		// ─── zfs_datasets ────────────────────────────────────────────────
+		{"zfs_datasets", `
+			CREATE TABLE IF NOT EXISTS zfs_datasets (
+				id               INTEGER PRIMARY KEY AUTOINCREMENT,
+				pool_id          INTEGER NOT NULL,
+				hostname         TEXT    NOT NULL,
+				pool_name        TEXT    NOT NULL,
+				dataset_name     TEXT    NOT NULL,
+				used_bytes       INTEGER DEFAULT 0,
+				available_bytes  INTEGER DEFAULT 0,
+				referenced_bytes INTEGER DEFAULT 0,
+				mountpoint       TEXT,
+				compress_ratio   REAL    DEFAULT 1.0,
+				quota_bytes      INTEGER DEFAULT 0,
+				last_seen        DATETIME DEFAULT CURRENT_TIMESTAMP,
+				created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+				UNIQUE(pool_id, dataset_name),
+				FOREIGN KEY (pool_id) REFERENCES zfs_pools(id) ON DELETE CASCADE
+			);`},
+		{"zfs_datasets indexes", `
+			CREATE INDEX IF NOT EXISTS idx_zfs_ds_pool     ON zfs_datasets(pool_id);
+			CREATE INDEX IF NOT EXISTS idx_zfs_ds_hostname ON zfs_datasets(hostname);
+			CREATE INDEX IF NOT EXISTS idx_zfs_ds_name     ON zfs_datasets(dataset_name);`},
+
 		// ─── api_tokens ──────────────────────────────────────────────────
 		{"api_tokens", `
 			CREATE TABLE IF NOT EXISTS api_tokens (

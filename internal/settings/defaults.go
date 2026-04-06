@@ -36,6 +36,7 @@ var DefaultSettings = []Setting{
 	{Category: "zfs", Key: "fragmentation_warning_pct", Value: "75", ValueType: "int", Description: "ZFS pool fragmentation warning threshold (%)"},
 	{Category: "zfs", Key: "vdev_error_threshold", Value: "1", ValueType: "int", Description: "Minimum vdev error count to trigger notification"},
 	{Category: "zfs", Key: "scrub_overdue_days", Value: "14", ValueType: "int", Description: "Days since last scrub before triggering overdue alert"},
+	{Category: "zfs", Key: "dataset_quota_warning_pct", Value: "85", ValueType: "int", Description: "Dataset quota usage percentage to trigger warning"},
 
 	// Backup settings
 	{Category: "backup", Key: "enabled", Value: "true", ValueType: "bool", Description: "Enable scheduled database backups"},

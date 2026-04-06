@@ -161,6 +161,7 @@ const ZFS = {
 
                 <div class="zfs-pool-stats">
                     <span class="zfs-frag-info" title="Fragmentation">Frag: ${pool.fragmentation || 0}%</span>
+                    ${(pool.compress_ratio || 1) > 1.00 ? `<span class="zfs-compress-info" title="Compression Ratio">Comp: ${(pool.compress_ratio).toFixed(2)}x</span>` : ''}
                     ${(pool.dedup_ratio || 1) > 1.00 ? `<span class="zfs-dedup-info" title="Dedup Ratio">Dedup: ${(pool.dedup_ratio).toFixed(2)}x</span>` : ''}
                 </div>
 
@@ -224,6 +225,7 @@ const ZFS = {
     renderPoolDetail(detail, hostname) {
         const pool = detail.pool || detail;
         const devices = detail.devices || pool.devices || [];
+        const datasets = detail.datasets || [];
         const scrubHistory = detail.scrub_history || [];
         const poolName = pool.name || pool.pool_name || 'Unknown';
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
@@ -246,6 +248,7 @@ const ZFS = {
             <div class="zfs-detail-tabs">
                 <button class="zfs-tab active" onclick="ZFS.switchTab(this, 'overview')">Overview</button>
                 <button class="zfs-tab" onclick="ZFS.switchTab(this, 'devices')">Devices (${diskCount})</button>
+                ${datasets.length > 0 ? `<button class="zfs-tab" onclick="ZFS.switchTab(this, 'datasets')">Datasets (${datasets.length})</button>` : ''}
                 <button class="zfs-tab" onclick="ZFS.switchTab(this, 'scrubs')">Scrub History</button>
             </div>
 
@@ -256,6 +259,12 @@ const ZFS = {
             <div id="zfs-tab-devices" class="zfs-tab-content">
                 ${this.renderDevicesTab(vdevs, uniqueDisks, hostname)}
             </div>
+
+            ${datasets.length > 0 ? `
+            <div id="zfs-tab-datasets" class="zfs-tab-content">
+                ${this.renderDatasetsTab(datasets)}
+            </div>
+            ` : ''}
 
             <div id="zfs-tab-scrubs" class="zfs-tab-content">
                 ${this.renderScrubsTab(scrubHistory)}
@@ -433,6 +442,10 @@ const ZFS = {
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Fragmentation</span>
                     <span class="zfs-detail-value">${pool.fragmentation || 0}%</span>
+                </div>
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Compression Ratio</span>
+                    <span class="zfs-detail-value">${(pool.compress_ratio || 1).toFixed(2)}x</span>
                 </div>
                 <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Dedup Ratio</span>
@@ -681,6 +694,57 @@ const ZFS = {
                 `).join('')}
             </div>
         `;
+    },
+
+    renderDatasetsTab(datasets) {
+        if (!datasets || datasets.length === 0) {
+            return `<p class="zfs-no-data">No dataset information available</p>`;
+        }
+
+        // Sort by used_bytes descending
+        const sorted = [...datasets].sort((a, b) => (b.used_bytes || 0) - (a.used_bytes || 0));
+        const maxUsed = sorted[0]?.used_bytes || 1;
+
+        return `
+            <div class="zfs-datasets-list">
+                <div class="zfs-datasets-header">
+                    <span class="zfs-ds-col-name">Dataset</span>
+                    <span class="zfs-ds-col-used">Used</span>
+                    <span class="zfs-ds-col-avail">Available</span>
+                    <span class="zfs-ds-col-refer">Referenced</span>
+                    <span class="zfs-ds-col-compress">Compress</span>
+                    <span class="zfs-ds-col-mount">Mountpoint</span>
+                </div>
+                ${sorted.map(ds => {
+                    const barPct = maxUsed > 0 ? Math.max(1, (ds.used_bytes / maxUsed) * 100) : 0;
+                    const quotaPct = ds.quota_bytes > 0 ? Math.round(ds.used_bytes / ds.quota_bytes * 100) : 0;
+                    const quotaClass = quotaPct >= 90 ? 'critical' : quotaPct >= 75 ? 'warning' : '';
+                    return `
+                    <div class="zfs-dataset-row ${quotaClass}">
+                        <span class="zfs-ds-col-name" title="${ds.dataset_name}">
+                            ${this.shortenDatasetName(ds.dataset_name)}
+                            ${ds.quota_bytes > 0 ? `<span class="zfs-ds-quota">${quotaPct}% of quota</span>` : ''}
+                        </span>
+                        <span class="zfs-ds-col-used">
+                            <span class="zfs-ds-bar-bg"><span class="zfs-ds-bar-fill" style="width:${barPct}%"></span></span>
+                            ${this.formatStorageSize(ds.used_bytes)}
+                        </span>
+                        <span class="zfs-ds-col-avail">${this.formatStorageSize(ds.available_bytes)}</span>
+                        <span class="zfs-ds-col-refer">${this.formatStorageSize(ds.referenced_bytes)}</span>
+                        <span class="zfs-ds-col-compress">${(ds.compress_ratio || 1).toFixed(2)}x</span>
+                        <span class="zfs-ds-col-mount" title="${ds.mountpoint || '-'}">${ds.mountpoint || '-'}</span>
+                    </div>`;
+                }).join('')}
+            </div>
+        `;
+    },
+
+    shortenDatasetName(name) {
+        if (!name) return 'Unknown';
+        // Show last two segments for readability (e.g. "pool/parent/child" → "parent/child")
+        const parts = name.split('/');
+        if (parts.length <= 2) return name;
+        return '…/' + parts.slice(-2).join('/');
     },
 
     renderLoadingState() {

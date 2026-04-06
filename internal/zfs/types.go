@@ -18,6 +18,7 @@ type ZFSPool struct {
 	Fragmentation  int       `json:"fragmentation"`
 	CapacityPct    int       `json:"capacity_pct"`
 	DedupRatio     float64   `json:"dedup_ratio"`
+	CompressRatio  float64   `json:"compress_ratio"`
 	Altroot        string    `json:"altroot,omitempty"`
 	ReadErrors     int64     `json:"read_errors"`
 	WriteErrors    int64     `json:"write_errors"`
@@ -83,6 +84,25 @@ type ZFSScrubHistory struct {
 	ProgressPct     float64   `json:"progress_pct"`
 	RateBytesPerSec int64     `json:"rate_bytes_sec"`
 	TimeRemaining   int64     `json:"time_remaining,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// ─── ZFS Dataset Types ──────────────────────────────────────────────────────
+
+// ZFSDataset represents a ZFS dataset snapshot in the database
+type ZFSDataset struct {
+	ID              int64     `json:"id"`
+	PoolID          int64     `json:"pool_id"`
+	Hostname        string    `json:"hostname"`
+	PoolName        string    `json:"pool_name"`
+	DatasetName     string    `json:"dataset_name"`
+	UsedBytes       int64     `json:"used_bytes"`
+	AvailableBytes  int64     `json:"available_bytes"`
+	ReferencedBytes int64     `json:"referenced_bytes"`
+	Mountpoint      string    `json:"mountpoint,omitempty"`
+	CompressRatio   float64   `json:"compress_ratio"`
+	QuotaBytes      int64     `json:"quota_bytes,omitempty"`
+	LastSeen        time.Time `json:"last_seen"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 

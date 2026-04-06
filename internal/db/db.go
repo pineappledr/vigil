@@ -134,4 +134,7 @@ func migrateSchema() {
 	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN scan_speed INTEGER DEFAULT 0")
 	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN scan_errors INTEGER DEFAULT 0")
 	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN scan_time_remaining INTEGER DEFAULT 0")
+
+	// Phase 3: Pool compression ratio
+	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN compress_ratio REAL DEFAULT 1.0")
 }
