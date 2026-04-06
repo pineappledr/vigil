@@ -10,7 +10,10 @@ import (
 
 	"vigil/internal/auth"
 	"vigil/internal/db"
+	"vigil/internal/health"
 	"vigil/internal/models"
+	"vigil/internal/wearout"
+	"vigil/internal/zfs"
 )
 
 // Version is set at build time
@@ -56,9 +59,13 @@ func loadIndex() {
 func preloadJSON() string {
 	type preload struct {
 		History []map[string]interface{} `json:"history"`
+		ZFS     interface{}              `json:"zfs,omitempty"`
+		Wearout interface{}              `json:"wearout,omitempty"`
+		Health  interface{}              `json:"health,omitempty"`
 	}
 	p := preload{History: make([]map[string]interface{}, 0)}
 
+	// ── History ─────────────────────────────────────────────────────────
 	aliases := loadAliases()
 	rows, err := db.DB.Query(`
 		SELECT r.hostname, r.timestamp, r.data,
@@ -100,6 +107,33 @@ func preloadJSON() string {
 			"last_seen": lastSeen,
 			"details":   dataMap,
 		})
+	}
+
+	// ── ZFS Pools ───────────────────────────────────────────────────────
+	if pools, err := zfs.GetAllZFSPools(db.DB); err == nil && len(pools) > 0 {
+		response := make([]ZFSPoolWithCount, len(pools))
+		for i, pool := range pools {
+			response[i].ZFSPool = pool
+			count, err := zfs.CountZFSDisks(db.DB, pool.ID)
+			if err != nil {
+				count = 0
+			}
+			response[i].DeviceCount = count
+		}
+		p.ZFS = response
+	}
+
+	// ── Wearout ─────────────────────────────────────────────────────────
+	if snapshots, err := wearout.GetAllLatestSnapshots(db.DB); err == nil {
+		p.Wearout = map[string]interface{}{
+			"drives": snapshots,
+			"count":  len(snapshots),
+		}
+	}
+
+	// ── Health Score ────────────────────────────────────────────────────
+	if score, err := health.Calculate(db.DB); err == nil {
+		p.Health = score
 	}
 
 	b, _ := json.Marshal(p)

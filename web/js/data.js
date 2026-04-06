@@ -13,7 +13,12 @@ const Data = {
             const preload = window.__VIGIL_PRELOAD__;
             let cache;
             if (preload && Array.isArray(preload.history) && preload.history.length > 0) {
-                cache = { history: preload.history };
+                cache = {
+                    history: preload.history,
+                    zfs: preload.zfs || null,
+                    wearout: preload.wearout?.drives || null,
+                    health: preload.health || null,
+                };
                 console.log('[Data] Using server-preloaded data (' + preload.history.length + ' servers)');
             } else {
                 const raw = localStorage.getItem(this._cacheKey);
