@@ -147,12 +147,12 @@ func GetZFSPoolByID(db *sql.DB, id int64) (*ZFSPool, error) {
 
 // GetZFSPoolsByHostname retrieves all ZFS pools for a hostname
 func GetZFSPoolsByHostname(db *sql.DB, hostname string) ([]ZFSPool, error) {
-	return queryPools(db, "SELECT * FROM zfs_pools WHERE hostname = ? ORDER BY pool_name", hostname)
+	return queryPools(db, "SELECT "+poolColumns+" FROM zfs_pools WHERE hostname = ? ORDER BY pool_name", hostname)
 }
 
 // GetAllZFSPools retrieves all ZFS pools
 func GetAllZFSPools(db *sql.DB) ([]ZFSPool, error) {
-	return queryPools(db, "SELECT * FROM zfs_pools ORDER BY hostname, pool_name")
+	return queryPools(db, "SELECT "+poolColumns+" FROM zfs_pools ORDER BY hostname, pool_name")
 }
 
 // DeleteZFSPool removes a ZFS pool (cascades to devices/scrub history)
@@ -172,6 +172,15 @@ func DeleteStaleZFSPools(db *sql.DB, hostname string, cutoff time.Time) (int64, 
 	}
 	return result.RowsAffected()
 }
+
+// poolColumns is the canonical column list for ZFSPool queries.
+// Must match the Scan order in scanPools.
+const poolColumns = `id, hostname, pool_name, pool_guid, status, health,
+	size_bytes, allocated_bytes, free_bytes,
+	fragmentation, capacity_pct, dedup_ratio, altroot,
+	read_errors, write_errors, checksum_errors,
+	scan_function, scan_state, scan_progress, scan_speed, scan_errors, scan_time_remaining, last_scan_time,
+	last_seen, created_at`
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 

@@ -157,7 +157,7 @@ func GetZFSPoolListItems(db *sql.DB) ([]ZFSPoolListItem, error) {
 // GetPoolsWithErrors returns pools that have errors
 func GetPoolsWithErrors(db *sql.DB) ([]ZFSPool, error) {
 	return queryPools(db, `
-		SELECT * FROM zfs_pools
+		SELECT `+poolColumns+` FROM zfs_pools
 		WHERE read_errors > 0 OR write_errors > 0 OR checksum_errors > 0
 		ORDER BY hostname, pool_name
 	`)
@@ -166,7 +166,7 @@ func GetPoolsWithErrors(db *sql.DB) ([]ZFSPool, error) {
 // GetDegradedPools returns pools with non-ONLINE status
 func GetDegradedPools(db *sql.DB) ([]ZFSPool, error) {
 	return queryPools(db, `
-		SELECT * FROM zfs_pools
+		SELECT `+poolColumns+` FROM zfs_pools
 		WHERE health != 'ONLINE'
 		ORDER BY hostname, pool_name
 	`)
