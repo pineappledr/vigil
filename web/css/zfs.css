@@ -236,6 +236,12 @@
     font-size: 0.8rem;
 }
 
+.zfs-capacity-percent {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-left: 0.15rem;
+}
+
 .zfs-capacity-bar {
     height: 6px;
     background: var(--bg-primary);

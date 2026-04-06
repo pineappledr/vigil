@@ -149,11 +149,12 @@ const ZFS = {
                     <span class="zfs-state-badge ${stateClass}">${state}</span>
                 </div>
 
-                <div class="zfs-pool-capacity" title="${capacity.percent}% used">
+                <div class="zfs-pool-capacity">
                     <div class="zfs-capacity-info">
                         <span class="zfs-capacity-used">${capacity.used}</span>
                         <span class="zfs-capacity-sep">of</span>
                         <span class="zfs-capacity-total">${capacity.total}</span>
+                        <span class="zfs-capacity-percent">(${capacity.percent}%)</span>
                     </div>
                     <div class="zfs-capacity-bar">
                         <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
@@ -168,25 +169,25 @@ const ZFS = {
                 </div>`}
 
                 <div class="zfs-card-footer">
-                    <div class="zfs-card-stat" title="Devices">
+                    <div class="zfs-card-stat" title="${deviceCount} disk${deviceCount !== 1 ? 's' : ''} in pool">
                         ${this.icons.drive}
                         <span>${deviceCount}</span>
                     </div>
-                    <div class="zfs-card-stat ${errors > 0 ? 'has-errors' : ''}" title="Errors">
+                    <div class="zfs-card-stat ${errors > 0 ? 'has-errors' : ''}" title="Pool errors (read + write + checksum): ${errors}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
                         <span>${errors}</span>
                     </div>
-                    <div class="zfs-card-stat" title="Fragmentation">
+                    <div class="zfs-card-stat" title="Fragmentation: ${frag}% — higher values may reduce write performance">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
                         <span>${frag}%</span>
                     </div>
                     ${compRatio > 1.00 ? `
-                    <div class="zfs-card-stat" title="Compression Ratio">
+                    <div class="zfs-card-stat" title="Compression ratio: ${compRatio.toFixed(2)}x — data is stored ${compRatio.toFixed(1)}x more efficiently">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M8 8l4-5 4 5M8 16l4 5 4-5"/></svg>
                         <span>${compRatio.toFixed(1)}x</span>
                     </div>` : ''}
                     ${dedupRatio > 1.00 ? `
-                    <div class="zfs-card-stat" title="Dedup Ratio">
+                    <div class="zfs-card-stat" title="Dedup ratio: ${dedupRatio.toFixed(2)}x — deduplication saves ${((1 - 1/dedupRatio) * 100).toFixed(0)}% space">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
                         <span>${dedupRatio.toFixed(1)}x</span>
                     </div>` : ''}
