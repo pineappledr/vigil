@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"vigil/internal/events"
+	"vigil/internal/settings"
 )
 
 // ProcessZFSReportWithEvents processes a ZFS report and publishes events
@@ -26,7 +28,8 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 	}
 
 	for _, pool := range report.Pools {
-		if err := processPool(db, hostname, pool); err != nil {
+		poolID, err := processPool(db, hostname, pool)
+		if err != nil {
 			log.Printf("⚠️  Failed to process pool %s: %v", pool.Name, err)
 			continue
 		}
@@ -34,6 +37,9 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 		if bus != nil {
 			publishPoolEvents(bus, hostname, pool)
 			publishDeviceEvents(bus, hostname, pool)
+			publishCapacityEvents(bus, db, hostname, pool)
+			publishVdevErrorEvents(bus, db, hostname, pool)
+			publishScrubOverdueEvents(bus, db, hostname, pool, poolID)
 		}
 	}
 
@@ -101,5 +107,118 @@ func publishDeviceRecursive(bus *events.Bus, hostname, poolName string, dev ZFSA
 
 	for _, child := range dev.Children {
 		publishDeviceRecursive(bus, hostname, poolName, child)
+	}
+}
+
+// publishCapacityEvents fires warnings when pool capacity or fragmentation
+// exceeds the configured thresholds.
+func publishCapacityEvents(bus *events.Bus, db *sql.DB, hostname string, pool ZFSAgentPool) {
+	capWarning := settings.GetInt(db, "zfs", "capacity_warning_pct", 80)
+	capCritical := settings.GetInt(db, "zfs", "capacity_critical_pct", 90)
+	fragWarning := settings.GetInt(db, "zfs", "fragmentation_warning_pct", 75)
+
+	if pool.CapacityPct >= capCritical {
+		bus.Publish(events.Event{
+			Type:     events.ZFSCapacityCritical,
+			Severity: events.SeverityCritical,
+			Hostname: hostname,
+			Message:  fmt.Sprintf("ZFS pool %q is %d%% full", pool.Name, pool.CapacityPct),
+			Metadata: map[string]string{
+				"pool_name":    pool.Name,
+				"capacity_pct": fmt.Sprintf("%d", pool.CapacityPct),
+				"threshold":    fmt.Sprintf("%d", capCritical),
+			},
+		})
+	} else if pool.CapacityPct >= capWarning {
+		bus.Publish(events.Event{
+			Type:     events.ZFSCapacityWarning,
+			Severity: events.SeverityWarning,
+			Hostname: hostname,
+			Message:  fmt.Sprintf("ZFS pool %q is %d%% full", pool.Name, pool.CapacityPct),
+			Metadata: map[string]string{
+				"pool_name":    pool.Name,
+				"capacity_pct": fmt.Sprintf("%d", pool.CapacityPct),
+				"threshold":    fmt.Sprintf("%d", capWarning),
+			},
+		})
+	}
+
+	if pool.Fragmentation >= fragWarning {
+		bus.Publish(events.Event{
+			Type:     events.ZFSFragmentationWarning,
+			Severity: events.SeverityWarning,
+			Hostname: hostname,
+			Message:  fmt.Sprintf("ZFS pool %q fragmentation is %d%%", pool.Name, pool.Fragmentation),
+			Metadata: map[string]string{
+				"pool_name":        pool.Name,
+				"fragmentation_pct": fmt.Sprintf("%d", pool.Fragmentation),
+				"threshold":        fmt.Sprintf("%d", fragWarning),
+			},
+		})
+	}
+}
+
+// publishVdevErrorEvents fires warnings when any device in the pool has
+// error counts exceeding the configured threshold.
+func publishVdevErrorEvents(bus *events.Bus, db *sql.DB, hostname string, pool ZFSAgentPool) {
+	threshold := int64(settings.GetInt(db, "zfs", "vdev_error_threshold", 1))
+
+	for _, dev := range pool.Devices {
+		publishVdevErrorRecursive(bus, hostname, pool.Name, dev, threshold)
+	}
+}
+
+func publishVdevErrorRecursive(bus *events.Bus, hostname, poolName string, dev ZFSAgentDevice, threshold int64) {
+	totalErrors := dev.ReadErrors + dev.WriteErrors + dev.ChecksumErrors
+
+	// Only fire for devices with errors above threshold that aren't already
+	// covered by the FAULTED/UNAVAIL/REMOVED state events.
+	if totalErrors >= threshold && dev.State != "FAULTED" && dev.State != "UNAVAIL" && dev.State != "REMOVED" {
+		bus.Publish(events.Event{
+			Type:         events.ZFSVdevErrors,
+			Severity:     events.SeverityWarning,
+			Hostname:     hostname,
+			SerialNumber: dev.SerialNumber,
+			Message: fmt.Sprintf("ZFS device %q in pool %q has errors (R:%d W:%d C:%d)",
+				dev.Name, poolName, dev.ReadErrors, dev.WriteErrors, dev.ChecksumErrors),
+			Metadata: map[string]string{
+				"pool_name":       poolName,
+				"device_name":     dev.Name,
+				"read_errors":     fmt.Sprintf("%d", dev.ReadErrors),
+				"write_errors":    fmt.Sprintf("%d", dev.WriteErrors),
+				"checksum_errors": fmt.Sprintf("%d", dev.ChecksumErrors),
+			},
+		})
+	}
+
+	for _, child := range dev.Children {
+		publishVdevErrorRecursive(bus, hostname, poolName, child, threshold)
+	}
+}
+
+// publishScrubOverdueEvents fires a warning when the pool hasn't been
+// scrubbed within the configured number of days.
+func publishScrubOverdueEvents(bus *events.Bus, db *sql.DB, hostname string, pool ZFSAgentPool, poolID int64) {
+	overdueThreshold := settings.GetInt(db, "zfs", "scrub_overdue_days", 14)
+
+	lastScrub, err := GetLastScrub(db, poolID)
+	if err != nil || lastScrub == nil {
+		// No scrub history — don't alert for pools that have never been scrubbed
+		return
+	}
+
+	daysSince := int(time.Since(lastScrub.EndTime).Hours() / 24)
+	if daysSince > overdueThreshold {
+		bus.Publish(events.Event{
+			Type:     events.ZFSScrubOverdue,
+			Severity: events.SeverityWarning,
+			Hostname: hostname,
+			Message:  fmt.Sprintf("ZFS pool %q last scrub was %d days ago (threshold: %d)", pool.Name, daysSince, overdueThreshold),
+			Metadata: map[string]string{
+				"pool_name":      pool.Name,
+				"days_since":     fmt.Sprintf("%d", daysSince),
+				"threshold_days": fmt.Sprintf("%d", overdueThreshold),
+			},
+		})
 	}
 }

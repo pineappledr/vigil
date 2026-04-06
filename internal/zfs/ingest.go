@@ -95,7 +95,7 @@ func ProcessZFSReport(db *sql.DB, hostname string, zfsData json.RawMessage) erro
 	}
 
 	for _, pool := range report.Pools {
-		if err := processPool(db, hostname, pool); err != nil {
+		if _, err := processPool(db, hostname, pool); err != nil {
 			log.Printf("⚠️  Failed to process pool %s: %v", pool.Name, err)
 		}
 	}
@@ -104,7 +104,7 @@ func ProcessZFSReport(db *sql.DB, hostname string, zfsData json.RawMessage) erro
 }
 
 // processPool handles a single pool from the agent report
-func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) error {
+func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) (int64, error) {
 	// Build pool record
 	dbPool := &ZFSPool{
 		Hostname:       hostname,
@@ -137,7 +137,7 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) error {
 	// Upsert pool
 	poolID, err := UpsertZFSPool(db, dbPool)
 	if err != nil {
-		return fmt.Errorf("upsert pool: %w", err)
+		return 0, fmt.Errorf("upsert pool: %w", err)
 	}
 
 	// Process devices - including children (disks inside mirrors/raidz)
@@ -151,7 +151,7 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) error {
 		processScrubHistory(db, poolID, hostname, pool.Name, pool.Scan)
 	}
 
-	return nil
+	return poolID, nil
 }
 
 // processDeviceRecursive processes a device and all its children

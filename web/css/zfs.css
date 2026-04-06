@@ -262,6 +262,20 @@
 .zfs-capacity-fill.warning { background: var(--warning); }
 .zfs-capacity-fill.critical { background: var(--danger); }
 
+/* ─── Pool Stats (Frag/Dedup) ────────────────────────────────────────────── */
+
+.zfs-pool-stats {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.zfs-frag-info,
+.zfs-dedup-info {
+    font-variant-numeric: tabular-nums;
+}
+
 /* ─── Scrub & Device Info ─────────────────────────────────────────────────── */
 
 .zfs-pool-scrub,
@@ -289,6 +303,27 @@
 .zfs-no-errors {
     color: var(--success);
 }
+
+/* Scrub staleness indicators */
+.zfs-pool-scrub.scrub-fresh { color: var(--success); }
+.zfs-pool-scrub.scrub-fresh svg { color: var(--success); }
+
+.zfs-pool-scrub.scrub-aging { color: var(--warning); }
+.zfs-pool-scrub.scrub-aging svg { color: var(--warning); }
+
+.zfs-pool-scrub.scrub-overdue { color: var(--danger); }
+.zfs-pool-scrub.scrub-overdue svg { color: var(--danger); }
+
+.zfs-pool-scrub.scrub-active { color: var(--info, var(--primary)); }
+.zfs-pool-scrub.scrub-active svg { color: var(--info, var(--primary)); }
+
+.zfs-pool-scrub.scrub-none { color: var(--text-muted); }
+.zfs-pool-scrub.scrub-none svg { color: var(--text-muted); }
+
+/* Detail view scrub staleness */
+.scrub-staleness-fresh { color: var(--success); font-weight: 500; }
+.scrub-staleness-aging { color: var(--warning); font-weight: 500; }
+.scrub-staleness-overdue { color: var(--danger); font-weight: 500; }
 
 /* ─── Empty State ─────────────────────────────────────────────────────────── */
 

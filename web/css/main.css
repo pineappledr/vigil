@@ -379,6 +379,11 @@
     font-family: monospace;
 }
 
+.zfs-vdev-errors.has-errors {
+    color: var(--danger);
+    font-weight: 600;
+}
+
 /* Disk list */
 .zfs-disk-list {
     padding: 8px 0;
@@ -476,6 +481,11 @@
     color: rgba(255, 255, 255, 0.35);
     font-family: monospace;
     white-space: nowrap;
+}
+
+.zfs-disk-errors.has-errors {
+    color: var(--danger);
+    font-weight: 600;
 }
 
 .zfs-no-disks {

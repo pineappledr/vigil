@@ -159,7 +159,12 @@ const ZFS = {
                     </div>
                 </div>
 
-                <div class="zfs-pool-scrub">
+                <div class="zfs-pool-stats">
+                    <span class="zfs-frag-info" title="Fragmentation">Frag: ${pool.fragmentation || 0}%</span>
+                    ${(pool.dedup_ratio || 1) > 1.00 ? `<span class="zfs-dedup-info" title="Dedup Ratio">Dedup: ${(pool.dedup_ratio).toFixed(2)}x</span>` : ''}
+                </div>
+
+                <div class="zfs-pool-scrub scrub-${scrub.staleness}">
                     ${this.icons.scrub}
                     <span class="zfs-scrub-info">${scrub.text}</span>
                 </div>
@@ -222,6 +227,7 @@ const ZFS = {
         const poolName = pool.name || pool.pool_name || 'Unknown';
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const capacity = this.parseCapacity(pool);
+        const daysSinceScrub = detail.days_since_last_scrub;
 
         this._currentHostname = hostname;
 
@@ -243,7 +249,7 @@ const ZFS = {
             </div>
 
             <div id="zfs-tab-overview" class="zfs-tab-content active">
-                ${this.renderOverviewTab(pool, capacity, state, topology, lastScrub)}
+                ${this.renderOverviewTab(pool, capacity, state, topology, lastScrub, daysSinceScrub)}
             </div>
 
             <div id="zfs-tab-devices" class="zfs-tab-content">
@@ -387,7 +393,7 @@ const ZFS = {
         return false;
     },
 
-    renderOverviewTab(pool, capacity, state, topology, lastScrub) {
+    renderOverviewTab(pool, capacity, state, topology, lastScrub, daysSinceScrub) {
         const poolName = pool.name || pool.pool_name || 'Unknown';
         
         return `
@@ -440,6 +446,12 @@ const ZFS = {
                         <span class="zfs-detail-label">Last Scan Date</span>
                         <span class="zfs-detail-value">${this.formatScrubDate(lastScrub.start_time)}</span>
                     </div>
+                    ${daysSinceScrub !== undefined && daysSinceScrub >= 0 ? `
+                    <div class="zfs-detail-row">
+                        <span class="zfs-detail-label">Days Since Scrub</span>
+                        <span class="zfs-detail-value scrub-staleness-${this.getScrubStaleness(daysSinceScrub)}">${daysSinceScrub} day${daysSinceScrub !== 1 ? 's' : ''}</span>
+                    </div>
+                    ` : ''}
                     <div class="zfs-detail-row">
                         <span class="zfs-detail-label">Last Scan Duration</span>
                         <span class="zfs-detail-value">${this.formatDurationLong(lastScrub.duration_secs)}</span>
@@ -555,7 +567,7 @@ const ZFS = {
                     <span class="zfs-vdev-name">${vdevName}</span>
                     <span class="zfs-vdev-type">${vdevType}</span>
                     <span class="zfs-vdev-state ${this.getStateClass(vdevState)}">${vdevState}</span>
-                    <span class="zfs-vdev-errors">R:${vdev.read_errors || 0} W:${vdev.write_errors || 0} C:${vdev.checksum_errors || 0}</span>
+                    <span class="zfs-vdev-errors ${(vdev.read_errors || 0) + (vdev.write_errors || 0) + (vdev.checksum_errors || 0) > 0 ? 'has-errors' : ''}">R:${vdev.read_errors || 0} W:${vdev.write_errors || 0} C:${vdev.checksum_errors || 0}</span>
                 </div>
                 <div class="zfs-disk-list">
                     ${disks.length > 0 
@@ -590,7 +602,7 @@ const ZFS = {
                             ${driveLink ? this.icons.link : ''}
                         </span>
                     ` : ''}
-                    <span class="zfs-disk-errors">R:${disk.read_errors || 0} W:${disk.write_errors || 0} C:${disk.checksum_errors || 0}</span>
+                    <span class="zfs-disk-errors ${(disk.read_errors || 0) + (disk.write_errors || 0) + (disk.checksum_errors || 0) > 0 ? 'has-errors' : ''}">R:${disk.read_errors || 0} W:${disk.write_errors || 0} C:${disk.checksum_errors || 0}</span>
                 </div>
             </div>
         `;
@@ -732,24 +744,40 @@ const ZFS = {
         const scanState = pool.scan_state || '';
         const scanProgress = pool.scan_progress || 0;
         const lastScanTime = pool.last_scan_time || '';
-        
+        const daysSince = pool.days_since_last_scrub;
+
         if (!scanFunction || scanFunction === 'none') {
-            return { text: 'No scrub data', state: null };
+            return { text: 'No scrub data', state: null, staleness: 'none' };
         }
 
         let text = '';
+        let staleness = 'fresh'; // green
         if (scanState === 'finished' || scanState === 'completed') {
-            const date = this.formatScrubDate(lastScanTime);
-            text = date !== 'Unknown' ? `Last: ${date}` : 'Completed';
+            if (daysSince !== undefined && daysSince >= 0) {
+                text = daysSince === 0 ? 'Scrubbed today' : `Last scrub: ${daysSince}d ago`;
+                staleness = this.getScrubStaleness(daysSince);
+            } else {
+                const date = this.formatScrubDate(lastScanTime);
+                text = date !== 'Unknown' ? `Last: ${date}` : 'Completed';
+            }
         } else if (scanState === 'scanning' || scanState === 'in_progress') {
             text = `In progress (${Math.round(scanProgress)}%)`;
+            staleness = 'active';
         } else if (scanState === 'canceled') {
             text = 'Scrub canceled';
+            staleness = 'stale';
         } else {
             text = scanState || 'No scrub data';
+            staleness = 'none';
         }
 
-        return { text, state: scanState };
+        return { text, state: scanState, staleness };
+    },
+
+    getScrubStaleness(days) {
+        if (days <= 7) return 'fresh';    // green
+        if (days <= 14) return 'aging';   // yellow
+        return 'overdue';                  // red
     },
 
     formatStorageSize(size) {

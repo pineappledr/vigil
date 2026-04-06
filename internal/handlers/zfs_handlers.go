@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"vigil/internal/db"
 	"vigil/internal/zfs"
@@ -13,7 +14,8 @@ import (
 // ZFSPoolWithCount extends ZFSPool with device count for list views
 type ZFSPoolWithCount struct {
 	zfs.ZFSPool
-	DeviceCount int `json:"device_count"`
+	DeviceCount        int `json:"device_count"`
+	DaysSinceLastScrub int `json:"days_since_last_scrub"`
 }
 
 // ─── ZFS Pool Endpoints ──────────────────────────────────────────────────────
@@ -54,6 +56,13 @@ func ZFSPools(w http.ResponseWriter, r *http.Request) {
 			count = 0
 		}
 		response[i].DeviceCount = count
+
+		// Compute days since last scrub
+		if !pool.LastScanTime.IsZero() {
+			response[i].DaysSinceLastScrub = int(time.Since(pool.LastScanTime).Hours() / 24)
+		} else {
+			response[i].DaysSinceLastScrub = -1 // never scrubbed
+		}
 	}
 
 	JSONResponse(w, response)
@@ -94,10 +103,16 @@ func ZFSPool(w http.ResponseWriter, r *http.Request) {
 		scrubHistory = []zfs.ZFSScrubHistory{}
 	}
 
+	daysSinceLastScrub := -1
+	if !pool.LastScanTime.IsZero() {
+		daysSinceLastScrub = int(time.Since(pool.LastScanTime).Hours() / 24)
+	}
+
 	response := map[string]interface{}{
-		"pool":          pool,
-		"devices":       devices,
-		"scrub_history": scrubHistory,
+		"pool":                   pool,
+		"devices":               devices,
+		"scrub_history":         scrubHistory,
+		"days_since_last_scrub": daysSinceLastScrub,
 	}
 
 	JSONResponse(w, response)
