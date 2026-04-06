@@ -47,7 +47,11 @@ const Renderer = {
         this._reconcileSummaryCards(summaryCards);
 
         if (!servers || servers.length === 0) {
-            serverList.innerHTML = Components.emptyState('noServers');
+            let emptyType = 'loading';
+            if (State.initialFetchDone) {
+                emptyType = State.historyError ? 'fetchError' : 'noServers';
+            }
+            serverList.innerHTML = Components.emptyState(emptyType);
             return;
         }
 

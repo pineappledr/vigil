@@ -61,11 +61,12 @@ const Data = {
 
     async fetch() {
         let historyOk = false;
+        State.historyError = false;
         let historyData = null, zfsData = null, wearoutData = null, healthData = null;
 
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthResponse, groupsResponse, assignResponse] = await Promise.all([
-                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); return null; }),
+                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); State.historyError = true; return null; }),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
                 API.get('/api/health/score').catch(() => null),
@@ -85,6 +86,12 @@ const Data = {
                 } catch (e) {
                     console.error('[Data] History parse error:', e);
                 }
+            } else if (historyResponse) {
+                console.warn('[Data] History API returned status', historyResponse.status);
+                State.historyError = true;
+            } else {
+                console.warn('[Data] History API unreachable');
+                State.historyError = true;
             }
             State.resolveActiveServer();
 
@@ -152,6 +159,7 @@ const Data = {
         const dataChanged = fingerprint !== this._lastHash;
         this._lastHash = fingerprint;
 
+        State.initialFetchDone = true;
         this.setOnlineStatus(historyOk || State.data.length > 0);
         this.updateLastRefresh();
 
