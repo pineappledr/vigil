@@ -7,11 +7,19 @@ const Data = {
     _lastHash: null,
 
     // Restore cached state and render immediately so the dashboard is never empty.
+    // Prefers server-injected data (instant, always fresh) over localStorage.
     restoreCache() {
         try {
-            const raw = localStorage.getItem(this._cacheKey);
-            if (!raw) return false;
-            const cache = JSON.parse(raw);
+            const preload = window.__VIGIL_PRELOAD__;
+            let cache;
+            if (preload && Array.isArray(preload.history) && preload.history.length > 0) {
+                cache = { history: preload.history };
+                console.log('[Data] Using server-preloaded data (' + preload.history.length + ' servers)');
+            } else {
+                const raw = localStorage.getItem(this._cacheKey);
+                if (!raw) return false;
+                cache = JSON.parse(raw);
+            }
             if (Array.isArray(cache.history) && cache.history.length > 0) {
                 State.data = cache.history;
                 State.resolveActiveServer();
