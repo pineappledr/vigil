@@ -7,11 +7,24 @@ const Data = {
     _lastHash: null,
 
     // Restore cached state and render immediately so the dashboard is never empty.
+    // Prefers server-injected data (instant, always fresh) over localStorage.
     restoreCache() {
         try {
-            const raw = localStorage.getItem(this._cacheKey);
-            if (!raw) return false;
-            const cache = JSON.parse(raw);
+            const preload = window.__VIGIL_PRELOAD__;
+            let cache;
+            if (preload && Array.isArray(preload.history) && preload.history.length > 0) {
+                cache = {
+                    history: preload.history,
+                    zfs: preload.zfs || null,
+                    wearout: preload.wearout?.drives || null,
+                    health: preload.health || null,
+                };
+                console.log('[Data] Using server-preloaded data (' + preload.history.length + ' servers)');
+            } else {
+                const raw = localStorage.getItem(this._cacheKey);
+                if (!raw) return false;
+                cache = JSON.parse(raw);
+            }
             if (Array.isArray(cache.history) && cache.history.length > 0) {
                 State.data = cache.history;
                 State.resolveActiveServer();
@@ -61,11 +74,12 @@ const Data = {
 
     async fetch() {
         let historyOk = false;
+        State.historyError = false;
         let historyData = null, zfsData = null, wearoutData = null, healthData = null;
 
         try {
             const [historyResponse, zfsResponse, wearoutResponse, healthResponse, groupsResponse, assignResponse] = await Promise.all([
-                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); return null; }),
+                API.getHistory().catch(e => { console.warn('[Data] History fetch failed:', e.message); Utils.toast('Failed to fetch server data', 'error'); State.historyError = true; return null; }),
                 API.getZFSPools().catch(() => null),
                 API.get('/api/wearout/all').catch(() => null),
                 API.get('/api/health/score').catch(() => null),
@@ -85,6 +99,12 @@ const Data = {
                 } catch (e) {
                     console.error('[Data] History parse error:', e);
                 }
+            } else if (historyResponse) {
+                console.warn('[Data] History API returned status', historyResponse.status);
+                State.historyError = true;
+            } else {
+                console.warn('[Data] History API unreachable');
+                State.historyError = true;
             }
             State.resolveActiveServer();
 
@@ -152,6 +172,7 @@ const Data = {
         const dataChanged = fingerprint !== this._lastHash;
         this._lastHash = fingerprint;
 
+        State.initialFetchDone = true;
         this.setOnlineStatus(historyOk || State.data.length > 0);
         this.updateLastRefresh();
 

@@ -72,6 +72,7 @@ func createSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_reports_hostname ON reports(hostname);
 	CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_reports_host_ts ON reports(hostname, timestamp);
+	CREATE INDEX IF NOT EXISTS idx_reports_host_id ON reports(hostname, id DESC);
 
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -231,6 +231,11 @@
 .empty-state.success-state svg { opacity: 0.6; color: var(--success); }
 .empty-state.success-state p { color: var(--success); }
 
+.empty-state svg.spin {
+    animation: spin 1.5s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ZFS Pool Modal Styles - Add to your main CSS file
    ═══════════════════════════════════════════════════════════════════════════ */

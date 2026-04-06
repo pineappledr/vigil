@@ -18,6 +18,8 @@ const State = {
     driveGroups: [],
     driveGroupAssignments: {},
     driveGroupMap: {},
+    initialFetchDone: false,
+    historyError: false,
     activeView: 'drives',
     serverSortOrder: 'asc',
 
