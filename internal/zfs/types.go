@@ -18,14 +18,18 @@ type ZFSPool struct {
 	Fragmentation  int       `json:"fragmentation"`
 	CapacityPct    int       `json:"capacity_pct"`
 	DedupRatio     float64   `json:"dedup_ratio"`
+	CompressRatio  float64   `json:"compress_ratio"`
 	Altroot        string    `json:"altroot,omitempty"`
 	ReadErrors     int64     `json:"read_errors"`
 	WriteErrors    int64     `json:"write_errors"`
 	ChecksumErrors int64     `json:"checksum_errors"`
-	ScanFunction   string    `json:"scan_function,omitempty"`
-	ScanState      string    `json:"scan_state,omitempty"`
-	ScanProgress   float64   `json:"scan_progress"`
-	LastScanTime   time.Time `json:"last_scan_time,omitempty"`
+	ScanFunction      string    `json:"scan_function,omitempty"`
+	ScanState         string    `json:"scan_state,omitempty"`
+	ScanProgress      float64   `json:"scan_progress"`
+	ScanSpeed         int64     `json:"scan_speed,omitempty"`
+	ScanErrors        int64     `json:"scan_errors"`
+	ScanTimeRemaining int64     `json:"scan_time_remaining,omitempty"`
+	LastScanTime      time.Time `json:"last_scan_time,omitempty"`
 	LastSeen       time.Time `json:"last_seen"`
 	CreatedAt      time.Time `json:"created_at"`
 }
@@ -83,6 +87,25 @@ type ZFSScrubHistory struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+// ─── ZFS Dataset Types ──────────────────────────────────────────────────────
+
+// ZFSDataset represents a ZFS dataset snapshot in the database
+type ZFSDataset struct {
+	ID              int64     `json:"id"`
+	PoolID          int64     `json:"pool_id"`
+	Hostname        string    `json:"hostname"`
+	PoolName        string    `json:"pool_name"`
+	DatasetName     string    `json:"dataset_name"`
+	UsedBytes       int64     `json:"used_bytes"`
+	AvailableBytes  int64     `json:"available_bytes"`
+	ReferencedBytes int64     `json:"referenced_bytes"`
+	Mountpoint      string    `json:"mountpoint,omitempty"`
+	CompressRatio   float64   `json:"compress_ratio"`
+	QuotaBytes      int64     `json:"quota_bytes,omitempty"`
+	LastSeen        time.Time `json:"last_seen"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
 // ─── ZFS Summary Types ───────────────────────────────────────────────────────
 
 // ZFSPoolSummary provides aggregate ZFS stats for a hostname
@@ -120,20 +143,24 @@ type ZFSPoolWithDevices struct {
 
 // ZFSPoolListItem is a lightweight pool representation for list views
 type ZFSPoolListItem struct {
-	ID             int64   `json:"id"`
-	Hostname       string  `json:"hostname"`
-	PoolName       string  `json:"name"`
-	Status         string  `json:"status"`
-	Health         string  `json:"health"`
-	SizeBytes      int64   `json:"size_bytes"`
-	AllocatedBytes int64   `json:"allocated_bytes"`
-	FreeBytes      int64   `json:"free_bytes"`
-	CapacityPct    int     `json:"capacity_pct"`
-	ReadErrors     int64   `json:"read_errors"`
-	WriteErrors    int64   `json:"write_errors"`
-	ChecksumErrors int64   `json:"checksum_errors"`
-	ScanState      string  `json:"scan_state,omitempty"`
-	ScanProgress   float64 `json:"scan_progress,omitempty"`
-	DeviceCount    int     `json:"device_count"`
-	LastScrub      string  `json:"last_scrub,omitempty"`
+	ID                int64   `json:"id"`
+	Hostname          string  `json:"hostname"`
+	PoolName          string  `json:"name"`
+	Status            string  `json:"status"`
+	Health            string  `json:"health"`
+	SizeBytes         int64   `json:"size_bytes"`
+	AllocatedBytes    int64   `json:"allocated_bytes"`
+	FreeBytes         int64   `json:"free_bytes"`
+	CapacityPct       int     `json:"capacity_pct"`
+	ReadErrors        int64   `json:"read_errors"`
+	WriteErrors       int64   `json:"write_errors"`
+	ChecksumErrors    int64   `json:"checksum_errors"`
+	ScanFunction      string  `json:"scan_function,omitempty"`
+	ScanState         string  `json:"scan_state,omitempty"`
+	ScanProgress      float64 `json:"scan_progress,omitempty"`
+	ScanSpeed         int64   `json:"scan_speed,omitempty"`
+	ScanErrors        int64   `json:"scan_errors"`
+	ScanTimeRemaining int64   `json:"scan_time_remaining,omitempty"`
+	DeviceCount       int     `json:"device_count"`
+	LastScrub         string  `json:"last_scrub,omitempty"`
 }

@@ -125,7 +125,7 @@ const ZFS = {
         const stateClass = this.getStateClass(state);
         const capacity = this.parseCapacity(pool);
         const scrub = this.parseScrub(pool);
-        
+
         // Use device_count from API, or calculate from unique disks
         let deviceCount = pool.device_count;
         if (deviceCount === undefined || deviceCount === 0) {
@@ -133,8 +133,11 @@ const ZFS = {
             const { uniqueDisks } = this.deduplicateDevices(devices);
             deviceCount = uniqueDisks.length;
         }
-        
+
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
+        const frag = pool.fragmentation || 0;
+        const compRatio = pool.compress_ratio || 1;
+        const dedupRatio = pool.dedup_ratio || 1;
 
         return `
             <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
@@ -145,34 +148,49 @@ const ZFS = {
                     </div>
                     <span class="zfs-state-badge ${stateClass}">${state}</span>
                 </div>
-                
+
                 <div class="zfs-pool-capacity">
                     <div class="zfs-capacity-info">
                         <span class="zfs-capacity-used">${capacity.used}</span>
-                        <span class="zfs-capacity-sep">/</span>
+                        <span class="zfs-capacity-sep">of</span>
                         <span class="zfs-capacity-total">${capacity.total}</span>
                         <span class="zfs-capacity-percent">(${capacity.percent}%)</span>
                     </div>
                     <div class="zfs-capacity-bar">
-                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}" 
+                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
                              style="width: ${Math.min(capacity.percent, 100)}%"></div>
                     </div>
                 </div>
 
-                <div class="zfs-pool-scrub">
+                ${scrub.active ? this.renderScanProgressBar(pool) : `
+                <div class="zfs-pool-scrub scrub-${scrub.staleness}">
                     ${this.icons.scrub}
                     <span class="zfs-scrub-info">${scrub.text}</span>
-                </div>
+                </div>`}
 
-                <div class="zfs-pool-devices">
-                    ${this.icons.drive}
-                    <span class="zfs-device-info">
-                        ${deviceCount} device${deviceCount !== 1 ? 's' : ''}
-                        ${errors > 0 
-                            ? `<span class="zfs-error-count">${errors} error${errors !== 1 ? 's' : ''}</span>` 
-                            : '<span class="zfs-no-errors">0 errors</span>'
-                        }
-                    </span>
+                <div class="zfs-card-footer">
+                    <div class="zfs-card-stat" title="${deviceCount} disk${deviceCount !== 1 ? 's' : ''} in pool">
+                        ${this.icons.drive}
+                        <span>${deviceCount}</span>
+                    </div>
+                    <div class="zfs-card-stat ${errors > 0 ? 'has-errors' : ''}" title="Pool errors (read + write + checksum): ${errors}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+                        <span>${errors}</span>
+                    </div>
+                    <div class="zfs-card-stat" title="Fragmentation: ${frag}% — higher values may reduce write performance">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                        <span>${frag}%</span>
+                    </div>
+                    ${compRatio > 1.00 ? `
+                    <div class="zfs-card-stat" title="Compression ratio: ${compRatio.toFixed(2)}x — data is stored ${compRatio.toFixed(1)}x more efficiently">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M8 8l4-5 4 5M8 16l4 5 4-5"/></svg>
+                        <span>${compRatio.toFixed(1)}x</span>
+                    </div>` : ''}
+                    ${dedupRatio > 1.00 ? `
+                    <div class="zfs-card-stat" title="Dedup ratio: ${dedupRatio.toFixed(2)}x — deduplication saves ${((1 - 1/dedupRatio) * 100).toFixed(0)}% space">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+                        <span>${dedupRatio.toFixed(1)}x</span>
+                    </div>` : ''}
                 </div>
             </div>
         `;
@@ -218,10 +236,12 @@ const ZFS = {
     renderPoolDetail(detail, hostname) {
         const pool = detail.pool || detail;
         const devices = detail.devices || pool.devices || [];
+        const datasets = detail.datasets || [];
         const scrubHistory = detail.scrub_history || [];
         const poolName = pool.name || pool.pool_name || 'Unknown';
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const capacity = this.parseCapacity(pool);
+        const daysSinceScrub = detail.days_since_last_scrub;
 
         this._currentHostname = hostname;
 
@@ -239,16 +259,23 @@ const ZFS = {
             <div class="zfs-detail-tabs">
                 <button class="zfs-tab active" onclick="ZFS.switchTab(this, 'overview')">Overview</button>
                 <button class="zfs-tab" onclick="ZFS.switchTab(this, 'devices')">Devices (${diskCount})</button>
+                ${datasets.length > 0 ? `<button class="zfs-tab" onclick="ZFS.switchTab(this, 'datasets')">Datasets (${datasets.length})</button>` : ''}
                 <button class="zfs-tab" onclick="ZFS.switchTab(this, 'scrubs')">Scrub History</button>
             </div>
 
             <div id="zfs-tab-overview" class="zfs-tab-content active">
-                ${this.renderOverviewTab(pool, capacity, state, topology, lastScrub)}
+                ${this.renderOverviewTab(pool, capacity, state, topology, lastScrub, daysSinceScrub)}
             </div>
 
             <div id="zfs-tab-devices" class="zfs-tab-content">
                 ${this.renderDevicesTab(vdevs, uniqueDisks, hostname)}
             </div>
+
+            ${datasets.length > 0 ? `
+            <div id="zfs-tab-datasets" class="zfs-tab-content">
+                ${this.renderDatasetsTab(datasets)}
+            </div>
+            ` : ''}
 
             <div id="zfs-tab-scrubs" class="zfs-tab-content">
                 ${this.renderScrubsTab(scrubHistory)}
@@ -387,7 +414,7 @@ const ZFS = {
         return false;
     },
 
-    renderOverviewTab(pool, capacity, state, topology, lastScrub) {
+    renderOverviewTab(pool, capacity, state, topology, lastScrub, daysSinceScrub) {
         const poolName = pool.name || pool.pool_name || 'Unknown';
         
         return `
@@ -428,11 +455,31 @@ const ZFS = {
                     <span class="zfs-detail-value">${pool.fragmentation || 0}%</span>
                 </div>
                 <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Compression Ratio</span>
+                    <span class="zfs-detail-value">${(pool.compress_ratio || 1).toFixed(2)}x</span>
+                </div>
+                <div class="zfs-detail-row">
                     <span class="zfs-detail-label">Dedup Ratio</span>
                     <span class="zfs-detail-value">${(pool.dedup_ratio || 1).toFixed(2)}x</span>
                 </div>
             </div>
             
+            ${(pool.scan_state === 'scanning' || pool.scan_state === 'in_progress') ? `
+            <div class="zfs-overview-section">
+                <h4>Active Scan</h4>
+                ${this.renderScanProgressBar(pool)}
+                <div class="zfs-detail-row" style="margin-top: 8px">
+                    <span class="zfs-detail-label">Type</span>
+                    <span class="zfs-detail-value">${(pool.scan_function || 'scrub').charAt(0).toUpperCase() + (pool.scan_function || 'scrub').slice(1)}</span>
+                </div>
+                ${pool.scan_errors > 0 ? `
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Errors Found</span>
+                    <span class="zfs-detail-value error-text">${pool.scan_errors}</span>
+                </div>` : ''}
+            </div>
+            ` : ''}
+
             <div class="zfs-overview-section">
                 <h4>Last Scan</h4>
                 ${lastScrub ? `
@@ -440,6 +487,12 @@ const ZFS = {
                         <span class="zfs-detail-label">Last Scan Date</span>
                         <span class="zfs-detail-value">${this.formatScrubDate(lastScrub.start_time)}</span>
                     </div>
+                    ${daysSinceScrub !== undefined && daysSinceScrub >= 0 ? `
+                    <div class="zfs-detail-row">
+                        <span class="zfs-detail-label">Days Since Scrub</span>
+                        <span class="zfs-detail-value scrub-staleness-${this.getScrubStaleness(daysSinceScrub)}">${daysSinceScrub} day${daysSinceScrub !== 1 ? 's' : ''}</span>
+                    </div>
+                    ` : ''}
                     <div class="zfs-detail-row">
                         <span class="zfs-detail-label">Last Scan Duration</span>
                         <span class="zfs-detail-value">${this.formatDurationLong(lastScrub.duration_secs)}</span>
@@ -555,7 +608,7 @@ const ZFS = {
                     <span class="zfs-vdev-name">${vdevName}</span>
                     <span class="zfs-vdev-type">${vdevType}</span>
                     <span class="zfs-vdev-state ${this.getStateClass(vdevState)}">${vdevState}</span>
-                    <span class="zfs-vdev-errors">R:${vdev.read_errors || 0} W:${vdev.write_errors || 0} C:${vdev.checksum_errors || 0}</span>
+                    <span class="zfs-vdev-errors ${(vdev.read_errors || 0) + (vdev.write_errors || 0) + (vdev.checksum_errors || 0) > 0 ? 'has-errors' : ''}">R:${vdev.read_errors || 0} W:${vdev.write_errors || 0} C:${vdev.checksum_errors || 0}</span>
                 </div>
                 <div class="zfs-disk-list">
                     ${disks.length > 0 
@@ -590,7 +643,7 @@ const ZFS = {
                             ${driveLink ? this.icons.link : ''}
                         </span>
                     ` : ''}
-                    <span class="zfs-disk-errors">R:${disk.read_errors || 0} W:${disk.write_errors || 0} C:${disk.checksum_errors || 0}</span>
+                    <span class="zfs-disk-errors ${(disk.read_errors || 0) + (disk.write_errors || 0) + (disk.checksum_errors || 0) > 0 ? 'has-errors' : ''}">R:${disk.read_errors || 0} W:${disk.write_errors || 0} C:${disk.checksum_errors || 0}</span>
                 </div>
             </div>
         `;
@@ -640,7 +693,8 @@ const ZFS = {
                 ${history.map(scrub => `
                     <div class="zfs-scrub-item ${scrub.errors_found > 0 ? 'has-errors' : ''}">
                         <div class="zfs-scrub-main">
-                            <span class="zfs-scrub-date">${this.formatScrubDate(scrub.start_time)}</span>
+                            <span class="zfs-scrub-date">${this.formatScrubDate(scrub.start_time || scrub.end_time || scrub.created_at)}</span>
+                            <span class="zfs-scrub-type">${(scrub.scan_type || 'scrub').charAt(0).toUpperCase() + (scrub.scan_type || 'scrub').slice(1)}</span>
                         </div>
                         <div class="zfs-scrub-stats">
                             <span class="zfs-scrub-duration">${this.formatDurationLong(scrub.duration_secs)}</span>
@@ -652,6 +706,57 @@ const ZFS = {
                 `).join('')}
             </div>
         `;
+    },
+
+    renderDatasetsTab(datasets) {
+        if (!datasets || datasets.length === 0) {
+            return `<p class="zfs-no-data">No dataset information available</p>`;
+        }
+
+        // Sort by used_bytes descending
+        const sorted = [...datasets].sort((a, b) => (b.used_bytes || 0) - (a.used_bytes || 0));
+        const maxUsed = sorted[0]?.used_bytes || 1;
+
+        return `
+            <div class="zfs-datasets-list">
+                <div class="zfs-datasets-header">
+                    <span class="zfs-ds-col-name">Dataset</span>
+                    <span class="zfs-ds-col-used">Used</span>
+                    <span class="zfs-ds-col-avail">Available</span>
+                    <span class="zfs-ds-col-refer">Referenced</span>
+                    <span class="zfs-ds-col-compress">Compress</span>
+                    <span class="zfs-ds-col-mount">Mountpoint</span>
+                </div>
+                ${sorted.map(ds => {
+                    const barPct = maxUsed > 0 ? Math.max(1, (ds.used_bytes / maxUsed) * 100) : 0;
+                    const quotaPct = ds.quota_bytes > 0 ? Math.round(ds.used_bytes / ds.quota_bytes * 100) : 0;
+                    const quotaClass = quotaPct >= 90 ? 'critical' : quotaPct >= 75 ? 'warning' : '';
+                    return `
+                    <div class="zfs-dataset-row ${quotaClass}">
+                        <span class="zfs-ds-col-name" title="${ds.dataset_name}">
+                            ${this.shortenDatasetName(ds.dataset_name)}
+                            ${ds.quota_bytes > 0 ? `<span class="zfs-ds-quota">${quotaPct}% of quota</span>` : ''}
+                        </span>
+                        <span class="zfs-ds-col-used">
+                            <span class="zfs-ds-bar-bg"><span class="zfs-ds-bar-fill" style="width:${barPct}%"></span></span>
+                            ${this.formatStorageSize(ds.used_bytes)}
+                        </span>
+                        <span class="zfs-ds-col-avail">${this.formatStorageSize(ds.available_bytes)}</span>
+                        <span class="zfs-ds-col-refer">${this.formatStorageSize(ds.referenced_bytes)}</span>
+                        <span class="zfs-ds-col-compress">${(ds.compress_ratio || 1).toFixed(2)}x</span>
+                        <span class="zfs-ds-col-mount" title="${ds.mountpoint || '-'}">${ds.mountpoint || '-'}</span>
+                    </div>`;
+                }).join('')}
+            </div>
+        `;
+    },
+
+    shortenDatasetName(name) {
+        if (!name) return 'Unknown';
+        // Show last two segments for readability (e.g. "pool/parent/child" → "parent/child")
+        const parts = name.split('/');
+        if (parts.length <= 2) return name;
+        return '…/' + parts.slice(-2).join('/');
     },
 
     renderLoadingState() {
@@ -732,24 +837,76 @@ const ZFS = {
         const scanState = pool.scan_state || '';
         const scanProgress = pool.scan_progress || 0;
         const lastScanTime = pool.last_scan_time || '';
-        
+        const daysSince = pool.days_since_last_scrub;
+
         if (!scanFunction || scanFunction === 'none') {
-            return { text: 'No scrub data', state: null };
+            return { text: 'No scrub data', state: null, staleness: 'none', active: false };
         }
 
         let text = '';
+        let staleness = 'fresh'; // green
+        let active = false;
         if (scanState === 'finished' || scanState === 'completed') {
-            const date = this.formatScrubDate(lastScanTime);
-            text = date !== 'Unknown' ? `Last: ${date}` : 'Completed';
+            if (daysSince !== undefined && daysSince >= 0) {
+                text = daysSince === 0 ? 'Scrubbed today' : `Last scrub: ${daysSince}d ago`;
+                staleness = this.getScrubStaleness(daysSince);
+            } else {
+                const date = this.formatScrubDate(lastScanTime);
+                text = date !== 'Unknown' ? `Last: ${date}` : 'Completed';
+            }
         } else if (scanState === 'scanning' || scanState === 'in_progress') {
             text = `In progress (${Math.round(scanProgress)}%)`;
+            staleness = 'active';
+            active = true;
         } else if (scanState === 'canceled') {
             text = 'Scrub canceled';
+            staleness = 'stale';
         } else {
             text = scanState || 'No scrub data';
+            staleness = 'none';
         }
 
-        return { text, state: scanState };
+        return { text, state: scanState, staleness, active };
+    },
+
+    getScrubStaleness(days) {
+        if (days <= 7) return 'fresh';    // green
+        if (days <= 14) return 'aging';   // yellow
+        return 'overdue';                  // red
+    },
+
+    renderScanProgressBar(pool) {
+        const scanFunc = pool.scan_function || 'scrub';
+        const isResilver = scanFunc === 'resilver';
+        const pct = Math.round(pool.scan_progress || 0);
+        const speed = pool.scan_speed || 0;
+        const eta = pool.scan_time_remaining || 0;
+        const colorClass = isResilver ? 'resilver' : 'scrub';
+        const label = isResilver ? 'Resilver' : 'Scrub';
+
+        let etaText = '';
+        if (eta > 0) {
+            const h = Math.floor(eta / 3600);
+            const m = Math.floor((eta % 3600) / 60);
+            etaText = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+        }
+
+        let speedText = '';
+        if (speed > 0) {
+            speedText = this.formatStorageSize(speed) + '/s';
+        }
+
+        return `
+            <div class="zfs-scan-progress scan-${colorClass}">
+                <div class="zfs-scan-header">
+                    <span class="zfs-scan-label">${label}: ${pct}%</span>
+                    <span class="zfs-scan-eta">${[speedText, etaText].filter(Boolean).join(' · ')}</span>
+                </div>
+                <div class="zfs-scan-bar">
+                    <div class="zfs-scan-fill scan-${colorClass}" style="width: ${Math.min(pct, 100)}%"></div>
+                </div>
+            </div>
+        `;
     },
 
     formatStorageSize(size) {

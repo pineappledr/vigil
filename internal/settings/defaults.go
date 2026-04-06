@@ -30,6 +30,14 @@ var DefaultSettings = []Setting{
 	{Category: "retention", Key: "host_history_limit", Value: "50", ValueType: "int", Description: "Maximum report history entries per host"},
 	{Category: "retention", Key: "notification_display_limit", Value: "50", ValueType: "int", Description: "Default number of notification history entries to display"},
 
+	// ZFS settings
+	{Category: "zfs", Key: "capacity_warning_pct", Value: "80", ValueType: "int", Description: "ZFS pool capacity warning threshold (%)"},
+	{Category: "zfs", Key: "capacity_critical_pct", Value: "90", ValueType: "int", Description: "ZFS pool capacity critical threshold (%)"},
+	{Category: "zfs", Key: "fragmentation_warning_pct", Value: "75", ValueType: "int", Description: "ZFS pool fragmentation warning threshold (%)"},
+	{Category: "zfs", Key: "vdev_error_threshold", Value: "1", ValueType: "int", Description: "Minimum vdev error count to trigger notification"},
+	{Category: "zfs", Key: "scrub_overdue_days", Value: "14", ValueType: "int", Description: "Days since last scrub before triggering overdue alert"},
+	{Category: "zfs", Key: "dataset_quota_warning_pct", Value: "85", ValueType: "int", Description: "Dataset quota usage percentage to trigger warning"},
+
 	// Backup settings
 	{Category: "backup", Key: "enabled", Value: "true", ValueType: "bool", Description: "Enable scheduled database backups"},
 	{Category: "backup", Key: "interval_hours", Value: "24", ValueType: "int", Description: "Hours between automatic backups"},

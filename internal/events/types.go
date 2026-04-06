@@ -11,9 +11,18 @@ const (
 	SmartCritical      EventType = "smart_critical"
 	TempAlert          EventType = "temp_alert"
 	TempCritical       EventType = "temp_critical"
-	ZFSPoolDegraded    EventType = "zfs_pool_degraded"
-	ZFSPoolFaulted     EventType = "zfs_pool_faulted"
-	ZFSDeviceFailed    EventType = "zfs_device_failed"
+	ZFSPoolDegraded            EventType = "zfs_pool_degraded"
+	ZFSPoolFaulted             EventType = "zfs_pool_faulted"
+	ZFSDeviceFailed            EventType = "zfs_device_failed"
+	ZFSCapacityWarning         EventType = "zfs_capacity_warning"
+	ZFSCapacityCritical        EventType = "zfs_capacity_critical"
+	ZFSFragmentationWarning    EventType = "zfs_fragmentation_warning"
+	ZFSVdevErrors              EventType = "zfs_vdev_errors"
+	ZFSScrubOverdue            EventType = "zfs_scrub_overdue"
+	ZFSResilverStarted         EventType = "zfs_resilver_started"
+	ZFSScrubCompleted          EventType = "zfs_scrub_completed"
+	ZFSResilverCompleted       EventType = "zfs_resilver_completed"
+	ZFSDatasetQuotaWarning     EventType = "zfs_dataset_quota_warning"
 	DriveAppeared      EventType = "drive_appeared"
 	DriveDisappeared   EventType = "drive_disappeared"
 	ReallocatedSectors EventType = "reallocated_sectors"
@@ -71,6 +80,9 @@ var AllEventTypes = []EventType{
 	// Monitoring
 	SmartWarning, SmartCritical, TempAlert, TempCritical,
 	ZFSPoolDegraded, ZFSPoolFaulted, ZFSDeviceFailed,
+	ZFSCapacityWarning, ZFSCapacityCritical, ZFSFragmentationWarning,
+	ZFSVdevErrors, ZFSScrubOverdue,
+	ZFSResilverStarted, ZFSScrubCompleted, ZFSResilverCompleted, ZFSDatasetQuotaWarning,
 	DriveAppeared, DriveDisappeared, ReallocatedSectors,
 	WearoutWarning, WearoutCritical, WearoutPredicted,
 	// Add-on / job
@@ -92,6 +104,15 @@ var AllEventTypeMeta = []EventTypeMeta{
 	{ZFSPoolDegraded, CategoryMonitoring, "ZFS Pool Degraded", SeverityWarning, 300, true},
 	{ZFSPoolFaulted, CategoryMonitoring, "ZFS Pool Faulted", SeverityCritical, 86400, true},
 	{ZFSDeviceFailed, CategoryMonitoring, "ZFS Device Failed", SeverityCritical, 86400, true},
+	{ZFSCapacityWarning, CategoryMonitoring, "ZFS Pool Capacity Warning", SeverityWarning, 3600, true},
+	{ZFSCapacityCritical, CategoryMonitoring, "ZFS Pool Capacity Critical", SeverityCritical, 86400, true},
+	{ZFSFragmentationWarning, CategoryMonitoring, "ZFS Pool Fragmentation", SeverityWarning, 86400, true},
+	{ZFSVdevErrors, CategoryMonitoring, "ZFS Vdev Errors", SeverityWarning, 3600, true},
+	{ZFSScrubOverdue, CategoryMonitoring, "ZFS Scrub Overdue", SeverityWarning, 86400, true},
+	{ZFSResilverStarted, CategoryMonitoring, "ZFS Resilver Started", SeverityWarning, 0, true},
+	{ZFSScrubCompleted, CategoryMonitoring, "ZFS Scrub Completed", SeverityInfo, 0, true},
+	{ZFSResilverCompleted, CategoryMonitoring, "ZFS Resilver Completed", SeverityInfo, 0, true},
+	{ZFSDatasetQuotaWarning, CategoryMonitoring, "ZFS Dataset Quota Warning", SeverityWarning, 3600, true},
 	{DriveAppeared, CategoryMonitoring, "Drive Appeared", SeverityInfo, 0, true},
 	{DriveDisappeared, CategoryMonitoring, "Drive Disappeared", SeverityWarning, 0, true},
 	{ReallocatedSectors, CategoryMonitoring, "Reallocated Sectors", SeverityWarning, 86400, true},

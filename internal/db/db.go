@@ -129,4 +129,12 @@ func OpenValidate(path string) (*sql.DB, error) {
 func migrateSchema() {
 	// Add must_change_password column if it doesn't exist
 	DB.Exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
+
+	// Phase 2: Active scan progress columns on zfs_pools
+	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN scan_speed INTEGER DEFAULT 0")
+	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN scan_errors INTEGER DEFAULT 0")
+	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN scan_time_remaining INTEGER DEFAULT 0")
+
+	// Phase 3: Pool compression ratio
+	DB.Exec("ALTER TABLE zfs_pools ADD COLUMN compress_ratio REAL DEFAULT 1.0")
 }
