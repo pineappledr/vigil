@@ -221,6 +221,11 @@ func main() {
 	handlers.Metrics = m
 	handlers.DBPath = cfg.DBPath
 
+	// Sync event rules so existing services pick up newly added event types.
+	if err := notify.SyncEventRules(db.DB, events.AllEventTypeMeta); err != nil {
+		log.Printf("⚠️  Failed to sync event rules: %v", err)
+	}
+
 	// Wire notification dispatch to event bus
 	dispatcher := notify.NewDispatcher(db.DB, eventBus, nil)
 	dispatcher.OnSent = func() { m.NotificationsSent.Add(1) }

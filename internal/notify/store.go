@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"vigil/internal/events"
 )
 
 const timeFormat = "2006-01-02 15:04:05"
@@ -153,6 +155,44 @@ func GetEventRules(db *sql.DB, serviceID int64) ([]EventRule, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// SyncEventRules ensures every enabled service has a rule for every known
+// event type. New event types added after the service was created get
+// inserted with their defaults; existing rules are left untouched.
+func SyncEventRules(db *sql.DB, allMeta []events.EventTypeMeta) error {
+	services, err := ListEnabledServices(db)
+	if err != nil {
+		return fmt.Errorf("sync event rules: list services: %w", err)
+	}
+
+	for _, svc := range services {
+		existing, err := GetEventRules(db, svc.ID)
+		if err != nil {
+			return fmt.Errorf("sync event rules: get rules for service %d: %w", svc.ID, err)
+		}
+
+		have := make(map[string]bool, len(existing))
+		for _, r := range existing {
+			have[r.EventType] = true
+		}
+
+		for _, meta := range allMeta {
+			if have[string(meta.Type)] {
+				continue
+			}
+			rule := &EventRule{
+				ServiceID: svc.ID,
+				EventType: string(meta.Type),
+				Enabled:   meta.DefaultEnabled,
+				Cooldown:  meta.DefaultCooldown,
+			}
+			if err := UpsertEventRule(db, rule); err != nil {
+				return fmt.Errorf("sync event rules: insert %s for service %d: %w", meta.Type, svc.ID, err)
+			}
+		}
+	}
+	return nil
 }
 
 // DeleteEventRule removes a specific event rule.
