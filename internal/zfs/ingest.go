@@ -129,6 +129,9 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) (int64, error) 
 		dbPool.ScanFunction = pool.Scan.Function
 		dbPool.ScanState = pool.Scan.State
 		dbPool.ScanProgress = pool.Scan.ProgressPct
+		dbPool.ScanSpeed = pool.Scan.Rate
+		dbPool.ScanErrors = pool.Scan.ErrorsFound
+		dbPool.ScanTimeRemaining = pool.Scan.TimeRemaining
 		if !pool.Scan.StartTime.IsZero() {
 			dbPool.LastScanTime = pool.Scan.StartTime
 		}

@@ -30,15 +30,15 @@ func UpsertZFSPool(db *sql.DB, pool *ZFSPool) (int64, error) {
 				size_bytes, allocated_bytes, free_bytes,
 				fragmentation, capacity_pct, dedup_ratio, altroot,
 				read_errors, write_errors, checksum_errors,
-				scan_function, scan_state, scan_progress, last_scan_time,
+				scan_function, scan_state, scan_progress, scan_speed, scan_errors, scan_time_remaining, last_scan_time,
 				last_seen, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
 			pool.Hostname, pool.PoolName, pool.PoolGUID, pool.Status, pool.Health,
 			pool.SizeBytes, pool.AllocatedBytes, pool.FreeBytes,
 			pool.Fragmentation, pool.CapacityPct, pool.DedupRatio, pool.Altroot,
 			pool.ReadErrors, pool.WriteErrors, pool.ChecksumErrors,
-			pool.ScanFunction, pool.ScanState, pool.ScanProgress, nullTimeString(pool.LastScanTime),
+			pool.ScanFunction, pool.ScanState, pool.ScanProgress, pool.ScanSpeed, pool.ScanErrors, pool.ScanTimeRemaining, nullTimeString(pool.LastScanTime),
 			now, now,
 		)
 		if err != nil {
@@ -54,7 +54,7 @@ func UpsertZFSPool(db *sql.DB, pool *ZFSPool) (int64, error) {
 			size_bytes = ?, allocated_bytes = ?, free_bytes = ?,
 			fragmentation = ?, capacity_pct = ?, dedup_ratio = ?, altroot = ?,
 			read_errors = ?, write_errors = ?, checksum_errors = ?,
-			scan_function = ?, scan_state = ?, scan_progress = ?, last_scan_time = ?,
+			scan_function = ?, scan_state = ?, scan_progress = ?, scan_speed = ?, scan_errors = ?, scan_time_remaining = ?, last_scan_time = ?,
 			last_seen = ?
 		WHERE id = ?
 	`,
@@ -62,7 +62,7 @@ func UpsertZFSPool(db *sql.DB, pool *ZFSPool) (int64, error) {
 		pool.SizeBytes, pool.AllocatedBytes, pool.FreeBytes,
 		pool.Fragmentation, pool.CapacityPct, pool.DedupRatio, pool.Altroot,
 		pool.ReadErrors, pool.WriteErrors, pool.ChecksumErrors,
-		pool.ScanFunction, pool.ScanState, pool.ScanProgress, nullTimeString(pool.LastScanTime),
+		pool.ScanFunction, pool.ScanState, pool.ScanProgress, pool.ScanSpeed, pool.ScanErrors, pool.ScanTimeRemaining, nullTimeString(pool.LastScanTime),
 		now, existingID,
 	)
 	if err != nil {
@@ -82,7 +82,7 @@ func GetZFSPool(db *sql.DB, hostname, poolName string) (*ZFSPool, error) {
 			size_bytes, allocated_bytes, free_bytes,
 			fragmentation, capacity_pct, dedup_ratio, altroot,
 			read_errors, write_errors, checksum_errors,
-			scan_function, scan_state, scan_progress, last_scan_time,
+			scan_function, scan_state, scan_progress, scan_speed, scan_errors, scan_time_remaining, last_scan_time,
 			last_seen, created_at
 		FROM zfs_pools
 		WHERE hostname = ? AND pool_name = ?
@@ -91,7 +91,7 @@ func GetZFSPool(db *sql.DB, hostname, poolName string) (*ZFSPool, error) {
 		&pool.SizeBytes, &pool.AllocatedBytes, &pool.FreeBytes,
 		&pool.Fragmentation, &pool.CapacityPct, &pool.DedupRatio, &pool.Altroot,
 		&pool.ReadErrors, &pool.WriteErrors, &pool.ChecksumErrors,
-		&pool.ScanFunction, &pool.ScanState, &pool.ScanProgress, &lastScanTime,
+		&pool.ScanFunction, &pool.ScanState, &pool.ScanProgress, &pool.ScanSpeed, &pool.ScanErrors, &pool.ScanTimeRemaining, &lastScanTime,
 		&lastSeen, &createdAt,
 	)
 
@@ -119,7 +119,7 @@ func GetZFSPoolByID(db *sql.DB, id int64) (*ZFSPool, error) {
 			size_bytes, allocated_bytes, free_bytes,
 			fragmentation, capacity_pct, dedup_ratio, altroot,
 			read_errors, write_errors, checksum_errors,
-			scan_function, scan_state, scan_progress, last_scan_time,
+			scan_function, scan_state, scan_progress, scan_speed, scan_errors, scan_time_remaining, last_scan_time,
 			last_seen, created_at
 		FROM zfs_pools WHERE id = ?
 	`, id).Scan(
@@ -127,7 +127,7 @@ func GetZFSPoolByID(db *sql.DB, id int64) (*ZFSPool, error) {
 		&pool.SizeBytes, &pool.AllocatedBytes, &pool.FreeBytes,
 		&pool.Fragmentation, &pool.CapacityPct, &pool.DedupRatio, &pool.Altroot,
 		&pool.ReadErrors, &pool.WriteErrors, &pool.ChecksumErrors,
-		&pool.ScanFunction, &pool.ScanState, &pool.ScanProgress, &lastScanTime,
+		&pool.ScanFunction, &pool.ScanState, &pool.ScanProgress, &pool.ScanSpeed, &pool.ScanErrors, &pool.ScanTimeRemaining, &lastScanTime,
 		&lastSeen, &createdAt,
 	)
 
@@ -197,7 +197,7 @@ func scanPools(rows *sql.Rows) ([]ZFSPool, error) {
 			&pool.SizeBytes, &pool.AllocatedBytes, &pool.FreeBytes,
 			&pool.Fragmentation, &pool.CapacityPct, &pool.DedupRatio, &pool.Altroot,
 			&pool.ReadErrors, &pool.WriteErrors, &pool.ChecksumErrors,
-			&pool.ScanFunction, &pool.ScanState, &pool.ScanProgress, &lastScanTime,
+			&pool.ScanFunction, &pool.ScanState, &pool.ScanProgress, &pool.ScanSpeed, &pool.ScanErrors, &pool.ScanTimeRemaining, &lastScanTime,
 			&lastSeen, &createdAt,
 		)
 		if err != nil {

@@ -28,6 +28,12 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 	}
 
 	for _, pool := range report.Pools {
+		// Fetch previous pool state before ingest overwrites it
+		var prevPool *ZFSPool
+		if bus != nil {
+			prevPool, _ = GetZFSPool(db, hostname, pool.Name)
+		}
+
 		poolID, err := processPool(db, hostname, pool)
 		if err != nil {
 			log.Printf("⚠️  Failed to process pool %s: %v", pool.Name, err)
@@ -40,6 +46,7 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 			publishCapacityEvents(bus, db, hostname, pool)
 			publishVdevErrorEvents(bus, db, hostname, pool)
 			publishScrubOverdueEvents(bus, db, hostname, pool, poolID)
+			publishScanTransitionEvents(bus, hostname, pool, prevPool)
 		}
 	}
 
@@ -220,5 +227,68 @@ func publishScrubOverdueEvents(bus *events.Bus, db *sql.DB, hostname string, poo
 				"threshold_days": fmt.Sprintf("%d", overdueThreshold),
 			},
 		})
+	}
+}
+
+// publishScanTransitionEvents detects scrub/resilver state transitions and
+// publishes events for resilver start and scrub/resilver completion.
+func publishScanTransitionEvents(bus *events.Bus, hostname string, pool ZFSAgentPool, prevPool *ZFSPool) {
+	if pool.Scan == nil {
+		return
+	}
+
+	curFunc := pool.Scan.Function
+	curState := pool.Scan.State
+	prevFunc := ""
+	prevState := ""
+	if prevPool != nil {
+		prevFunc = prevPool.ScanFunction
+		prevState = prevPool.ScanState
+	}
+
+	// Resilver started: current scan is resilver in progress, previous was not
+	if curFunc == "resilver" && (curState == "scanning" || curState == "in_progress") {
+		if prevFunc != "resilver" || (prevState != "scanning" && prevState != "in_progress") {
+			bus.Publish(events.Event{
+				Type:     events.ZFSResilverStarted,
+				Severity: events.SeverityWarning,
+				Hostname: hostname,
+				Message:  fmt.Sprintf("ZFS pool %q resilver started", pool.Name),
+				Metadata: map[string]string{
+					"pool_name":    pool.Name,
+					"progress_pct": fmt.Sprintf("%.1f", pool.Scan.ProgressPct),
+				},
+			})
+		}
+		return
+	}
+
+	// Scan completed: current state is finished, previous was in progress
+	if curState == "finished" && (prevState == "scanning" || prevState == "in_progress") {
+		if curFunc == "resilver" || prevFunc == "resilver" {
+			bus.Publish(events.Event{
+				Type:     events.ZFSResilverCompleted,
+				Severity: events.SeverityInfo,
+				Hostname: hostname,
+				Message:  fmt.Sprintf("ZFS pool %q resilver completed (%d errors)", pool.Name, pool.Scan.ErrorsFound),
+				Metadata: map[string]string{
+					"pool_name":     pool.Name,
+					"errors_found":  fmt.Sprintf("%d", pool.Scan.ErrorsFound),
+					"duration_secs": fmt.Sprintf("%d", pool.Scan.Duration),
+				},
+			})
+		} else {
+			bus.Publish(events.Event{
+				Type:     events.ZFSScrubCompleted,
+				Severity: events.SeverityInfo,
+				Hostname: hostname,
+				Message:  fmt.Sprintf("ZFS pool %q scrub completed (%d errors)", pool.Name, pool.Scan.ErrorsFound),
+				Metadata: map[string]string{
+					"pool_name":     pool.Name,
+					"errors_found":  fmt.Sprintf("%d", pool.Scan.ErrorsFound),
+					"duration_secs": fmt.Sprintf("%d", pool.Scan.Duration),
+				},
+			})
+		}
 	}
 }

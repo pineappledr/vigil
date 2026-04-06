@@ -19,6 +19,9 @@ const (
 	ZFSFragmentationWarning    EventType = "zfs_fragmentation_warning"
 	ZFSVdevErrors              EventType = "zfs_vdev_errors"
 	ZFSScrubOverdue            EventType = "zfs_scrub_overdue"
+	ZFSResilverStarted         EventType = "zfs_resilver_started"
+	ZFSScrubCompleted          EventType = "zfs_scrub_completed"
+	ZFSResilverCompleted       EventType = "zfs_resilver_completed"
 	DriveAppeared      EventType = "drive_appeared"
 	DriveDisappeared   EventType = "drive_disappeared"
 	ReallocatedSectors EventType = "reallocated_sectors"
@@ -78,6 +81,7 @@ var AllEventTypes = []EventType{
 	ZFSPoolDegraded, ZFSPoolFaulted, ZFSDeviceFailed,
 	ZFSCapacityWarning, ZFSCapacityCritical, ZFSFragmentationWarning,
 	ZFSVdevErrors, ZFSScrubOverdue,
+	ZFSResilverStarted, ZFSScrubCompleted, ZFSResilverCompleted,
 	DriveAppeared, DriveDisappeared, ReallocatedSectors,
 	WearoutWarning, WearoutCritical, WearoutPredicted,
 	// Add-on / job
@@ -104,6 +108,9 @@ var AllEventTypeMeta = []EventTypeMeta{
 	{ZFSFragmentationWarning, CategoryMonitoring, "ZFS Pool Fragmentation", SeverityWarning, 86400, true},
 	{ZFSVdevErrors, CategoryMonitoring, "ZFS Vdev Errors", SeverityWarning, 3600, true},
 	{ZFSScrubOverdue, CategoryMonitoring, "ZFS Scrub Overdue", SeverityWarning, 86400, true},
+	{ZFSResilverStarted, CategoryMonitoring, "ZFS Resilver Started", SeverityWarning, 0, true},
+	{ZFSScrubCompleted, CategoryMonitoring, "ZFS Scrub Completed", SeverityInfo, 0, true},
+	{ZFSResilverCompleted, CategoryMonitoring, "ZFS Resilver Completed", SeverityInfo, 0, true},
 	{DriveAppeared, CategoryMonitoring, "Drive Appeared", SeverityInfo, 0, true},
 	{DriveDisappeared, CategoryMonitoring, "Drive Disappeared", SeverityWarning, 0, true},
 	{ReallocatedSectors, CategoryMonitoring, "Reallocated Sectors", SeverityWarning, 86400, true},

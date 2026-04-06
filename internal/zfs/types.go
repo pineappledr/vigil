@@ -22,10 +22,13 @@ type ZFSPool struct {
 	ReadErrors     int64     `json:"read_errors"`
 	WriteErrors    int64     `json:"write_errors"`
 	ChecksumErrors int64     `json:"checksum_errors"`
-	ScanFunction   string    `json:"scan_function,omitempty"`
-	ScanState      string    `json:"scan_state,omitempty"`
-	ScanProgress   float64   `json:"scan_progress"`
-	LastScanTime   time.Time `json:"last_scan_time,omitempty"`
+	ScanFunction      string    `json:"scan_function,omitempty"`
+	ScanState         string    `json:"scan_state,omitempty"`
+	ScanProgress      float64   `json:"scan_progress"`
+	ScanSpeed         int64     `json:"scan_speed,omitempty"`
+	ScanErrors        int64     `json:"scan_errors"`
+	ScanTimeRemaining int64     `json:"scan_time_remaining,omitempty"`
+	LastScanTime      time.Time `json:"last_scan_time,omitempty"`
 	LastSeen       time.Time `json:"last_seen"`
 	CreatedAt      time.Time `json:"created_at"`
 }
@@ -120,20 +123,24 @@ type ZFSPoolWithDevices struct {
 
 // ZFSPoolListItem is a lightweight pool representation for list views
 type ZFSPoolListItem struct {
-	ID             int64   `json:"id"`
-	Hostname       string  `json:"hostname"`
-	PoolName       string  `json:"name"`
-	Status         string  `json:"status"`
-	Health         string  `json:"health"`
-	SizeBytes      int64   `json:"size_bytes"`
-	AllocatedBytes int64   `json:"allocated_bytes"`
-	FreeBytes      int64   `json:"free_bytes"`
-	CapacityPct    int     `json:"capacity_pct"`
-	ReadErrors     int64   `json:"read_errors"`
-	WriteErrors    int64   `json:"write_errors"`
-	ChecksumErrors int64   `json:"checksum_errors"`
-	ScanState      string  `json:"scan_state,omitempty"`
-	ScanProgress   float64 `json:"scan_progress,omitempty"`
-	DeviceCount    int     `json:"device_count"`
-	LastScrub      string  `json:"last_scrub,omitempty"`
+	ID                int64   `json:"id"`
+	Hostname          string  `json:"hostname"`
+	PoolName          string  `json:"name"`
+	Status            string  `json:"status"`
+	Health            string  `json:"health"`
+	SizeBytes         int64   `json:"size_bytes"`
+	AllocatedBytes    int64   `json:"allocated_bytes"`
+	FreeBytes         int64   `json:"free_bytes"`
+	CapacityPct       int     `json:"capacity_pct"`
+	ReadErrors        int64   `json:"read_errors"`
+	WriteErrors       int64   `json:"write_errors"`
+	ChecksumErrors    int64   `json:"checksum_errors"`
+	ScanFunction      string  `json:"scan_function,omitempty"`
+	ScanState         string  `json:"scan_state,omitempty"`
+	ScanProgress      float64 `json:"scan_progress,omitempty"`
+	ScanSpeed         int64   `json:"scan_speed,omitempty"`
+	ScanErrors        int64   `json:"scan_errors"`
+	ScanTimeRemaining int64   `json:"scan_time_remaining,omitempty"`
+	DeviceCount       int     `json:"device_count"`
+	LastScrub         string  `json:"last_scrub,omitempty"`
 }

@@ -117,7 +117,7 @@ func GetZFSPoolListItems(db *sql.DB) ([]ZFSPoolListItem, error) {
 			p.id, p.hostname, p.pool_name, p.status, p.health,
 			p.size_bytes, p.allocated_bytes, p.free_bytes, p.capacity_pct,
 			p.read_errors, p.write_errors, p.checksum_errors,
-			p.scan_state, p.scan_progress,
+			p.scan_function, p.scan_state, p.scan_progress, p.scan_speed, p.scan_errors, p.scan_time_remaining,
 			(SELECT COUNT(*) FROM zfs_pool_devices d WHERE d.pool_id = p.id) as device_count,
 			(SELECT MAX(start_time) FROM zfs_scrub_history s WHERE s.pool_id = p.id) as last_scrub
 		FROM zfs_pools p
@@ -137,7 +137,7 @@ func GetZFSPoolListItems(db *sql.DB) ([]ZFSPoolListItem, error) {
 			&item.ID, &item.Hostname, &item.PoolName, &item.Status, &item.Health,
 			&item.SizeBytes, &item.AllocatedBytes, &item.FreeBytes, &item.CapacityPct,
 			&item.ReadErrors, &item.WriteErrors, &item.ChecksumErrors,
-			&item.ScanState, &item.ScanProgress,
+			&item.ScanFunction, &item.ScanState, &item.ScanProgress, &item.ScanSpeed, &item.ScanErrors, &item.ScanTimeRemaining,
 			&item.DeviceCount, &lastScrub,
 		)
 		if err != nil {
@@ -179,7 +179,7 @@ func GetPoolsNeedingScrub(db *sql.DB, daysSinceLastScrub int) ([]ZFSPoolListItem
 			p.id, p.hostname, p.pool_name, p.status, p.health,
 			p.size_bytes, p.allocated_bytes, p.free_bytes, p.capacity_pct,
 			p.read_errors, p.write_errors, p.checksum_errors,
-			p.scan_state, p.scan_progress,
+			p.scan_function, p.scan_state, p.scan_progress, p.scan_speed, p.scan_errors, p.scan_time_remaining,
 			(SELECT COUNT(*) FROM zfs_pool_devices d WHERE d.pool_id = p.id) as device_count,
 			(SELECT MAX(start_time) FROM zfs_scrub_history s WHERE s.pool_id = p.id) as last_scrub
 		FROM zfs_pools p
@@ -204,7 +204,7 @@ func GetPoolsNeedingScrub(db *sql.DB, daysSinceLastScrub int) ([]ZFSPoolListItem
 			&item.ID, &item.Hostname, &item.PoolName, &item.Status, &item.Health,
 			&item.SizeBytes, &item.AllocatedBytes, &item.FreeBytes, &item.CapacityPct,
 			&item.ReadErrors, &item.WriteErrors, &item.ChecksumErrors,
-			&item.ScanState, &item.ScanProgress,
+			&item.ScanFunction, &item.ScanState, &item.ScanProgress, &item.ScanSpeed, &item.ScanErrors, &item.ScanTimeRemaining,
 			&item.DeviceCount, &lastScrub,
 		)
 		if err != nil {

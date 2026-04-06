@@ -164,10 +164,11 @@ const ZFS = {
                     ${(pool.dedup_ratio || 1) > 1.00 ? `<span class="zfs-dedup-info" title="Dedup Ratio">Dedup: ${(pool.dedup_ratio).toFixed(2)}x</span>` : ''}
                 </div>
 
+                ${scrub.active ? this.renderScanProgressBar(pool) : `
                 <div class="zfs-pool-scrub scrub-${scrub.staleness}">
                     ${this.icons.scrub}
                     <span class="zfs-scrub-info">${scrub.text}</span>
-                </div>
+                </div>`}
 
                 <div class="zfs-pool-devices">
                     ${this.icons.drive}
@@ -439,6 +440,22 @@ const ZFS = {
                 </div>
             </div>
             
+            ${(pool.scan_state === 'scanning' || pool.scan_state === 'in_progress') ? `
+            <div class="zfs-overview-section">
+                <h4>Active Scan</h4>
+                ${this.renderScanProgressBar(pool)}
+                <div class="zfs-detail-row" style="margin-top: 8px">
+                    <span class="zfs-detail-label">Type</span>
+                    <span class="zfs-detail-value">${(pool.scan_function || 'scrub').charAt(0).toUpperCase() + (pool.scan_function || 'scrub').slice(1)}</span>
+                </div>
+                ${pool.scan_errors > 0 ? `
+                <div class="zfs-detail-row">
+                    <span class="zfs-detail-label">Errors Found</span>
+                    <span class="zfs-detail-value error-text">${pool.scan_errors}</span>
+                </div>` : ''}
+            </div>
+            ` : ''}
+
             <div class="zfs-overview-section">
                 <h4>Last Scan</h4>
                 ${lastScrub ? `
@@ -747,11 +764,12 @@ const ZFS = {
         const daysSince = pool.days_since_last_scrub;
 
         if (!scanFunction || scanFunction === 'none') {
-            return { text: 'No scrub data', state: null, staleness: 'none' };
+            return { text: 'No scrub data', state: null, staleness: 'none', active: false };
         }
 
         let text = '';
         let staleness = 'fresh'; // green
+        let active = false;
         if (scanState === 'finished' || scanState === 'completed') {
             if (daysSince !== undefined && daysSince >= 0) {
                 text = daysSince === 0 ? 'Scrubbed today' : `Last scrub: ${daysSince}d ago`;
@@ -763,6 +781,7 @@ const ZFS = {
         } else if (scanState === 'scanning' || scanState === 'in_progress') {
             text = `In progress (${Math.round(scanProgress)}%)`;
             staleness = 'active';
+            active = true;
         } else if (scanState === 'canceled') {
             text = 'Scrub canceled';
             staleness = 'stale';
@@ -771,13 +790,47 @@ const ZFS = {
             staleness = 'none';
         }
 
-        return { text, state: scanState, staleness };
+        return { text, state: scanState, staleness, active };
     },
 
     getScrubStaleness(days) {
         if (days <= 7) return 'fresh';    // green
         if (days <= 14) return 'aging';   // yellow
         return 'overdue';                  // red
+    },
+
+    renderScanProgressBar(pool) {
+        const scanFunc = pool.scan_function || 'scrub';
+        const isResilver = scanFunc === 'resilver';
+        const pct = Math.round(pool.scan_progress || 0);
+        const speed = pool.scan_speed || 0;
+        const eta = pool.scan_time_remaining || 0;
+        const colorClass = isResilver ? 'resilver' : 'scrub';
+        const label = isResilver ? 'Resilver' : 'Scrub';
+
+        let etaText = '';
+        if (eta > 0) {
+            const h = Math.floor(eta / 3600);
+            const m = Math.floor((eta % 3600) / 60);
+            etaText = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+        }
+
+        let speedText = '';
+        if (speed > 0) {
+            speedText = this.formatStorageSize(speed) + '/s';
+        }
+
+        return `
+            <div class="zfs-scan-progress scan-${colorClass}">
+                <div class="zfs-scan-header">
+                    <span class="zfs-scan-label">${label}: ${pct}%</span>
+                    <span class="zfs-scan-eta">${[speedText, etaText].filter(Boolean).join(' · ')}</span>
+                </div>
+                <div class="zfs-scan-bar">
+                    <div class="zfs-scan-fill scan-${colorClass}" style="width: ${Math.min(pct, 100)}%"></div>
+                </div>
+            </div>
+        `;
     },
 
     formatStorageSize(size) {

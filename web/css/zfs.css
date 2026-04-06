@@ -276,6 +276,75 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* ─── Active Scan Progress Bar ───────────────────────────────────────────── */
+
+.zfs-scan-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.zfs-scan-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+}
+
+.zfs-scan-label {
+    font-weight: 600;
+}
+
+.scan-scrub .zfs-scan-label { color: var(--info, var(--primary)); }
+.scan-resilver .zfs-scan-label { color: var(--warning); }
+
+.zfs-scan-eta {
+    color: var(--text-muted);
+}
+
+.zfs-scan-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.zfs-scan-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.zfs-scan-fill.scan-scrub {
+    background: var(--info, var(--primary));
+}
+
+.zfs-scan-fill.scan-resilver {
+    background: var(--warning);
+}
+
+.zfs-scan-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.2) 50%,
+        transparent 100%
+    );
+    animation: scan-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes scan-shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
 /* ─── Scrub & Device Info ─────────────────────────────────────────────────── */
 
 .zfs-pool-scrub,
