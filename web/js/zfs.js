@@ -125,7 +125,7 @@ const ZFS = {
         const stateClass = this.getStateClass(state);
         const capacity = this.parseCapacity(pool);
         const scrub = this.parseScrub(pool);
-        
+
         // Use device_count from API, or calculate from unique disks
         let deviceCount = pool.device_count;
         if (deviceCount === undefined || deviceCount === 0) {
@@ -133,8 +133,11 @@ const ZFS = {
             const { uniqueDisks } = this.deduplicateDevices(devices);
             deviceCount = uniqueDisks.length;
         }
-        
+
         let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
+        const frag = pool.fragmentation || 0;
+        const compRatio = pool.compress_ratio || 1;
+        const dedupRatio = pool.dedup_ratio || 1;
 
         return `
             <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
@@ -145,24 +148,17 @@ const ZFS = {
                     </div>
                     <span class="zfs-state-badge ${stateClass}">${state}</span>
                 </div>
-                
-                <div class="zfs-pool-capacity">
+
+                <div class="zfs-pool-capacity" title="${capacity.percent}% used">
                     <div class="zfs-capacity-info">
                         <span class="zfs-capacity-used">${capacity.used}</span>
-                        <span class="zfs-capacity-sep">/</span>
+                        <span class="zfs-capacity-sep">of</span>
                         <span class="zfs-capacity-total">${capacity.total}</span>
-                        <span class="zfs-capacity-percent">(${capacity.percent}%)</span>
                     </div>
                     <div class="zfs-capacity-bar">
-                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}" 
+                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
                              style="width: ${Math.min(capacity.percent, 100)}%"></div>
                     </div>
-                </div>
-
-                <div class="zfs-pool-stats">
-                    <span class="zfs-frag-info" title="Fragmentation">Frag: ${pool.fragmentation || 0}%</span>
-                    ${(pool.compress_ratio || 1) > 1.00 ? `<span class="zfs-compress-info" title="Compression Ratio">Comp: ${(pool.compress_ratio).toFixed(2)}x</span>` : ''}
-                    ${(pool.dedup_ratio || 1) > 1.00 ? `<span class="zfs-dedup-info" title="Dedup Ratio">Dedup: ${(pool.dedup_ratio).toFixed(2)}x</span>` : ''}
                 </div>
 
                 ${scrub.active ? this.renderScanProgressBar(pool) : `
@@ -171,15 +167,29 @@ const ZFS = {
                     <span class="zfs-scrub-info">${scrub.text}</span>
                 </div>`}
 
-                <div class="zfs-pool-devices">
-                    ${this.icons.drive}
-                    <span class="zfs-device-info">
-                        ${deviceCount} device${deviceCount !== 1 ? 's' : ''}
-                        ${errors > 0 
-                            ? `<span class="zfs-error-count">${errors} error${errors !== 1 ? 's' : ''}</span>` 
-                            : '<span class="zfs-no-errors">0 errors</span>'
-                        }
-                    </span>
+                <div class="zfs-card-footer">
+                    <div class="zfs-card-stat" title="Devices">
+                        ${this.icons.drive}
+                        <span>${deviceCount}</span>
+                    </div>
+                    <div class="zfs-card-stat ${errors > 0 ? 'has-errors' : ''}" title="Errors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+                        <span>${errors}</span>
+                    </div>
+                    <div class="zfs-card-stat" title="Fragmentation">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                        <span>${frag}%</span>
+                    </div>
+                    ${compRatio > 1.00 ? `
+                    <div class="zfs-card-stat" title="Compression Ratio">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M8 8l4-5 4 5M8 16l4 5 4-5"/></svg>
+                        <span>${compRatio.toFixed(1)}x</span>
+                    </div>` : ''}
+                    ${dedupRatio > 1.00 ? `
+                    <div class="zfs-card-stat" title="Dedup Ratio">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+                        <span>${dedupRatio.toFixed(1)}x</span>
+                    </div>` : ''}
                 </div>
             </div>
         `;
