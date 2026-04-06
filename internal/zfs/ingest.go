@@ -156,6 +156,8 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) (int64, error) 
 		dbPool.ScanTimeRemaining = pool.Scan.TimeRemaining
 		if !pool.Scan.StartTime.IsZero() {
 			dbPool.LastScanTime = pool.Scan.StartTime
+		} else if !pool.Scan.EndTime.IsZero() {
+			dbPool.LastScanTime = pool.Scan.EndTime
 		}
 	}
 
@@ -244,13 +246,18 @@ func processScrubHistory(db *sql.DB, poolID int64, hostname, poolName string, sc
 		return
 	}
 
+	startTime := scan.StartTime
+	if startTime.IsZero() && !scan.EndTime.IsZero() {
+		startTime = scan.EndTime // Use end time as fallback
+	}
+
 	record := &ZFSScrubHistory{
 		PoolID:          poolID,
 		Hostname:        hostname,
 		PoolName:        poolName,
 		ScanType:        scan.Function,
 		State:           scan.State,
-		StartTime:       scan.StartTime,
+		StartTime:       startTime,
 		EndTime:         scan.EndTime,
 		DurationSecs:    scan.Duration,
 		DataExamined:    scan.DataExamined,
@@ -269,6 +276,11 @@ func processScrubHistory(db *sql.DB, poolID int64, hostname, poolName string, sc
 
 // shouldRecordScrub determines if a scrub should be recorded
 func shouldRecordScrub(lastScrub *ZFSScrubHistory, scan *ZFSAgentScan) bool {
+	// Skip scrubs with no useful timestamp at all
+	if scan.StartTime.IsZero() && scan.EndTime.IsZero() {
+		return false
+	}
+
 	// No previous scrub - record it
 	if lastScrub == nil {
 		return true
@@ -279,8 +291,16 @@ func shouldRecordScrub(lastScrub *ZFSScrubHistory, scan *ZFSAgentScan) bool {
 		return true
 	}
 
-	// New scrub started (different start time)
-	if !scan.StartTime.IsZero() && scan.StartTime.After(lastScrub.StartTime) {
+	// New scrub started (different start time or end time)
+	scanTime := scan.StartTime
+	if scanTime.IsZero() {
+		scanTime = scan.EndTime
+	}
+	lastTime := lastScrub.StartTime
+	if lastTime.IsZero() {
+		lastTime = lastScrub.EndTime
+	}
+	if !scanTime.IsZero() && !lastTime.IsZero() && scanTime.After(lastTime) {
 		return true
 	}
 

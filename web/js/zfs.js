@@ -682,7 +682,8 @@ const ZFS = {
                 ${history.map(scrub => `
                     <div class="zfs-scrub-item ${scrub.errors_found > 0 ? 'has-errors' : ''}">
                         <div class="zfs-scrub-main">
-                            <span class="zfs-scrub-date">${this.formatScrubDate(scrub.start_time)}</span>
+                            <span class="zfs-scrub-date">${this.formatScrubDate(scrub.start_time || scrub.end_time || scrub.created_at)}</span>
+                            <span class="zfs-scrub-type">${(scrub.scan_type || 'scrub').charAt(0).toUpperCase() + (scrub.scan_type || 'scrub').slice(1)}</span>
                         </div>
                         <div class="zfs-scrub-stats">
                             <span class="zfs-scrub-duration">${this.formatDurationLong(scrub.duration_secs)}</span>
