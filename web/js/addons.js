@@ -84,7 +84,7 @@ const Addons = {
             <div class="addons-empty">
                 ${this._icons.addonLarge}
                 <p>No add-ons registered</p>
-                <span class="hint">Click "Add Add-on" to register your first add-on</span>
+                <span class="hint">Click "Add" to register your first add-on</span>
             </div>
         `;
     },
@@ -123,9 +123,10 @@ const Addons = {
                         <line x1="12" y1="5" x2="12" y2="19"/>
                         <line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
-                    Add Add-on
+                    Add
                 </button>
             </div>
+            <p class="addons-repo-hint">Browse and discover add-ons at <a href="https://github.com/pineappledr/vigil-addons" target="_blank" rel="noopener">github.com/pineappledr/vigil-addons</a></p>
             <div class="addons-summary">
                 ${this._summaryCards()}
             </div>

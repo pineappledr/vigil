@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containrrr/shoutrrr"
+	"github.com/nicholas-fedor/shoutrrr"
 	"vigil/internal/drivegroups"
 	"vigil/internal/events"
 )
