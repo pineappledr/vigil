@@ -474,6 +474,35 @@ func DeleteAddonToken(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, map[string]string{"status": "deleted"})
 }
 
+// RotateAddonToken generates a new token for a connected add-on.
+// POST /api/addons/{id}/rotate-token
+func RotateAddonToken(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	addon, _ := addons.Get(db.DB, id)
+	if addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+
+	tok, err := addons.RotateAddonToken(db.DB, id)
+	if err != nil {
+		log.Printf("❌ Rotate addon token: %v", err)
+		JSONError(w, "Failed to rotate token", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("🔑 Add-on token rotated: %s (id=%d, token=%.16s…)", addon.Name, id, tok.Token)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "addon_token_rotate", "addon", fmt.Sprintf("%d", id), addon.Name, "success")
+	}
+	JSONResponse(w, map[string]string{"token": tok.Token})
+}
+
 // ─── SSE Telemetry Stream ────────────────────────────────────────────────
 
 // AddonTelemetrySSE streams telemetry events for a specific add-on.
@@ -875,10 +904,24 @@ func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
 
 	req.Header.Set("Accept", "application/json")
 
-	// For ghcr.io private packages, use a GitHub token if available.
+	// For ghcr.io, get a token (explicit or anonymous).
 	if strings.Contains(registry, "ghcr.io") {
-		if token := os.Getenv("GHCR_TOKEN"); token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
+		if envToken := os.Getenv("GHCR_TOKEN"); envToken != "" {
+			req.Header.Set("Authorization", "Bearer "+envToken)
+		} else {
+			// Obtain an anonymous pull token from ghcr.io
+			tokenURL := fmt.Sprintf("https://ghcr.io/token?service=ghcr.io&scope=repository:%s:pull", repo)
+			tokenReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+			tokenResp, err := registryClient.Do(tokenReq)
+			if err == nil {
+				defer tokenResp.Body.Close()
+				var tokenData struct {
+					Token string `json:"token"`
+				}
+				if json.NewDecoder(tokenResp.Body).Decode(&tokenData) == nil && tokenData.Token != "" {
+					req.Header.Set("Authorization", "Bearer "+tokenData.Token)
+				}
+			}
 		}
 	}
 
@@ -1006,6 +1049,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
 	mux.HandleFunc("GET /api/addons/{id}/check-updates", protect(CheckAddonUpdates))
+	mux.HandleFunc("POST /api/addons/{id}/rotate-token", protect(RotateAddonToken))
 
 	// Admin UI registration flow
 	mux.HandleFunc("POST /api/addons/register", protect(CreateAddonFromUI))

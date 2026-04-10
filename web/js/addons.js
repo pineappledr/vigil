@@ -182,6 +182,9 @@ const Addons = {
                         <button class="btn-token-action" onclick="Addons.copyToken(${addon.id})" title="Copy token">
                             ${this._icons.copy}
                         </button>
+                        <button class="btn-token-action btn-token-rotate" onclick="Addons.rotateToken(${addon.id})" title="Rotate token">
+                            ${this._icons.rotate}
+                        </button>
                     </div>
                 </div>
         ` : '';
@@ -751,6 +754,29 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         this._copyText(el.dataset.token, el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[1]);
     },
 
+    async rotateToken(addonId) {
+        if (!confirm('Rotate the registration token for this add-on?\n\nThe add-on will need to be restarted with the new token to reconnect.')) return;
+        try {
+            const resp = await this._fetch(`/api/addons/${addonId}/rotate-token`, { method: 'POST' });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to rotate token');
+            }
+            const data = await resp.json();
+            // Show the new token temporarily so the user can copy it
+            const el = document.getElementById(`addon-token-${addonId}`);
+            if (el) {
+                el.dataset.token = data.token;
+                el.dataset.masked = 'false';
+                el.textContent = data.token;
+            }
+            alert('Token rotated successfully. Copy the new token now — it will be masked on next page load.');
+            await this.refresh();
+        } catch (err) {
+            alert(`Failed to rotate token: ${err.message}`);
+        }
+    },
+
     _copyText(text, btn) {
         const flash = () => {
             if (!btn) return;
@@ -812,6 +838,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
         eyeOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
         update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
-        updateArrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`
+        updateArrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+        rotate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`
     }
 };

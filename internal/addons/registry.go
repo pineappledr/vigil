@@ -361,6 +361,41 @@ func ConsumeRegistrationToken(db *sql.DB, token string, addonID int64) error {
 	return err
 }
 
+// RotateAddonToken generates a new token for an addon that already has a bound token.
+// The old token row is updated in place with the new value and timestamps.
+func RotateAddonToken(db *sql.DB, addonID int64) (*RegistrationToken, error) {
+	// Verify there is an existing bound token for this addon
+	var tokenID int64
+	err := db.QueryRow(`
+		SELECT id FROM addon_registration_tokens
+		WHERE used_by_addon_id = ?
+	`, addonID).Scan(&tokenID)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no bound token found for addon %d", addonID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lookup bound token: %w", err)
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return nil, fmt.Errorf("generate token: %w", err)
+	}
+	newToken := hex.EncodeToString(raw)
+	now := time.Now().UTC().Format(timeFormat)
+
+	_, err = db.Exec(`
+		UPDATE addon_registration_tokens
+		SET token = ?, used_at = ?
+		WHERE id = ?
+	`, newToken, now, tokenID)
+	if err != nil {
+		return nil, fmt.Errorf("rotate addon token: %w", err)
+	}
+
+	return GetRegistrationToken(db, newToken)
+}
+
 // DeleteRegistrationToken removes a token by ID.
 func DeleteRegistrationToken(db *sql.DB, id int64) error {
 	res, err := db.Exec(`DELETE FROM addon_registration_tokens WHERE id = ?`, id)
