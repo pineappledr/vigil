@@ -763,15 +763,16 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
                 throw new Error(err.error || 'Failed to rotate token');
             }
             const data = await resp.json();
-            // Show the new token temporarily so the user can copy it
+            // Show the full new token and store it for copy
             const el = document.getElementById(`addon-token-${addonId}`);
             if (el) {
                 el.dataset.token = data.token;
                 el.dataset.masked = 'false';
                 el.textContent = data.token;
             }
-            alert('Token rotated successfully. Copy the new token now — it will be masked on next page load.');
-            await this.refresh();
+            // Auto-copy to clipboard
+            this._copyText(data.token);
+            alert('Token rotated and copied to clipboard.\n\nUpdate the add-on with the new token and restart it.\nThe token will be masked on next page load.');
         } catch (err) {
             alert(`Failed to rotate token: ${err.message}`);
         }
