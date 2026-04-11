@@ -22,14 +22,14 @@ const Addons = {
             image: 'ghcr.io/pineappledr/vigil-addons-snapraid-hub',
             port: '9300',
             description: 'SnapRAID array management and automation.',
-            envExtra: '      VIGIL_SNAPRAID_HUB_DATA_REGISTRY_PATH: "/data"',
+            envExtra: '      VIGIL_SNAPRAID_HUB_DATA_REGISTRY_PATH: "/data/agents.json"',
         },
         'zfs-manager': {
             name: 'ZFS Manager',
             image: 'ghcr.io/pineappledr/vigil-addons-zfs-manager',
             port: '9500',
             description: 'Visual ZFS pool, dataset, and snapshot management for homelab servers.',
-            envExtra: '      VIGIL_ZFS_MANAGER_DATA_REGISTRY_PATH: "/data"',
+            envExtra: '      VIGIL_ZFS_MANAGER_DATA_REGISTRY_PATH: "/data/agents.json"',
         },
     },
 
