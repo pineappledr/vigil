@@ -16,23 +16,20 @@ const Addons = {
             port: '9100',
             description: 'Disk burn-in, SMART testing, and pre-clear formatting tool for new and repurposed drives.',
             envExtra: '      BURNIN_HUB_DATA_DIR: "/data"',
-            volumes: '      - ${containerName}-data:/data',
         },
         'snapraid-hub': {
             name: 'SnapRaid Hub',
             image: 'ghcr.io/pineappledr/vigil-addons-snapraid-hub',
             port: '9300',
             description: 'SnapRAID array management and automation.',
-            envExtra: '',
-            volumes: '      - ${containerName}-data:/data',
+            command: '["-config", "/etc/snapraid-hub/config.hub.yaml"]',
+            extraVolumes: '      - ./config.hub.yaml:/etc/snapraid-hub/config.hub.yaml:ro',
         },
         'zfs-manager': {
             name: 'ZFS Manager',
             image: 'ghcr.io/pineappledr/vigil-addons-zfs-manager',
             port: '9500',
             description: 'Visual ZFS pool, dataset, and snapshot management for homelab servers.',
-            envExtra: '',
-            volumes: '      - ${containerName}-data:/data',
         },
     },
 
@@ -91,6 +88,10 @@ const Addons = {
     async _fetch(url, opts = {}) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
+        // Automatically include CSRF header for mutating requests.
+        if (opts.method && opts.method !== 'GET') {
+            opts.headers = { 'X-Requested-With': 'XMLHttpRequest', ...opts.headers };
+        }
         try {
             return await fetch(url, { ...opts, signal: controller.signal });
         } catch (e) {
@@ -314,7 +315,7 @@ const Addons = {
         const modal = Modals.create(`
             <div class="modal modal-add-agent">
                 <div class="modal-header">
-                    <h3>Add Add-on</h3>
+                    <h3>New Add-on</h3>
                     <button class="modal-close" onclick="Modals.close(this)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -396,7 +397,7 @@ const Addons = {
                             <span id="addon-copy-label">Copy docker compose</span>
                         </button>
                     </div>
-                    <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register Add-on</button>
+                    <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register</button>
                 </div>
             </div>
         `);
@@ -565,6 +566,11 @@ services:
             yaml += `\n    ports:\n      - "${port}:${port}"`;
         }
 
+        // Add command if preset specifies one (e.g., snapraid-hub config path)
+        if (preset?.command) {
+            yaml += `\n    command: ${preset.command}`;
+        }
+
         yaml += `\n    environment:
       VIGIL_URL: ${serverURL}
       VIGIL_TOKEN: ${token}
@@ -577,8 +583,14 @@ services:
         }
 
         yaml += `\n    volumes:
-      - ${containerName}-data:/data
+      - ${containerName}-data:/data`;
 
+        // Add preset-specific extra volumes (e.g., config file mounts)
+        if (preset?.extraVolumes) {
+            yaml += `\n${preset.extraVolumes}`;
+        }
+
+        yaml += `\n
 volumes:
   ${containerName}-data:`;
 
