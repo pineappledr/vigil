@@ -444,11 +444,10 @@ func ListAddonTokens(w http.ResponseWriter, r *http.Request) {
 		tokens = []addons.RegistrationToken{}
 	}
 
-	// Mask unbound tokens — available/expired tokens that aren't tied to an addon.
-	// Bound tokens (used_by_addon_id set) are kept in full so the user can
-	// copy them for addon deployment without needing to rotate.
+	// Mask all tokens — never expose full token values via the list endpoint.
+	// Users can only see a token's full value at the moment it is rotated.
 	for i := range tokens {
-		if tokens[i].UsedByAddonID == nil && len(tokens[i].Token) > 16 {
+		if len(tokens[i].Token) > 16 {
 			tokens[i].Token = tokens[i].Token[:16] + "…"
 		}
 	}

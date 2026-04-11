@@ -175,11 +175,8 @@ const Addons = {
                 <div class="addon-token-row" onclick="event.stopPropagation()">
                     <label>Token</label>
                     <div class="addon-token-field">
-                        <span class="addon-token-value" id="addon-token-${addon.id}" data-token="${Utils.escapeHtml(token.token)}" data-masked="true">${'*'.repeat(20)}</span>
-                        <button class="btn-token-action" onclick="Addons.toggleTokenVisibility(${addon.id})" title="Show/hide token">
-                            ${this._icons.eye}
-                        </button>
-                        <button class="btn-token-action" onclick="Addons.copyToken(${addon.id})" title="Copy token">
+                        <span class="addon-token-value" id="addon-token-${addon.id}" data-masked="true">${'*'.repeat(20)}</span>
+                        <button class="btn-token-action" onclick="Addons.copyToken(${addon.id})" title="Copy token" style="display:none">
                             ${this._icons.copy}
                         </button>
                         <button class="btn-token-action btn-token-rotate" onclick="Addons.rotateToken(${addon.id})" title="Rotate token">
@@ -763,16 +760,19 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
                 throw new Error(err.error || 'Failed to rotate token');
             }
             const data = await resp.json();
-            // Show the full new token and store it for copy
+            // Show the full new token temporarily until page reload
             const el = document.getElementById(`addon-token-${addonId}`);
             if (el) {
                 el.dataset.token = data.token;
                 el.dataset.masked = 'false';
                 el.textContent = data.token;
+                // Show the copy button while token is visible
+                const copyBtn = el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[0];
+                if (copyBtn) copyBtn.style.display = '';
             }
             // Auto-copy to clipboard
             this._copyText(data.token);
-            alert('Token rotated and copied to clipboard.\n\nUpdate the add-on with the new token and restart it.\nThe token will be masked on next page load.');
+            alert('Token rotated and copied to clipboard.\n\nUpdate the add-on with the new token and restart it.\nThe token will be hidden on next page load.');
         } catch (err) {
             alert(`Failed to rotate token: ${err.message}`);
         }
@@ -809,16 +809,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
     },
 
     // ─── Token Visibility Toggle ─────────────────────────────────────────
-
-    toggleTokenVisibility(addonId) {
-        const el = document.getElementById(`addon-token-${addonId}`);
-        if (!el) return;
-        const isMasked = el.dataset.masked === 'true';
-        el.textContent = isMasked ? el.dataset.token : '*'.repeat(20);
-        el.dataset.masked = isMasked ? 'false' : 'true';
-        const eyeBtn = el.closest('.addon-token-field')?.querySelector('.btn-token-action');
-        if (eyeBtn) eyeBtn.innerHTML = isMasked ? this._icons.eyeOff : this._icons.eye;
-    },
+    // Removed: tokens are only visible immediately after rotation.
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
