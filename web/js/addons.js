@@ -22,14 +22,14 @@ const Addons = {
             image: 'ghcr.io/pineappledr/vigil-addons-snapraid-hub',
             port: '9300',
             description: 'SnapRAID array management and automation.',
-            command: '["-config", "/etc/snapraid-hub/config.hub.yaml"]',
-            extraVolumes: '      - ./config.hub.yaml:/etc/snapraid-hub/config.hub.yaml:ro',
+            envExtra: '      VIGIL_SNAPRAID_HUB_DATA_REGISTRY_PATH: "/data"',
         },
         'zfs-manager': {
             name: 'ZFS Manager',
             image: 'ghcr.io/pineappledr/vigil-addons-zfs-manager',
             port: '9500',
             description: 'Visual ZFS pool, dataset, and snapshot management for homelab servers.',
+            envExtra: '      VIGIL_ZFS_MANAGER_DATA_REGISTRY_PATH: "/data"',
         },
     },
 
@@ -420,11 +420,15 @@ const Addons = {
             if (errorEl) errorEl.textContent = 'Name must be 128 characters or fewer';
             return;
         }
+        if (!url) {
+            if (errorEl) errorEl.textContent = 'Add-on URL is required';
+            return;
+        }
         if (!token) {
             if (errorEl) errorEl.textContent = 'Token is missing — close and reopen the modal';
             return;
         }
-        if (url && url.length > 512) {
+        if (url.length > 512) {
             if (errorEl) errorEl.textContent = 'URL must be 512 characters or fewer';
             return;
         }
@@ -566,29 +570,18 @@ services:
             yaml += `\n    ports:\n      - "${port}:${port}"`;
         }
 
-        // Add command if preset specifies one (e.g., snapraid-hub config path)
-        if (preset?.command) {
-            yaml += `\n    command: ${preset.command}`;
-        }
-
         yaml += `\n    environment:
       VIGIL_URL: ${serverURL}
       VIGIL_TOKEN: ${token}
       VIGIL_SERVER_PUBKEY: ${pubKey}
       TZ: \${TZ:-UTC}`;
 
-        // Add preset-specific environment variables
         if (preset?.envExtra) {
             yaml += `\n${preset.envExtra}`;
         }
 
         yaml += `\n    volumes:
       - ${containerName}-data:/data`;
-
-        // Add preset-specific extra volumes (e.g., config file mounts)
-        if (preset?.extraVolumes) {
-            yaml += `\n${preset.extraVolumes}`;
-        }
 
         yaml += `\n
 volumes:
