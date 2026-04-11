@@ -8,6 +8,34 @@ const Addons = {
     activeAddonId: null,
     _updateCache: {},  // keyed by addon ID → { update_available, latest_tag, checked_at }
 
+    // Official add-on presets
+    _presets: {
+        'burnin-hub': {
+            name: 'Burn-In Hub',
+            image: 'ghcr.io/pineappledr/vigil-addons-burnin-hub',
+            port: '9100',
+            description: 'Disk burn-in, SMART testing, and pre-clear formatting tool for new and repurposed drives.',
+            envExtra: '      BURNIN_HUB_DATA_DIR: "/data"',
+            volumes: '      - ${containerName}-data:/data',
+        },
+        'snapraid-hub': {
+            name: 'SnapRaid Hub',
+            image: 'ghcr.io/pineappledr/vigil-addons-snapraid-hub',
+            port: '9300',
+            description: 'SnapRAID array management and automation.',
+            envExtra: '',
+            volumes: '      - ${containerName}-data:/data',
+        },
+        'zfs-manager': {
+            name: 'ZFS Manager',
+            image: 'ghcr.io/pineappledr/vigil-addons-zfs-manager',
+            port: '9500',
+            description: 'Visual ZFS pool, dataset, and snapshot management for homelab servers.',
+            envExtra: '',
+            volumes: '      - ${containerName}-data:/data',
+        },
+    },
+
     // ─── Data Fetching & Render ──────────────────────────────────────────
 
     async render() {
@@ -303,6 +331,15 @@ const Addons = {
                         Deploy the add-on with Docker, then register it below.
                     </p>
                     <div class="form-group">
+                        <label>Add-on</label>
+                        <select id="addon-preset" class="form-input" onchange="Addons._applyPreset()">
+                            <option value="">Custom add-on</option>
+                            ${Object.entries(this._presets).map(([k, p]) =>
+                                `<option value="${k}">${Utils.escapeHtml(p.name)}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label>Name</label>
                         <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Hub" maxlength="128">
                     </div>
@@ -435,6 +472,31 @@ const Addons = {
         }
     },
 
+    _applyPreset() {
+        const key = document.getElementById('addon-preset')?.value;
+        const preset = this._presets[key];
+        const nameEl = document.getElementById('addon-name');
+        const imageEl = document.getElementById('addon-image');
+        const urlEl = document.getElementById('addon-url');
+
+        if (preset) {
+            if (nameEl) nameEl.value = preset.name;
+            if (imageEl) imageEl.value = preset.image;
+            // Pre-fill URL with port from preset if empty or from another preset
+            if (urlEl) {
+                const current = urlEl.value.trim();
+                if (!current || Object.values(this._presets).some(p => current.endsWith(':' + p.port))) {
+                    urlEl.value = '';
+                    urlEl.placeholder = `e.g., http://192.168.1.50:${preset.port}`;
+                }
+            }
+        } else {
+            if (nameEl) nameEl.value = '';
+            if (imageEl) imageEl.value = '';
+            if (urlEl) { urlEl.value = ''; urlEl.placeholder = 'e.g., http://192.168.1.50:9100'; }
+        }
+    },
+
     _copyAddonInstall() {
         const overlay = document.querySelector('.modal-overlay');
         const st = overlay?._addonState;
@@ -472,6 +534,8 @@ const Addons = {
         const serverURL = document.getElementById('addon-server-url')?.value || '';
         const pubKey = document.getElementById('addon-pubkey')?.value || '';
         const token = document.getElementById('addon-token')?.value || '';
+        const presetKey = document.getElementById('addon-preset')?.value || '';
+        const preset = this._presets[presetKey];
 
         if (!image) {
             alert('Enter a Docker image to generate the docker-compose.');
@@ -482,11 +546,11 @@ const Addons = {
         const containerName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
         // Extract port from addon URL if provided (e.g., "http://192.168.1.50:9100" → "9100")
-        let port = '';
+        let port = preset ? preset.port : '';
         if (addonURL) {
             try {
                 const parsed = new URL(addonURL);
-                port = parsed.port || '';
+                if (parsed.port) port = parsed.port;
             } catch {}
         }
 
@@ -503,11 +567,16 @@ services:
 
         yaml += `\n    environment:
       VIGIL_URL: ${serverURL}
-      VIGIL_AGENT_TOKEN: ${token}
+      VIGIL_TOKEN: ${token}
       VIGIL_SERVER_PUBKEY: ${pubKey}
-      TZ: \${TZ:-UTC}
-      BURNIN_HUB_DATA_DIR: "/data"
-    volumes:
+      TZ: \${TZ:-UTC}`;
+
+        // Add preset-specific environment variables
+        if (preset?.envExtra) {
+            yaml += `\n${preset.envExtra}`;
+        }
+
+        yaml += `\n    volumes:
       - ${containerName}-data:/data
 
 volumes:
@@ -522,7 +591,7 @@ volumes:
         const token = document.getElementById('addon-token')?.value || '';
 
         return `VIGIL_URL="${serverURL}"
-VIGIL_AGENT_TOKEN="${token}"
+VIGIL_TOKEN="${token}"
 VIGIL_SERVER_PUBKEY="${pubKey}"`;
     },
 
