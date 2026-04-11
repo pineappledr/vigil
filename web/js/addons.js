@@ -88,11 +88,11 @@ const Addons = {
         }
     },
 
-    async _fetch(url) {
+    async _fetch(url, opts = {}) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
         try {
-            return await fetch(url, { signal: controller.signal });
+            return await fetch(url, { ...opts, signal: controller.signal });
         } catch (e) {
             if (e.name === 'AbortError') throw new Error(`Request timed out`);
             throw e;
