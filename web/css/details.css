@@ -181,3 +181,43 @@
     margin-bottom: 12px;
     opacity: 0.5;
 }
+
+/* LED Identify Button */
+.btn-identify {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-identify:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.btn-identify.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.btn-identify:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.btn-identify svg {
+    width: 16px;
+    height: 16px;
+}

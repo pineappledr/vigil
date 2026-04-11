@@ -74,6 +74,15 @@ func reportWorker() {
 				log.Printf("⚠️  Failed to update agent status by hostname %s: %v", w.hostname, err)
 			}
 
+			// Extract and persist agent capabilities (LED identify, listen address).
+			if caps, ok := w.payload["capabilities"].(map[string]interface{}); ok {
+				listenAddr, _ := caps["listen_addr"].(string)
+				capsJSON, _ := json.Marshal(caps)
+				if err := agents.UpdateAgentCapabilities(db.DB, w.hostname, listenAddr, string(capsJSON)); err != nil {
+					log.Printf("⚠️  Failed to update capabilities for %s: %v", w.hostname, err)
+				}
+			}
+
 			wearout.ProcessWearoutFromReport(db.DB, EventBus, w.hostname, w.payload)
 			smart.ProcessReportWithEvents(db.DB, EventBus, w.hostname, w.payload)
 

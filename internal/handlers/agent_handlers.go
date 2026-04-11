@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -394,5 +396,49 @@ func DeleteToken(w http.ResponseWriter, r *http.Request) {
 		audit.LogEvent(db.DB, r, s.UserID, s.Username, "token_delete", "registration_token", idStr, "", "success")
 	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
+}
+
+// ─── LED Identify proxy ─────────────────────────────────────────────────────
+
+// IdentifyDrive proxies a LED identify request to the agent's command server.
+// POST /api/v1/agents/{hostname}/identify
+func IdentifyDrive(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	if hostname == "" {
+		JSONError(w, "Missing hostname", http.StatusBadRequest)
+		return
+	}
+
+	listenAddr, _, err := agents.GetAgentByHostname(db.DB, hostname)
+	if err != nil {
+		JSONError(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+	if listenAddr == "" {
+		JSONError(w, "Agent does not have a command server enabled", http.StatusNotImplemented)
+		return
+	}
+
+	// Read and forward the request body to the agent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		JSONError(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	agentURL := fmt.Sprintf("http://%s/api/identify", listenAddr)
+	resp, err := http.Post(agentURL, "application/json", bytes.NewReader(body)) // #nosec G107 -- URL built from trusted DB value
+	if err != nil {
+		log.Printf("⚠️  LED identify proxy to %s failed: %v", listenAddr, err)
+		JSONError(w, "Failed to reach agent command server", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward the agent's response back to the caller
+	respBody, _ := io.ReadAll(resp.Body)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(respBody) //nolint:errcheck
 }
 

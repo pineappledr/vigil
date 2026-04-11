@@ -72,6 +72,11 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("migration failed at [tokens nullable expiry]: %w", err)
 	}
 
+	// Migration: add listen_addr and capabilities columns for optional command server.
+	if err := migrateAgentCapabilities(db); err != nil {
+		return fmt.Errorf("migration failed at [agent capabilities]: %w", err)
+	}
+
 	log.Println("🔐 Migration completed: agent authentication tables ready")
 	return nil
 }
@@ -125,4 +130,34 @@ func migrateTokensNullableExpiry(db *sql.DB) error {
 
 	log.Println("  ✓ agent_registration_tokens: expires_at now nullable")
 	return tx.Commit()
+}
+
+// migrateAgentCapabilities adds listen_addr and capabilities columns to the
+// agent_registry table. These are used by the optional command server (LED
+// identification, etc.). No-op if already present.
+func migrateAgentCapabilities(db *sql.DB) error {
+	// Check if column already exists.
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('agent_registry') WHERE name = 'listen_addr'`).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil // already migrated
+	}
+
+	log.Println("  ↻ Migrating agent_registry: adding listen_addr and capabilities columns")
+
+	stmts := []string{
+		`ALTER TABLE agent_registry ADD COLUMN listen_addr TEXT DEFAULT ''`,
+		`ALTER TABLE agent_registry ADD COLUMN capabilities TEXT DEFAULT ''`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil {
+			return fmt.Errorf("agent capabilities migration: %w", err)
+		}
+	}
+
+	log.Println("  ✓ agent_registry: listen_addr and capabilities columns added")
+	return nil
 }

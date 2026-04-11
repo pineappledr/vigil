@@ -287,6 +287,7 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// ─── Agent management (admin-protected) ───────────────────────────────
 	mux.HandleFunc("GET /api/v1/agents", protect(handlers.ListAgents))
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", protect(handlers.DeleteRegisteredAgent))
+	mux.HandleFunc("POST /api/v1/agents/{hostname}/identify", protect(handlers.IdentifyDrive))
 	mux.HandleFunc("POST /api/v1/tokens", protect(handlers.CreateToken))
 	mux.HandleFunc("GET /api/v1/tokens", protect(handlers.ListTokens))
 	mux.HandleFunc("DELETE /api/v1/tokens/{id}", protect(handlers.DeleteToken))

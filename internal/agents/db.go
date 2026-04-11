@@ -125,6 +125,28 @@ func UpdateAgentLastSeenByHostname(db *sql.DB, hostname string) error {
 	return err
 }
 
+// UpdateAgentCapabilities stores the agent's listen address and capabilities
+// JSON string, keyed by hostname. Called during report processing.
+func UpdateAgentCapabilities(db *sql.DB, hostname, listenAddr, capabilities string) error {
+	_, err := db.Exec(`
+		UPDATE agent_registry
+		SET listen_addr = ?, capabilities = ?
+		WHERE hostname = ? AND enabled = 1
+	`, listenAddr, capabilities, hostname)
+	return err
+}
+
+// GetAgentByHostname returns the agent record for a hostname.
+func GetAgentByHostname(db *sql.DB, hostname string) (listenAddr, capabilities string, err error) {
+	err = db.QueryRow(`
+		SELECT COALESCE(listen_addr, ''), COALESCE(capabilities, '')
+		FROM agent_registry
+		WHERE hostname = ? AND enabled = 1
+		ORDER BY last_seen_at DESC LIMIT 1
+	`, hostname).Scan(&listenAddr, &capabilities)
+	return
+}
+
 // DeleteAgent removes an agent and all its sessions (ON DELETE CASCADE).
 func DeleteAgent(db *sql.DB, id int64) error {
 	_, err := db.Exec("DELETE FROM agent_registry WHERE id = ?", id)
