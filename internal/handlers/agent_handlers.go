@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -419,6 +421,20 @@ func IdentifyDrive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	host, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		JSONError(w, "Invalid agent address", http.StatusBadGateway)
+		return
+	}
+	if ip := net.ParseIP(host); ip == nil {
+		JSONError(w, "Invalid agent host", http.StatusBadGateway)
+		return
+	}
+	if p, perr := strconv.Atoi(port); perr != nil || p < 1 || p > 65535 {
+		JSONError(w, "Invalid agent port", http.StatusBadGateway)
+		return
+	}
+
 	// Read and forward the request body to the agent
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -426,8 +442,8 @@ func IdentifyDrive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentURL := fmt.Sprintf("http://%s/api/identify", listenAddr)
-	resp, err := http.Post(agentURL, "application/json", bytes.NewReader(body)) // #nosec G107 -- URL built from trusted DB value
+	agentURL := (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port), Path: "/api/identify"}).String()
+	resp, err := http.Post(agentURL, "application/json", bytes.NewReader(body)) // #nosec G107 G_SSRP -- host/port validated above
 	if err != nil {
 		log.Printf("⚠️  LED identify proxy to %s failed: %v", listenAddr, err)
 		JSONError(w, "Failed to reach agent command server", http.StatusBadGateway)
