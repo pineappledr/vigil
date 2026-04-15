@@ -25,8 +25,9 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
 FROM alpine:3.19
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates wget tzdata
+# Install runtime dependencies (upgrade first to pull CVE-patched musl)
+RUN apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates wget tzdata
 
 # Create non-root user and data directory
 RUN adduser -D -u 1000 vigil && \
