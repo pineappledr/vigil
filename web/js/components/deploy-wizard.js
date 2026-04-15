@@ -315,8 +315,9 @@ const DeployWizardComponent = {
             const isSecret = envDef.secret === true || envKey.includes('PSK') || envKey.includes('SECRET') || envKey.includes('KEY') || envKey.includes('TOKEN');
 
             const hasRotate = !!envDef.rotate_action;
+            const prefillKey = envDef.key || '';
             const rotateBtn = hasRotate
-                ? `<button class="btn-copy" onclick="DeployWizardComponent._rotateToken('${compId}', '${this._escapeJS(envDef.rotate_action)}', '${fieldId}')" title="Rotate token">
+                ? `<button class="btn-copy" onclick="DeployWizardComponent._rotateToken('${compId}', '${this._escapeJS(envDef.rotate_action)}', '${fieldId}', '${this._escapeJS(prefillKey)}')" title="Rotate token">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                         <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
                     </svg>
@@ -546,7 +547,7 @@ services:
         }
     },
 
-    async _rotateToken(compId, action, fieldId) {
+    async _rotateToken(compId, action, fieldId, prefillKey) {
         if (!confirm('Are you sure you want to rotate this token? Existing agents will need to be updated with the new token.')) {
             return;
         }
@@ -565,13 +566,16 @@ services:
             });
 
             const data = await resp.json();
-            if (resp.ok && data.hub_token) {
+            const newValue = prefillKey && data[prefillKey] ? data[prefillKey] : (data.hub_token || data.hub_psk);
+            if (resp.ok && newValue) {
                 const input = document.getElementById(fieldId);
                 if (input) {
-                    input.value = data.hub_token;
+                    input.value = newValue;
                     input.type = 'text';  // reveal the new token
                 }
-                wiz.prefill.hub_token = data.hub_token;
+                if (prefillKey) {
+                    wiz.prefill[prefillKey] = newValue;
+                }
             } else {
                 alert(data.error || 'Failed to rotate token');
             }
