@@ -25,7 +25,8 @@ WORKDIR /app
 # Note: ZFS tools require kernel modules from host - use with:
 #   - privileged: true
 #   - /dev/zfs:/dev/zfs mount
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache \
     smartmontools \
     nvme-cli \
     ca-certificates \
