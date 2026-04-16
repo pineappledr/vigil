@@ -272,6 +272,8 @@
 
 .manifest-shell {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .manifest-header {
@@ -1391,9 +1393,17 @@
         gap: 8px;
     }
 
-    /* Refresh toolbar: auto-refresh label stays compact */
+    /* Refresh toolbar: wrap to a second line when the agent selector + dropdown
+       don't fit on one row, and keep each control from forcing overflow. */
     .manifest-refresh-toolbar {
         gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .manifest-refresh-toolbar .manifest-agent-select,
+    .manifest-refresh-toolbar .manifest-refresh-auto {
+        max-width: 100%;
+        min-width: 0;
     }
 
     .manifest-refresh-toolbar .manifest-refresh-auto {
@@ -1404,6 +1414,18 @@
     .manifest-refresh-toolbar .manifest-refresh-btn {
         font-size: 0.75rem;
         padding: 5px 10px;
+    }
+
+    /* Ensure the smart-table actually scrolls inside its container rather than
+       stretching the parent. width:100% on the container caps it to the
+       manifest-component's content box; the table then overflows horizontally. */
+    .smart-table-container {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .manifest-component {
+        min-width: 0;
     }
 
     /* Progress: wrap phases, truncate long job IDs */

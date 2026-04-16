@@ -252,7 +252,11 @@ const SmartTableComponent = {
             'active_job': '/api/active_job'
         };
 
-        let path = sourceMap[entry.config.source];
+        const rawSource = entry.config.source;
+        let path = sourceMap[rawSource];
+        if (!path && typeof rawSource === 'string' && rawSource.startsWith('/api/')) {
+            path = rawSource;
+        }
         if (!path) return;
 
         // Append agent_id from the page-level agent selector (if available).

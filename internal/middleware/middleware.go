@@ -139,6 +139,14 @@ func (sr *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not support Hijack")
 }
 
+// Flush implements http.Flusher so SSE handlers (e.g. add-on telemetry streams)
+// can flush through the logging wrapper.
+func (sr *statusRecorder) Flush() {
+	if fl, ok := sr.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
+	}
+}
+
 // Logging logs request details with request ID and response status.
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
