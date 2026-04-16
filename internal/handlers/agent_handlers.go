@@ -426,8 +426,14 @@ func IdentifyDrive(w http.ResponseWriter, r *http.Request) {
 		JSONError(w, "Invalid agent address", http.StatusBadGateway)
 		return
 	}
-	if ip := net.ParseIP(host); ip == nil {
+	ip := net.ParseIP(host)
+	if ip == nil {
 		JSONError(w, "Invalid agent host", http.StatusBadGateway)
+		return
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() {
+		JSONError(w, "Agent address is not routable", http.StatusBadGateway)
 		return
 	}
 	if p, perr := strconv.Atoi(port); perr != nil || p < 1 || p > 65535 {
@@ -443,7 +449,8 @@ func IdentifyDrive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agentURL := (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port), Path: "/api/identify"}).String()
-	resp, err := http.Post(agentURL, "application/json", bytes.NewReader(body)) // #nosec G107 G_SSRP -- host/port validated above
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(agentURL, "application/json", bytes.NewReader(body)) // #nosec G107 G_SSRP -- host validated above
 	if err != nil {
 		log.Printf("⚠️  LED identify proxy to %s failed: %v", listenAddr, err)
 		JSONError(w, "Failed to reach agent command server", http.StatusBadGateway)

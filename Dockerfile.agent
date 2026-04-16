@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o vigil-agent ./cmd/agent
 
 # Final Stage - Alpine with ZFS tools
-FROM alpine:3.19
+FROM alpine:3.23.4
 WORKDIR /app
 
 # Install smartmontools, nvme-cli, and ZFS userspace tools

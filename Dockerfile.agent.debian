@@ -26,7 +26,8 @@ WORKDIR /app
 # ZFS tools can be:
 #   1. Installed here (apt install zfsutils-linux) if host has compatible kernel
 #   2. Mounted from host for TrueNAS/FreeBSD compatibility
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
     smartmontools \
     nvme-cli \
     ca-certificates \
