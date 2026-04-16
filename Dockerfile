@@ -22,7 +22,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
     -o vigil-server ./cmd/server
 
 # Final Stage - Minimal Alpine runtime
-FROM alpine:3.19
+FROM alpine:3.23.4
 WORKDIR /app
 
 # Install runtime dependencies
