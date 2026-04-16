@@ -235,7 +235,7 @@ const ManifestRenderer = {
 
             for (const a of agents) {
                 const id = a.agent_id || a.id || a.ID;
-                const label = a.hostname || id;
+                const label = a.alias || a.hostname || id;
                 const status = a.status || '';
                 const opt = document.createElement('option');
                 opt.value = id;
