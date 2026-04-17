@@ -2003,3 +2003,246 @@
 .smart-row-clickable:hover {
     background: var(--bg-hover);
 }
+
+/* ── Manifest-driven actions (toolbar + per-row) ─────────────── */
+
+.smart-toolbar-spacer {
+    flex: 1;
+}
+
+.smart-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-right: auto;
+}
+
+.smart-action-btn,
+.smart-row-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--bg-secondary, #161b22);
+    color: var(--text-secondary, #c9d1d9);
+    border-color: var(--border, #30363d);
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
+}
+
+.smart-action-btn:hover,
+.smart-row-action-btn:hover {
+    background: var(--bg-hover, #1c2128);
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-action-primary,
+.smart-row-action-primary { /* green tier — default look */ }
+
+.smart-action-warning,
+.smart-row-action-warning {
+    border-color: var(--warning, #f59e0b);
+    color: var(--warning, #f59e0b);
+}
+.smart-action-warning:hover,
+.smart-row-action-warning:hover {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--warning, #f59e0b);
+}
+
+.smart-action-danger,
+.smart-row-action-danger {
+    border-color: var(--danger, #ef4444);
+    color: var(--danger, #ef4444);
+}
+.smart-action-danger:hover,
+.smart-row-action-danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger, #ef4444);
+}
+
+.smart-row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.smart-row-action-btn {
+    padding: 3px 8px;
+    font-size: 0.72rem;
+}
+
+.smart-col-actions-head {
+    text-align: right;
+    width: 1%;
+    white-space: nowrap;
+}
+
+/* ── Action modal ─────────────────────────────────────────────── */
+
+.smart-action-modal {
+    width: min(640px, 92vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+.smart-action-modal .modal-body {
+    overflow-y: auto;
+}
+
+.smart-action-modal .form-group {
+    margin-bottom: 14px;
+}
+
+.smart-action-modal .form-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-action-modal .form-req {
+    color: var(--danger, #ef4444);
+}
+
+.smart-action-modal .form-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-secondary, #161b22);
+    color: var(--text-primary, #f0f6fc);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+}
+.smart-action-modal .form-input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #58a6ff);
+}
+
+.smart-action-modal .form-multi-select {
+    height: auto;
+    min-height: 120px;
+}
+
+.smart-action-modal .form-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted, #8b949e);
+    margin-top: 4px;
+    line-height: 1.35;
+}
+
+.smart-action-modal .form-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-action-modal .form-group[data-tier="red"] {
+    padding: 8px 10px;
+    border-left: 3px solid var(--danger, #ef4444);
+    background: rgba(239, 68, 68, 0.06);
+    border-radius: 4px;
+}
+.smart-action-modal .form-group[data-tier="yellow"] {
+    border-left: 3px solid var(--warning, #f59e0b);
+    padding-left: 10px;
+}
+
+.smart-action-message {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: var(--bg-secondary, #161b22);
+    border-left: 3px solid var(--accent-primary, #58a6ff);
+    border-radius: 3px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-secondary, #c9d1d9);
+}
+
+.smart-action-preview {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+}
+
+.smart-action-preview-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #8b949e);
+    margin-bottom: 6px;
+}
+
+.smart-action-preview-cmd {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.78rem;
+    color: var(--text-primary, #f0f6fc);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+#smart-action-error {
+    margin-top: 10px;
+    color: var(--danger, #ef4444);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+}
+
+/* ── Safety tier badge in modal header ───────────────────────── */
+
+.smart-tier-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+}
+.smart-tier-yellow {
+    background: rgba(245, 158, 11, 0.18);
+    color: var(--warning, #f59e0b);
+    border: 1px solid var(--warning, #f59e0b);
+}
+.smart-tier-red {
+    background: rgba(239, 68, 68, 0.18);
+    color: var(--danger, #ef4444);
+    border: 1px solid var(--danger, #ef4444);
+}
+
+/* ── Generic row badge (used by `format: badge` columns) ─────── */
+
+.smart-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.smart-badge-success { background: rgba(16, 185, 129, 0.18); color: var(--success, #10b981); }
+.smart-badge-warning { background: rgba(245, 158, 11, 0.18); color: var(--warning, #f59e0b); }
+.smart-badge-danger,
+.smart-badge-critical { background: rgba(239, 68, 68, 0.18); color: var(--danger, #ef4444); }
+.smart-badge-muted   { background: rgba(139, 148, 158, 0.18); color: var(--text-muted, #8b949e); }

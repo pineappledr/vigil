@@ -30,8 +30,15 @@ const SmartTableComponent = {
      * @returns {string} HTML
      */
     render(compId, config, addonId) {
-        const columns = config.columns || ['ID', 'Attribute', 'Value', 'Worst', 'Threshold', 'Raw Value'];
+        let columns = config.columns || ['ID', 'Attribute', 'Value', 'Worst', 'Threshold', 'Raw Value'];
         const isStructured = columns.length > 0 && typeof columns[0] === 'object';
+
+        // Auto-append an "Actions" column when row_actions are declared and the
+        // manifest didn't already provide an explicit `format: "actions"` column.
+        const rowActions = Array.isArray(config.row_actions) ? config.row_actions : [];
+        if (isStructured && rowActions.length > 0 && !columns.some(c => c.format === 'actions')) {
+            columns = [...columns, { key: '__actions', label: '', format: 'row_actions' }];
+        }
 
         const sortState = config.default_sort
             ? { key: config.default_sort.key, dir: config.default_sort.direction || 'asc' }
@@ -47,16 +54,23 @@ const SmartTableComponent = {
             sort: sortState,
             timeRange: config.time_filter ? (config.time_filter.default || '') : '',
             pageSize: config.page_size || 0,  // 0 = show all (no pagination)
-            currentPage: 1
+            currentPage: 1,
+            rowActions,
+            toolbarActions: Array.isArray(config.toolbar_actions) ? config.toolbar_actions : [],
+            optionsCache: {}  // keyed by options_from path
         };
 
         const headers = isStructured
             ? columns.map(c => {
-                if (config.sortable && c.key && c.format !== 'actions') {
+                const isActionCol = c.format === 'actions' || c.format === 'row_actions';
+                if (config.sortable && c.key && !isActionCol) {
                     const arrow = sortState && sortState.key === c.key
                         ? (sortState.dir === 'asc' ? ' &#9650;' : ' &#9660;')
                         : '';
                     return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${Utils.escapeHtml(c.label || c.key)}${arrow}</th>`;
+                }
+                if (isActionCol) {
+                    return `<th class="smart-col-actions-head">${Utils.escapeHtml(c.label || '')}</th>`;
                 }
                 return `<th>${Utils.escapeHtml(c.label || c.key)}</th>`;
             }).join('')
@@ -91,9 +105,16 @@ const SmartTableComponent = {
             ? this._renderPageSizeSelector(compId, config.page_size)
             : '';
 
+        const toolbarActionsHtml = this._tables[compId].toolbarActions.length > 0
+            ? `<div class="smart-toolbar-actions">${this._tables[compId].toolbarActions.map((act, i) =>
+                this._renderToolbarActionButton(compId, act, i)).join('')}</div>`
+            : '';
+
         return `
             <div class="smart-table-container" id="smart-table-${compId}">
                 <div class="smart-table-toolbar">
+                    ${toolbarActionsHtml}
+                    <div class="smart-toolbar-spacer"></div>
                     ${pageSizeSelector}
                     ${timeFilter}
                     ${refreshBtn}
@@ -412,7 +433,12 @@ const SmartTableComponent = {
         }
 
         const isJobHistory = entry.config.source === 'job_history';
-        tbody.innerHTML = displayRows.map(row => {
+        // Tag each row with the table id + its index in the displayed slice so
+        // row-action buttons can recover the row context on click.
+        entry.displayedRows = displayRows;
+        tbody.innerHTML = displayRows.map((row, idx) => {
+            row.__compId = compId;
+            row.__rowIdx = idx;
             const clickAttr = isJobHistory && row.id
                 ? ` class="smart-row-clickable" onclick="Modals.showJobDetail(${entry.addonId}, ${row.id})"`
                 : '';
@@ -432,6 +458,14 @@ const SmartTableComponent = {
         }
         if (format === 'actions') {
             return this._formatActions(row, col);
+        }
+        if (format === 'row_actions') {
+            // Locate the table this row belongs to via `__compId` we tag in
+            // _updateStructuredTable below.
+            return this._renderRowActionButtons(row.__compId, row);
+        }
+        if (format === 'badge') {
+            return this._formatBadge(val, col);
         }
 
         if (format === 'warning_badge') {
@@ -534,11 +568,15 @@ const SmartTableComponent = {
         const thead = document.querySelector(`#smart-table-${compId} thead tr`);
         if (thead) {
             thead.innerHTML = entry.columns.map(c => {
-                if (entry.config.sortable && c.key && c.format !== 'actions') {
+                const isActionCol = c.format === 'actions' || c.format === 'row_actions';
+                if (entry.config.sortable && c.key && !isActionCol) {
                     const arrow = entry.sort && entry.sort.key === c.key
                         ? (entry.sort.dir === 'asc' ? ' &#9650;' : ' &#9660;')
                         : '';
                     return `<th class="smart-th-sortable" onclick="SmartTableComponent._toggleSort('${this._escapeJS(compId)}','${this._escapeJS(c.key)}')">${Utils.escapeHtml(c.label || c.key)}${arrow}</th>`;
+                }
+                if (isActionCol) {
+                    return `<th class="smart-col-actions-head">${Utils.escapeHtml(c.label || '')}</th>`;
                 }
                 return `<th>${Utils.escapeHtml(c.label || c.key)}</th>`;
             }).join('');
@@ -668,5 +706,532 @@ const SmartTableComponent = {
     _escapeJS(str) {
         if (!str) return '';
         return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    },
+
+    // ─── Manifest-driven Actions ─────────────────────────────────────────
+    //
+    // The frontend renders action buttons declared in the manifest as
+    // `toolbar_actions` (above the table) and `row_actions` (per row). Each
+    // action either opens a `form` modal (multi-field input) or a `confirm`
+    // modal (single yes/no with optional type-to-confirm), then POSTs to the
+    // addon API through the proxy route.
+
+    _renderToolbarActionButton(compId, action, idx) {
+        const tier = action.safety_tier || 'green';
+        const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
+        const label = Utils.escapeHtml(action.label || action.id || 'Action');
+        const icon = this._iconSvg(action.icon);
+        return `<button class="smart-action-btn smart-action-${variant}"
+                    title="${label}"
+                    onclick="SmartTableComponent._invokeToolbarAction('${this._escapeJS(compId)}', ${idx})">
+                    ${icon}<span>${label}</span>
+                </button>`;
+    },
+
+    _renderRowActionButtons(compId, row) {
+        const entry = this._tables[compId];
+        if (!entry || !entry.rowActions || entry.rowActions.length === 0) return '';
+        const rowIdx = row.__rowIdx;
+        return `<div class="smart-row-actions">${entry.rowActions.map((act, i) => {
+            const tier = act.safety_tier || 'green';
+            const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
+            const label = Utils.escapeHtml(act.label || act.id || 'Action');
+            const icon = this._iconSvg(act.icon);
+            return `<button class="smart-row-action-btn smart-row-action-${variant}"
+                        title="${label}"
+                        onclick="event.stopPropagation(); SmartTableComponent._invokeRowAction('${this._escapeJS(compId)}', ${i}, ${rowIdx})">
+                        ${icon}<span>${label}</span>
+                    </button>`;
+        }).join('')}</div>`;
+    },
+
+    _invokeToolbarAction(compId, actionIdx) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const action = entry.toolbarActions[actionIdx];
+        if (!action) return;
+        this._openActionModal(compId, action, null);
+    },
+
+    _invokeRowAction(compId, actionIdx, rowIdx) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const action = entry.rowActions[actionIdx];
+        const row = entry.displayedRows ? entry.displayedRows[rowIdx] : null;
+        if (!action || !row) return;
+        this._openActionModal(compId, action, row);
+    },
+
+    // ─── Modal ───────────────────────────────────────────────────────────
+
+    _openActionModal(compId, action, row) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+
+        // Two shapes: `form` (multi-field) or `confirm` (single dialog,
+        // possibly with extra_fields and type-to-confirm). We unify them so
+        // the rest of the pipeline only sees one structure.
+        const cfg = this._normalizeActionConfig(action);
+        const title = this._interpolate(cfg.title || action.label || 'Action', row);
+        const message = cfg.message ? this._interpolate(cfg.message, row) : '';
+        const tier = action.safety_tier || 'green';
+
+        const fieldsHtml = cfg.fields
+            .filter(f => f.type !== 'hidden')
+            .map(f => this._renderField(f, row))
+            .join('');
+
+        const previewHtml = action.action && action.action.preview
+            ? `<div class="smart-action-preview" id="smart-action-preview"><div class="smart-action-preview-label">Command preview</div><pre class="smart-action-preview-cmd">Loading…</pre></div>`
+            : '';
+
+        const tierBadge = tier !== 'green'
+            ? `<span class="smart-tier-badge smart-tier-${tier}">${tier.toUpperCase()} TIER</span>`
+            : '';
+
+        const submitVariant = cfg.button_variant || (tier === 'red' ? 'danger' : 'primary');
+        const submitLabel = Utils.escapeHtml(cfg.button_label || action.label || 'Submit');
+
+        const modal = Modals.create(`
+            <div class="modal smart-action-modal">
+                <div class="modal-header">
+                    <h3>${Utils.escapeHtml(title)} ${tierBadge}</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    ${message ? `<p class="smart-action-message">${Utils.escapeHtml(message)}</p>` : ''}
+                    <form class="smart-action-form" onsubmit="return false;">${fieldsHtml}</form>
+                    ${previewHtml}
+                    <div class="form-error" id="smart-action-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-${submitVariant}" id="smart-action-submit">${submitLabel}</button>
+                </div>
+            </div>
+        `);
+
+        // Stash everything the submit handler needs on the DOM element.
+        modal._smartAction = { compId, action, row, cfg };
+
+        // Wire submit + initial preview + initial options_from loads.
+        const submitBtn = modal.querySelector('#smart-action-submit');
+        submitBtn.onclick = () => this._submitActionFromModal(modal);
+
+        // Keep submit gated until type-to-confirm passes (if required).
+        if (cfg.require_type_confirm) {
+            this._wireTypeConfirm(modal);
+        }
+
+        // Hidden fields with value_from go into the form values directly when
+        // collected — load options and prime the preview.
+        for (const field of cfg.fields) {
+            if (field.options_from) {
+                this._loadFieldOptions(modal, field, entry.addonId);
+            }
+        }
+
+        if (action.action && action.action.preview) {
+            // Debounce preview so typing doesn't hammer the agent.
+            const refreshPreview = this._debounce(() => this._refreshPreview(modal), 250);
+            modal.querySelectorAll('input, select, textarea').forEach(el => {
+                el.addEventListener('input', refreshPreview);
+                el.addEventListener('change', refreshPreview);
+            });
+            // First fetch.
+            this._refreshPreview(modal);
+        }
+    },
+
+    _normalizeActionConfig(action) {
+        // `form` and `confirm` describe the same modal in different shapes.
+        // Confirm dialogs may also carry `extra_fields` for inputs that aren't
+        // the type-to-confirm box itself.
+        if (action.form) {
+            return {
+                title: action.form.title,
+                fields: action.form.fields || [],
+                button_label: action.form.button_label,
+                button_variant: action.form.button_variant,
+                show_command: action.form.show_command,
+                require_type_confirm: action.form.require_type_confirm || false,
+                confirm_value: action.form.confirm_value,
+                confirm_key: action.form.confirm_key || 'confirm',
+                confirm_label: action.form.confirm_label,
+                message: action.form.message
+            };
+        }
+        if (action.confirm) {
+            const fields = [...(action.confirm.extra_fields || [])];
+            if (action.confirm.require_type_confirm) {
+                fields.push({
+                    key: action.confirm.confirm_key || 'confirm',
+                    label: action.confirm.confirm_label || 'Type to confirm',
+                    type: 'text',
+                    placeholder: action.confirm.confirm_value || ''
+                });
+            }
+            return {
+                title: action.confirm.title || action.label,
+                message: action.confirm.message || '',
+                fields,
+                button_label: action.confirm.button_label || 'Confirm',
+                button_variant: action.confirm.button_variant,
+                show_command: action.confirm.show_command,
+                require_type_confirm: action.confirm.require_type_confirm || false,
+                confirm_value: action.confirm.confirm_value,
+                confirm_key: action.confirm.confirm_key || 'confirm',
+                confirm_label: action.confirm.confirm_label
+            };
+        }
+        // No form, no confirm — bare action. Treat as a one-tap confirm.
+        return {
+            title: action.label,
+            message: `Run ${action.label}?`,
+            fields: [],
+            button_label: action.label || 'Run'
+        };
+    },
+
+    // ─── Field rendering ────────────────────────────────────────────────
+
+    _renderField(field, row) {
+        const id = `smart-field-${field.key.replace(/\./g, '_')}`;
+        const label = field.label
+            ? `<label for="${id}" class="form-label">${Utils.escapeHtml(field.label)}${field.required ? ' <span class="form-req">*</span>' : ''}</label>`
+            : '';
+        const hint = field.hint
+            ? `<div class="form-hint">${Utils.escapeHtml(field.hint)}</div>`
+            : '';
+        const tierAttr = field.safety_tier ? ` data-tier="${field.safety_tier}"` : '';
+
+        let input = '';
+        const initialVal = this._resolveValueFrom(field, row);
+        const placeholder = field.placeholder ? this._interpolate(field.placeholder, row) : '';
+
+        switch (field.type) {
+            case 'text':
+            case 'number':
+                input = `<input type="${field.type}" id="${id}" class="form-input"
+                            data-field-key="${Utils.escapeHtml(field.key)}"
+                            ${initialVal != null ? `value="${Utils.escapeHtml(String(initialVal))}"` : ''}
+                            ${placeholder ? `placeholder="${Utils.escapeHtml(placeholder)}"` : ''}
+                            ${field.required ? 'required' : ''}>`;
+                break;
+            case 'select': {
+                const opts = (field.options || []).map(o =>
+                    `<option value="${Utils.escapeHtml(String(o.value))}"${String(o.value) === String(initialVal) ? ' selected' : ''}>${Utils.escapeHtml(o.label)}</option>`
+                ).join('');
+                const blank = field.required ? '' : `<option value="">— unchanged —</option>`;
+                input = `<select id="${id}" class="form-input" data-field-key="${Utils.escapeHtml(field.key)}">${blank}${opts}<option disabled>Loading…</option></select>`;
+                break;
+            }
+            case 'multi-select':
+                input = `<select id="${id}" class="form-input form-multi-select" multiple
+                            data-field-key="${Utils.escapeHtml(field.key)}"
+                            size="6"><option disabled>Loading options…</option></select>`;
+                break;
+            case 'checkbox':
+            case 'toggle':
+                input = `<label class="form-checkbox-row"><input type="checkbox" id="${id}"
+                            data-field-key="${Utils.escapeHtml(field.key)}"
+                            ${initialVal === true || initialVal === 'on' || initialVal === 'true' ? 'checked' : ''}>
+                            <span>${Utils.escapeHtml(field.label || '')}</span></label>`;
+                // Checkbox uses its own inline label; suppress the outer one.
+                return `<div class="form-group"${tierAttr}>${input}${hint}</div>`;
+            case 'hidden':
+                // Hidden fields are tracked separately so the form can still
+                // hand their values to the body collector. Render none.
+                return `<input type="hidden" id="${id}" data-field-key="${Utils.escapeHtml(field.key)}" value="${Utils.escapeHtml(String(initialVal ?? ''))}">`;
+            default:
+                input = `<input type="text" id="${id}" class="form-input" data-field-key="${Utils.escapeHtml(field.key)}">`;
+        }
+
+        return `<div class="form-group"${tierAttr}>${label}${input}${hint}</div>`;
+    },
+
+    _resolveValueFrom(field, row) {
+        if (field.value !== undefined) return field.value;
+        if (!field.value_from) return undefined;
+        if (typeof field.value_from === 'string' && field.value_from.startsWith('row.')) {
+            const key = field.value_from.slice(4);
+            return row ? row[key] : undefined;
+        }
+        return undefined;
+    },
+
+    _interpolate(template, row) {
+        if (!template) return '';
+        return String(template).replace(/\{row\.([a-zA-Z0-9_]+)\}/g, (_, key) =>
+            row && row[key] != null ? String(row[key]) : '');
+    },
+
+    // ─── options_from loader ─────────────────────────────────────────────
+
+    async _loadFieldOptions(modalEl, field, addonId) {
+        const sel = modalEl.querySelector(`[data-field-key="${field.key.replace(/"/g, '\\"')}"]`);
+        if (!sel) return;
+        if (!addonId) return;
+
+        let path = field.options_from;
+        if (typeof path !== 'string') return;
+        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+            const agentId = ManifestRenderer.getSelectedAgentId();
+            if (agentId) {
+                const sep = path.includes('?') ? '&' : '?';
+                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
+            }
+        }
+
+        try {
+            const resp = await fetch(`/api/addons/${addonId}/proxy?path=${encodeURIComponent(path)}`);
+            if (!resp.ok) {
+                sel.innerHTML = `<option disabled>Failed to load (HTTP ${resp.status})</option>`;
+                return;
+            }
+            const data = await resp.json();
+            const items = Array.isArray(data) ? data : (data && data.items) || [];
+            const valueKey = field.option_value || 'value';
+            const labelKey = field.option_label || 'label';
+            const detailKey = field.option_detail;
+
+            if (items.length === 0) {
+                sel.innerHTML = `<option disabled>No options available</option>`;
+                return;
+            }
+
+            const opts = items.map(it => {
+                const v = String(it[valueKey] ?? '');
+                let l = String(it[labelKey] ?? v);
+                if (detailKey && it[detailKey]) l += ` — ${it[detailKey]}`;
+                return `<option value="${Utils.escapeHtml(v)}">${Utils.escapeHtml(l)}</option>`;
+            }).join('');
+
+            // Single-select: leading blank if not required.
+            const blank = (field.type === 'select' && !field.required) ? `<option value="">— unchanged —</option>` : '';
+            sel.innerHTML = blank + opts;
+        } catch (e) {
+            console.error(`[SmartTable] options_from ${path}:`, e);
+            sel.innerHTML = `<option disabled>Could not load options</option>`;
+        }
+    },
+
+    // ─── Preview ─────────────────────────────────────────────────────────
+
+    async _refreshPreview(modalEl) {
+        const ctx = modalEl._smartAction;
+        if (!ctx) return;
+        const previewEl = modalEl.querySelector('#smart-action-preview .smart-action-preview-cmd');
+        if (!previewEl) return;
+        const preview = ctx.action.action && ctx.action.action.preview;
+        if (!preview) return;
+
+        const entry = this._tables[ctx.compId];
+        if (!entry || !entry.addonId) return;
+
+        const formValues = this._collectFormValues(modalEl);
+        const body = this._buildRequestBody(ctx.action, ctx.row, formValues, preview);
+
+        let path = preview.endpoint;
+        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+            const agentId = ManifestRenderer.getSelectedAgentId();
+            if (agentId) {
+                const sep = path.includes('?') ? '&' : '?';
+                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
+            }
+        }
+
+        try {
+            const method = (preview.method || ctx.action.action.method || 'POST').toUpperCase();
+            const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
+                + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
+            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } };
+            if (init.method !== 'GET') init.body = JSON.stringify(body);
+            const resp = await fetch(proxyURL, init);
+            if (!resp.ok) {
+                previewEl.textContent = `Preview unavailable (HTTP ${resp.status})`;
+                return;
+            }
+            const data = await resp.json().catch(() => ({}));
+            previewEl.textContent = data.command || data.preview || JSON.stringify(data, null, 2);
+        } catch (e) {
+            previewEl.textContent = `Preview unavailable: ${e.message}`;
+        }
+    },
+
+    // ─── Submit ──────────────────────────────────────────────────────────
+
+    async _submitActionFromModal(modalEl) {
+        const ctx = modalEl._smartAction;
+        if (!ctx) return;
+        const entry = this._tables[ctx.compId];
+        if (!entry || !entry.addonId) return;
+
+        const submitBtn = modalEl.querySelector('#smart-action-submit');
+        const errEl = modalEl.querySelector('#smart-action-error');
+        errEl.textContent = '';
+
+        const formValues = this._collectFormValues(modalEl);
+        const body = this._buildRequestBody(ctx.action, ctx.row, formValues, ctx.action.action);
+
+        // Type-to-confirm gate for red-tier actions.
+        if (ctx.cfg.require_type_confirm) {
+            const expected = this._interpolate(ctx.cfg.confirm_value || '', ctx.row);
+            const got = String(formValues[ctx.cfg.confirm_key] || '');
+            if (expected && got !== expected) {
+                errEl.textContent = `Type "${expected}" exactly to confirm.`;
+                return;
+            }
+        }
+
+        let path = ctx.action.action.endpoint;
+        const method = (ctx.action.action.method || 'POST').toUpperCase();
+
+        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+            const agentId = ManifestRenderer.getSelectedAgentId();
+            if (agentId) {
+                const sep = path.includes('?') ? '&' : '?';
+                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
+            }
+        }
+
+        submitBtn.disabled = true;
+        const origLabel = submitBtn.textContent;
+        submitBtn.textContent = 'Working…';
+        try {
+            const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
+                + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
+            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } };
+            if (init.method !== 'GET') init.body = JSON.stringify(body);
+            const resp = await fetch(proxyURL, init);
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                errEl.textContent = (data && (data.error || data.message)) || `Request failed (HTTP ${resp.status})`;
+                if (data && data.command) {
+                    errEl.textContent += `\nCommand: ${data.command}`;
+                }
+                return;
+            }
+            Modals.close(submitBtn);
+            this.refresh(ctx.compId);
+        } catch (e) {
+            errEl.textContent = `Request failed: ${e.message}`;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = origLabel;
+        }
+    },
+
+    _collectFormValues(modalEl) {
+        const out = {};
+        modalEl.querySelectorAll('[data-field-key]').forEach(el => {
+            const key = el.dataset.fieldKey;
+            if (!key) return;
+            let value;
+            if (el.type === 'checkbox') {
+                value = el.checked;
+            } else if (el.tagName === 'SELECT' && el.multiple) {
+                value = Array.from(el.selectedOptions).map(o => o.value).filter(v => v !== '');
+            } else if (el.type === 'number') {
+                const n = el.value === '' ? null : Number(el.value);
+                value = Number.isFinite(n) ? n : null;
+            } else {
+                value = el.value;
+            }
+            this._setNestedValue(out, key, value);
+        });
+        return out;
+    },
+
+    _setNestedValue(obj, dottedKey, value) {
+        const parts = dottedKey.split('.');
+        let cur = obj;
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+            cur = cur[parts[i]];
+        }
+        cur[parts[parts.length - 1]] = value;
+    },
+
+    _buildRequestBody(action, row, formValues, actionOrPreview) {
+        // Compose: static body fields + body_map (row→body) + form values.
+        // Form values take precedence over body_map for the same key.
+        const body = {};
+        if (actionOrPreview && actionOrPreview.body && typeof actionOrPreview.body === 'object') {
+            Object.assign(body, actionOrPreview.body);
+        }
+        if (actionOrPreview && actionOrPreview.body_map && typeof actionOrPreview.body_map === 'object') {
+            for (const [bodyKey, src] of Object.entries(actionOrPreview.body_map)) {
+                if (typeof src === 'string' && src.startsWith('row.') && row) {
+                    const v = row[src.slice(4)];
+                    if (v !== undefined) this._setNestedValue(body, bodyKey, v);
+                }
+            }
+        }
+        // Strip empty-string optional values so the backend gets {} rather than
+        // {"new_name": ""} which would be interpreted as "rename to empty".
+        for (const [k, v] of Object.entries(formValues)) {
+            if (v === '' || v === null) continue;
+            if (Array.isArray(v) && v.length === 0) continue;
+            this._setNestedValue(body, k, v);
+        }
+        return body;
+    },
+
+    _wireTypeConfirm(modalEl) {
+        const ctx = modalEl._smartAction;
+        if (!ctx) return;
+        const expected = this._interpolate(ctx.cfg.confirm_value || '', ctx.row);
+        if (!expected) return;
+        const key = ctx.cfg.confirm_key || 'confirm';
+        const sel = modalEl.querySelector(`[data-field-key="${key.replace(/"/g, '\\"')}"]`);
+        const submit = modalEl.querySelector('#smart-action-submit');
+        if (!sel || !submit) return;
+        const update = () => {
+            submit.disabled = String(sel.value) !== expected;
+        };
+        sel.addEventListener('input', update);
+        update();
+    },
+
+    // ─── Helpers ─────────────────────────────────────────────────────────
+
+    _formatBadge(val, col) {
+        if (val == null || val === '') return '';
+        const map = (col && (col.badge_map || col.badge)) || {};
+        const variant = map[val] || 'muted';
+        return `<span class="smart-badge smart-badge-${variant}">${Utils.escapeHtml(String(val))}</span>`;
+    },
+
+    _iconSvg(name) {
+        // Tiny inline icon registry for the icon names the manifest uses. Any
+        // name not listed falls back to a small dot. We don't pull in a full
+        // icon library — the dashboard only needs a handful.
+        const ICONS = {
+            'edit':         '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+            'plus-square':  '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+            'log-in':       '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>',
+            'log-out':      '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+            'trash-2':      '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+            'refresh-cw':   '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+            'rotate-ccw':   '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>',
+            'pause':        '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
+            'x-circle':     '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+            'camera':       '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+            'eraser':       '<path d="M20 20H7L3 16a2 2 0 0 1 0-3l9-9a2 2 0 0 1 3 0l6 6a2 2 0 0 1 0 3l-7 7"/>',
+            'play':         '<polygon points="5 3 19 12 5 21 5 3"/>'
+        };
+        const path = name && ICONS[name] ? ICONS[name] : '<circle cx="12" cy="12" r="3"/>';
+        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+    },
+
+    _debounce(fn, ms) {
+        let timer = null;
+        return function (...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), ms);
+        };
     }
 };
