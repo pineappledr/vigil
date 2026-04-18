@@ -2044,7 +2044,15 @@
 }
 
 .smart-action-primary,
-.smart-row-action-primary { /* green tier — default look */ }
+.smart-row-action-primary {
+    border-color: var(--success, #10b981);
+    color: var(--success, #10b981);
+}
+.smart-action-primary:hover,
+.smart-row-action-primary:hover {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--success, #10b981);
+}
 
 .smart-action-warning,
 .smart-row-action-warning {
@@ -2094,6 +2102,199 @@
     max-height: 92vh;
     display: flex;
     flex-direction: column;
+}
+
+.smart-action-modal-wide {
+    width: min(900px, 95vw);
+}
+
+/* Let long <select> option labels wrap in the open dropdown so the
+   "Mirror — 2+ drives, highest durability, lose 50% capacity" text doesn't
+   clip on narrow columns. The closed-state summary still truncates. */
+.smart-action-modal select.form-input option {
+    white-space: normal;
+}
+
+/* ── Form sections ───────────────────────────────────────────── */
+
+.smart-section {
+    border: 1px solid var(--border, #30363d);
+    border-radius: 6px;
+    margin-bottom: 14px;
+    background: var(--bg-secondary, #161b22);
+    overflow: hidden;
+}
+.smart-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary, #f0f6fc);
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-tertiary, #0d1117);
+    border-bottom: 1px solid var(--border, #30363d);
+}
+.smart-section-header:hover {
+    background: var(--bg-hover, #1c2128);
+}
+.smart-section-chevron {
+    transition: transform 0.15s ease;
+    color: var(--text-muted, #8b949e);
+}
+.smart-section-collapsed .smart-section-chevron {
+    transform: rotate(0deg);
+}
+.smart-section:not(.smart-section-collapsed) .smart-section-chevron {
+    transform: rotate(90deg);
+    color: var(--accent-primary, #6366f1);
+}
+.smart-section-body {
+    padding: 14px;
+}
+.smart-section-collapsed .smart-section-body {
+    display: none;
+}
+.smart-section-body.smart-section-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
+}
+.smart-section-body.smart-section-columns .smart-capacity-preview {
+    grid-column: 1 / -1;
+}
+
+/* ── Capacity preview ────────────────────────────────────────── */
+
+.smart-capacity-preview {
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid var(--accent-primary, #6366f1);
+    border-radius: 4px;
+    padding: 10px 12px;
+}
+.smart-capacity-body {
+    font-size: 0.82rem;
+    color: var(--text-primary, #f0f6fc);
+    margin-top: 4px;
+}
+.smart-capacity-note {
+    font-size: 0.72rem;
+    color: var(--text-muted, #8b949e);
+    margin-top: 4px;
+}
+
+/* ── Custom select input (`allow_custom` + __custom__ sentinel) ─ */
+
+.smart-custom-input-group {
+    margin-top: 6px;
+    margin-bottom: 0;
+}
+
+/* ── Disk picker cards (`multi-select` with `variant: "cards"`) ── */
+
+.smart-hidden-select {
+    display: none !important;
+}
+
+.smart-disk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.smart-disk-grid-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 14px;
+    color: var(--text-muted, #8b949e);
+    font-size: 0.82rem;
+    background: var(--bg-secondary, #161b22);
+    border: 1px dashed var(--border, #30363d);
+    border-radius: 4px;
+}
+
+.smart-disk-grid-count {
+    font-size: 0.72rem;
+    color: var(--text-muted, #8b949e);
+    margin-top: 6px;
+    text-align: right;
+}
+
+.smart-disk-card {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 10px 12px;
+    border: 1px solid var(--border, #30363d);
+    border-radius: 6px;
+    background: var(--bg-secondary, #161b22);
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    user-select: none;
+}
+.smart-disk-card:hover {
+    border-color: var(--accent-primary, #6366f1);
+    background: var(--bg-hover, #1c2128);
+}
+.smart-disk-card-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border, #30363d);
+    color: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.smart-disk-card-selected {
+    border-color: var(--success, #10b981);
+    background: rgba(16, 185, 129, 0.08);
+}
+.smart-disk-card-selected .smart-disk-card-check {
+    background: var(--success, #10b981);
+    border-color: var(--success, #10b981);
+    color: #fff;
+}
+.smart-disk-card-name {
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--text-primary, #f0f6fc);
+}
+.smart-disk-card-detail {
+    font-size: 0.74rem;
+    color: var(--text-secondary, #c9d1d9);
+    margin-top: 2px;
+}
+.smart-disk-card-meta {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted, #8b949e);
+}
+.smart-disk-card-serial {
+    font-family: var(--font-mono, SFMono-Regular, Menlo, monospace);
+}
+.smart-disk-card-conflict {
+    font-size: 0.68rem;
+    color: var(--warning, #f59e0b);
+    margin-top: 4px;
+    min-height: 0;
+}
+.smart-disk-card-conflict-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    border-style: dashed;
+}
+.smart-disk-card-conflict-disabled:hover {
+    border-color: var(--border, #30363d);
+    background: var(--bg-secondary, #161b22);
 }
 .smart-action-modal .modal-body {
     overflow-y: auto;
@@ -2246,3 +2447,113 @@
 .smart-badge-danger,
 .smart-badge-critical { background: rgba(239, 68, 68, 0.18); color: var(--danger, #ef4444); }
 .smart-badge-muted   { background: rgba(139, 148, 158, 0.18); color: var(--text-muted, #8b949e); }
+
+/* ── Expandable rows (`expand_key`) ──────────────────────────── */
+
+.smart-col-expand-head,
+.smart-col-expand {
+    width: 28px;
+    padding: 4px 2px 4px 8px;
+}
+
+.smart-expand-toggle {
+    background: transparent;
+    border: none;
+    padding: 2px;
+    color: var(--text-muted, #8b949e);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, color 0.12s;
+}
+.smart-expand-toggle:hover {
+    color: var(--text-primary, #f0f6fc);
+}
+.smart-expand-toggle.smart-expand-open {
+    transform: rotate(90deg);
+    color: var(--accent-primary, #6366f1);
+}
+
+.smart-expand-row > td {
+    padding: 0 8px 10px 36px;
+    background: var(--bg-tertiary, #0d1117);
+}
+
+.smart-table-nested {
+    width: 100%;
+    margin: 0;
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    background: var(--bg-secondary, #161b22);
+}
+.smart-table-nested th,
+.smart-table-nested td {
+    font-size: 0.78rem;
+    padding: 4px 8px;
+}
+.smart-table-nested thead th {
+    background: var(--bg-tertiary, #0d1117);
+    color: var(--text-muted, #8b949e);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+/* Discovery card — TrueNAS-style unused-disk callout */
+.discovery-card-container {
+    margin: 1rem 0;
+}
+.discovery-card {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1rem 1.25rem;
+    background: var(--bg-secondary, #161b22);
+    border: 1px solid var(--accent, #3b82f6);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+.discovery-card-icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--accent, #3b82f6);
+    font-size: 1.3rem;
+}
+.discovery-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.discovery-card-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+}
+.discovery-card-summary {
+    margin: 0 0 0.75rem 0;
+    color: var(--text-secondary, #b1bac4);
+    font-size: 0.875rem;
+}
+.discovery-card-group {
+    display: inline-block;
+    margin-right: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-tertiary, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #8b949e);
+}
+.discovery-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}

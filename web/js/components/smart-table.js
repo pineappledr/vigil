@@ -60,8 +60,12 @@ const SmartTableComponent = {
             optionsCache: {}  // keyed by options_from path
         };
 
+        const expandHead = config.expand_key
+            ? `<th class="smart-col-expand-head"></th>`
+            : '';
+
         const headers = isStructured
-            ? columns.map(c => {
+            ? expandHead + columns.map(c => {
                 const isActionCol = c.format === 'actions' || c.format === 'row_actions';
                 if (config.sortable && c.key && !isActionCol) {
                     const arrow = sortState && sortState.key === c.key
@@ -76,7 +80,7 @@ const SmartTableComponent = {
             }).join('')
             : columns.map(c => `<th>${Utils.escapeHtml(c)}</th>`).join('');
 
-        const colCount = columns.length;
+        const colCount = columns.length + (config.expand_key ? 1 : 0);
 
         // Fetch source data after DOM insertion
         if (config.source && addonId) {
@@ -413,8 +417,13 @@ const SmartTableComponent = {
         const tbody = document.getElementById(`smart-tbody-${compId}`);
         if (!tbody) return;
 
+        const expandKey = entry.config && entry.config.expand_key;
+        const totalCols = entry.columns.length + (expandKey ? 1 : 0);
+
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty">No data yet — agent is collecting, try refreshing in a moment</td></tr>`;
+            const msg = (entry.config && entry.config.empty_message)
+                || 'No data yet — agent is collecting, try refreshing in a moment';
+            tbody.innerHTML = `<tr><td colspan="${totalCols}" class="smart-table-empty">${Utils.escapeHtml(msg)}</td></tr>`;
             this._renderPagination(compId, 0, entry.pageSize, 1);
             return;
         }
@@ -442,14 +451,56 @@ const SmartTableComponent = {
             const clickAttr = isJobHistory && row.id
                 ? ` class="smart-row-clickable" onclick="Modals.showJobDetail(${entry.addonId}, ${row.id})"`
                 : '';
-            return `<tr${clickAttr}>${entry.columns.map(col => {
+            const children = expandKey ? row[expandKey] : null;
+            const hasChildren = Array.isArray(children) && children.length > 0;
+            const expandCell = expandKey
+                ? (hasChildren
+                    ? `<td class="smart-col-expand"><button type="button" class="smart-expand-toggle" onclick="SmartTableComponent._toggleExpand('${this._escapeJS(compId)}',${idx})" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></button></td>`
+                    : `<td class="smart-col-expand"></td>`)
+                : '';
+            const mainRow = `<tr data-row-idx="${idx}"${clickAttr}>${expandCell}${entry.columns.map(col => {
                 const val = row[col.key];
                 return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
+            const nestedRow = hasChildren
+                ? `<tr class="smart-expand-row" data-expand-for="${idx}" style="display:none"><td colspan="${totalCols}">${this._renderExpandedChildren(children, entry.config)}</td></tr>`
+                : '';
+            return mainRow + nestedRow;
         }).join('');
 
         // Render pagination controls.
         this._renderPagination(compId, sorted.length, entry.pageSize, entry.currentPage);
+    },
+
+    // Toggle the nested row sibling for the main row at `idx`. The chevron
+    // rotates via `aria-expanded`; CSS handles the visual.
+    _toggleExpand(compId, idx) {
+        const tbody = document.getElementById(`smart-tbody-${compId}`);
+        if (!tbody) return;
+        const expandRow = tbody.querySelector(`tr.smart-expand-row[data-expand-for="${idx}"]`);
+        const toggle = tbody.querySelector(`tr[data-row-idx="${idx}"] .smart-expand-toggle`);
+        if (!expandRow || !toggle) return;
+        const open = expandRow.style.display !== 'none';
+        expandRow.style.display = open ? 'none' : '';
+        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        toggle.classList.toggle('smart-expand-open', !open);
+    },
+
+    // Render child rows as a nested smart-table using the same column
+    // formatters. Child shape is determined by inspecting the first child's
+    // keys, since manifest doesn't (yet) declare a `child_columns` section.
+    _renderExpandedChildren(children, parentConfig) {
+        if (!Array.isArray(children) || children.length === 0) return '';
+        const childCols = parentConfig.child_columns
+            || Object.keys(children[0]).map(k => ({ key: k, label: k }));
+        const head = childCols.map(c =>
+            `<th>${Utils.escapeHtml(c.label || c.key)}</th>`).join('');
+        const body = children.map(child =>
+            `<tr>${childCols.map(c =>
+                `<td>${this._formatValue(child[c.key], c.format, child, c)}</td>`
+            ).join('')}</tr>`
+        ).join('');
+        return `<table class="smart-table smart-table-nested"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
     },
 
     _formatValue(val, format, row, col) {
@@ -723,6 +774,7 @@ const SmartTableComponent = {
         const icon = this._iconSvg(action.icon);
         return `<button class="smart-action-btn smart-action-${variant}"
                     title="${label}"
+                    data-action-id="${Utils.escapeHtml(action.id || '')}"
                     onclick="SmartTableComponent._invokeToolbarAction('${this._escapeJS(compId)}', ${idx})">
                     ${icon}<span>${label}</span>
                 </button>`;
@@ -776,10 +828,19 @@ const SmartTableComponent = {
         const message = cfg.message ? this._interpolate(cfg.message, row) : '';
         const tier = action.safety_tier || 'green';
 
-        const fieldsHtml = cfg.fields
-            .filter(f => f.type !== 'hidden')
-            .map(f => this._renderField(f, row))
-            .join('');
+        const fieldsHtml = cfg.sections
+            ? cfg.sections.map((sec, i) => this._renderSection(sec, i, row)).join('')
+            : cfg.fields
+                .filter(f => f.type !== 'hidden')
+                .map(f => this._renderField(f, row))
+                .join('');
+        // Hidden fields still need to be in the DOM so _collectFormValues can
+        // pick them up when sections are used.
+        const hiddenHtml = cfg.sections
+            ? cfg.fields.filter(f => f.type === 'hidden').map(f => this._renderField(f, row)).join('')
+            : '';
+
+        const wideClass = cfg.sections ? ' smart-action-modal-wide' : '';
 
         const previewHtml = action.action && action.action.preview
             ? `<div class="smart-action-preview" id="smart-action-preview"><div class="smart-action-preview-label">Command preview</div><pre class="smart-action-preview-cmd">Loading…</pre></div>`
@@ -793,7 +854,7 @@ const SmartTableComponent = {
         const submitLabel = Utils.escapeHtml(cfg.button_label || action.label || 'Submit');
 
         const modal = Modals.create(`
-            <div class="modal smart-action-modal">
+            <div class="modal smart-action-modal${wideClass}">
                 <div class="modal-header">
                     <h3>${Utils.escapeHtml(title)} ${tierBadge}</h3>
                     <button class="modal-close" onclick="Modals.close(this)">
@@ -802,7 +863,7 @@ const SmartTableComponent = {
                 </div>
                 <div class="modal-body">
                     ${message ? `<p class="smart-action-message">${Utils.escapeHtml(message)}</p>` : ''}
-                    <form class="smart-action-form" onsubmit="return false;">${fieldsHtml}</form>
+                    <form class="smart-action-form" onsubmit="return false;">${fieldsHtml}${hiddenHtml}</form>
                     ${previewHtml}
                     <div class="form-error" id="smart-action-error"></div>
                 </div>
@@ -833,6 +894,21 @@ const SmartTableComponent = {
             }
         }
 
+        // Apply `visible_when` once to set initial state, then re-evaluate on
+        // every input/change so form-field references react live.
+        this._applyVisibleWhen(modal, row);
+        this._updateCapacityPreviews(modal, cfg.fields);
+        modal.querySelectorAll('input, select, textarea').forEach(el => {
+            el.addEventListener('input', () => {
+                this._applyVisibleWhen(modal, row);
+                this._updateCapacityPreviews(modal, cfg.fields);
+            });
+            el.addEventListener('change', () => {
+                this._applyVisibleWhen(modal, row);
+                this._updateCapacityPreviews(modal, cfg.fields);
+            });
+        });
+
         if (action.action && action.action.preview) {
             // Debounce preview so typing doesn't hammer the agent.
             const refreshPreview = this._debounce(() => this._refreshPreview(modal), 250);
@@ -845,14 +921,141 @@ const SmartTableComponent = {
         }
     },
 
+    // Render a `{title, collapsed, layout, fields}` section as a collapsible
+    // card. `layout: "columns"` arranges fields in a 2-column grid.
+    _renderSection(section, idx, row) {
+        const title = section.title ? Utils.escapeHtml(section.title) : '';
+        const collapsed = !!section.collapsed;
+        const layoutClass = section.layout === 'columns' ? ' smart-section-columns' : '';
+        const fieldsHtml = (section.fields || [])
+            .filter(f => f.type !== 'hidden')
+            .map(f => this._renderField(f, row))
+            .join('');
+        const collapsedClass = collapsed ? ' smart-section-collapsed' : '';
+        return `
+            <section class="smart-section${collapsedClass}" data-section-idx="${idx}">
+                ${title ? `<header class="smart-section-header" onclick="SmartTableComponent._toggleSection(this)">
+                    <svg class="smart-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+                    <span>${title}</span>
+                </header>` : ''}
+                <div class="smart-section-body${layoutClass}">${fieldsHtml}</div>
+            </section>`;
+    },
+
+    _toggleSection(headerEl) {
+        const section = headerEl.parentElement;
+        if (!section) return;
+        section.classList.toggle('smart-section-collapsed');
+    },
+
+    // Client-side capacity calculator for `type: "capacity_preview"` fields.
+    // Pulls sizes from the devices field's loaded options (`options.size_bytes`
+    // when the endpoint exposes it) and applies the vdev arithmetic.
+    _updateCapacityPreviews(modal, allFields) {
+        const panels = modal.querySelectorAll('.smart-capacity-preview');
+        if (panels.length === 0) return;
+        panels.forEach(panel => {
+            const typeKey = panel.dataset.typeField;
+            const devKey = panel.dataset.devicesField;
+            const typeEl = modal.querySelector(`[data-field-key="${CSS.escape(typeKey)}"]`);
+            const devEl = modal.querySelector(`[data-field-key="${CSS.escape(devKey)}"]`);
+            const body = panel.querySelector('.smart-capacity-body');
+            if (!typeEl || !devEl || !body) return;
+
+            const vdevType = (typeEl.value || 'stripe').toLowerCase();
+            const selectedValues = devEl.multiple
+                ? Array.from(devEl.selectedOptions).map(o => o.value)
+                : (devEl.value ? [devEl.value] : []);
+            const n = selectedValues.length;
+            if (n === 0) {
+                body.textContent = 'Select drives to preview usable capacity.';
+                return;
+            }
+
+            // Pull per-drive size from option dataset — populated by
+            // _loadFieldOptions when the field declares `option_meta`.
+            const sizes = selectedValues.map(v => {
+                const opt = devEl.querySelector(`option[value="${CSS.escape(v)}"]`);
+                const bytes = opt && opt.dataset.sizeBytes ? Number(opt.dataset.sizeBytes) : 0;
+                return Number.isFinite(bytes) ? bytes : 0;
+            });
+            const smallest = sizes.length ? Math.min(...sizes.filter(s => s > 0)) : 0;
+
+            let usableCount = 0;
+            let layoutNote = '';
+            switch (vdevType) {
+                case 'mirror':
+                    usableCount = 1;
+                    layoutNote = `mirror of ${n} drives — ${n}-way redundancy`;
+                    break;
+                case 'raidz':
+                case 'raidz1':
+                    usableCount = Math.max(n - 1, 0);
+                    layoutNote = `raidz1 — loses 1 drive to parity`;
+                    break;
+                case 'raidz2':
+                    usableCount = Math.max(n - 2, 0);
+                    layoutNote = `raidz2 — loses 2 drives to parity`;
+                    break;
+                case 'raidz3':
+                    usableCount = Math.max(n - 3, 0);
+                    layoutNote = `raidz3 — loses 3 drives to parity`;
+                    break;
+                default:
+                    usableCount = n;
+                    layoutNote = `stripe — no redundancy, any drive loss destroys the pool`;
+            }
+            const raw = n * smallest;
+            const usable = usableCount * smallest;
+            const pct = raw > 0 ? Math.round((usable / raw) * 100) : 0;
+            body.innerHTML = smallest > 0
+                ? `<strong>${this._formatBytes(usable)}</strong> usable &middot; ${this._formatBytes(raw)} raw &middot; ${pct}% efficiency<div class="smart-capacity-note">${Utils.escapeHtml(layoutNote)}</div>`
+                : `<div class="smart-capacity-note">${Utils.escapeHtml(layoutNote)} &middot; drive sizes unknown — usable capacity will be shown after the agent reports them.</div>`;
+        });
+    },
+
+    // Show/hide form fields based on `visible_when: {field, equals}`.
+    // `field` may be `row.X` (static from the triggering row) or a form-field
+    // key (live from another input in the same form).
+    _applyVisibleWhen(modal, row) {
+        const groups = modal.querySelectorAll('.form-group[data-visible-when]');
+        groups.forEach(group => {
+            let rule;
+            try { rule = JSON.parse(group.dataset.visibleWhen); }
+            catch { return; }
+            if (!rule || !rule.field) return;
+            let actual;
+            if (rule.field.startsWith('row.')) {
+                actual = row ? row[rule.field.slice(4)] : undefined;
+            } else {
+                const input = modal.querySelector(`[data-field-key="${CSS.escape(rule.field)}"]`);
+                if (input) {
+                    actual = input.type === 'checkbox' ? input.checked : input.value;
+                }
+            }
+            const match = String(actual) === String(rule.equals);
+            group.style.display = match ? '' : 'none';
+        });
+    },
+
     _normalizeActionConfig(action) {
         // `form` and `confirm` describe the same modal in different shapes.
         // Confirm dialogs may also carry `extra_fields` for inputs that aren't
         // the type-to-confirm box itself.
         if (action.form) {
+            // A form may declare either a flat `fields` array, or a `sections`
+            // array of `{title, collapsed, layout, fields}`. We normalize both
+            // shapes: downstream loops (options loading, visible_when) walk
+            // the flat `fields`, while the modal renders from `sections` when
+            // present.
+            const sections = Array.isArray(action.form.sections) ? action.form.sections : null;
+            const flatFields = sections
+                ? sections.flatMap(s => s.fields || [])
+                : (action.form.fields || []);
             return {
                 title: action.form.title,
-                fields: action.form.fields || [],
+                fields: flatFields,
+                sections,
                 button_label: action.form.button_label,
                 button_variant: action.form.button_variant,
                 show_command: action.form.show_command,
@@ -906,6 +1109,9 @@ const SmartTableComponent = {
             ? `<div class="form-hint">${Utils.escapeHtml(field.hint)}</div>`
             : '';
         const tierAttr = field.safety_tier ? ` data-tier="${field.safety_tier}"` : '';
+        const vwAttr = field.visible_when
+            ? ` data-visible-when="${Utils.escapeHtml(JSON.stringify(field.visible_when))}"`
+            : '';
 
         let input = '';
         const initialVal = this._resolveValueFrom(field, row);
@@ -925,14 +1131,48 @@ const SmartTableComponent = {
                     `<option value="${Utils.escapeHtml(String(o.value))}"${String(o.value) === String(initialVal) ? ' selected' : ''}>${Utils.escapeHtml(o.label)}</option>`
                 ).join('');
                 const blank = field.required ? '' : `<option value="">— unchanged —</option>`;
-                input = `<select id="${id}" class="form-input" data-field-key="${Utils.escapeHtml(field.key)}">${blank}${opts}<option disabled>Loading…</option></select>`;
+                // `allow_custom` injects a sentinel option and a sibling text
+                // input that appears only when the sentinel is chosen. On
+                // submit, _collectFormValues substitutes the text value back.
+                const customOpt = field.allow_custom
+                    ? `<option value="__custom__">${Utils.escapeHtml(field.custom_label || 'Custom…')}</option>`
+                    : '';
+                input = `<select id="${id}" class="form-input" data-field-key="${Utils.escapeHtml(field.key)}"${field.allow_custom ? ` data-allow-custom="1"` : ''}>${blank}${opts}${customOpt}<option disabled>Loading…</option></select>`;
+                if (field.allow_custom) {
+                    const customId = `${id}__custom`;
+                    // Nested .form-group so visible_when hides it by display:none.
+                    input += `<div class="form-group smart-custom-input-group" data-visible-when='${JSON.stringify({field: field.key, equals: '__custom__'})}'>
+                        <input type="text" id="${customId}" class="form-input smart-custom-input" data-custom-for="${Utils.escapeHtml(field.key)}" placeholder="${Utils.escapeHtml(field.custom_placeholder || 'e.g. */15 * * * *')}">
+                        ${field.custom_hint ? `<div class="form-hint">${Utils.escapeHtml(field.custom_hint)}</div>` : ''}
+                    </div>`;
+                }
                 break;
             }
-            case 'multi-select':
-                input = `<select id="${id}" class="form-input form-multi-select" multiple
-                            data-field-key="${Utils.escapeHtml(field.key)}"
-                            size="6"><option disabled>Loading options…</option></select>`;
+            case 'multi-select': {
+                // `variant: "cards"` keeps a hidden <select multiple> as the
+                // canonical source of truth (so _collectFormValues is
+                // unchanged), and renders a visible grid of toggleable cards.
+                // _loadFieldOptions populates both. Card clicks toggle the
+                // matching <option>.selected and fire a `change` event so
+                // visible_when + capacity preview re-evaluate.
+                const variant = field.variant === 'cards' ? 'cards' : 'native';
+                if (variant === 'cards') {
+                    input = `<select id="${id}" class="form-input form-multi-select smart-hidden-select" multiple
+                                data-field-key="${Utils.escapeHtml(field.key)}"
+                                data-variant="cards"
+                                aria-hidden="true"
+                                tabindex="-1"><option disabled>Loading options…</option></select>
+                            <div class="smart-disk-grid" data-for-field="${Utils.escapeHtml(field.key)}">
+                                <div class="smart-disk-grid-empty">Loading drives…</div>
+                            </div>
+                            <div class="smart-disk-grid-count" data-count-for="${Utils.escapeHtml(field.key)}"></div>`;
+                } else {
+                    input = `<select id="${id}" class="form-input form-multi-select" multiple
+                                data-field-key="${Utils.escapeHtml(field.key)}"
+                                size="6"><option disabled>Loading options…</option></select>`;
+                }
                 break;
+            }
             case 'checkbox':
             case 'toggle':
                 input = `<label class="form-checkbox-row"><input type="checkbox" id="${id}"
@@ -940,16 +1180,29 @@ const SmartTableComponent = {
                             ${initialVal === true || initialVal === 'on' || initialVal === 'true' ? 'checked' : ''}>
                             <span>${Utils.escapeHtml(field.label || '')}</span></label>`;
                 // Checkbox uses its own inline label; suppress the outer one.
-                return `<div class="form-group"${tierAttr}>${input}${hint}</div>`;
+                return `<div class="form-group"${tierAttr}${vwAttr}>${input}${hint}</div>`;
             case 'hidden':
                 // Hidden fields are tracked separately so the form can still
                 // hand their values to the body collector. Render none.
                 return `<input type="hidden" id="${id}" data-field-key="${Utils.escapeHtml(field.key)}" value="${Utils.escapeHtml(String(initialVal ?? ''))}">`;
+            case 'capacity_preview': {
+                // Read-only panel that computes usable capacity from sibling
+                // fields (type_field + devices_field + size_from). Rendered
+                // inert; _updateCapacityPreview fills it live as the user
+                // picks devices in the same form.
+                const typeField = field.type_field || 'data_type';
+                const devField = field.devices_field || 'data_devices';
+                const sizeFrom = field.size_from || '';
+                return `<div class="form-group smart-capacity-preview" data-type-field="${Utils.escapeHtml(typeField)}" data-devices-field="${Utils.escapeHtml(devField)}" data-size-from="${Utils.escapeHtml(sizeFrom)}">
+                    <div class="form-label">${Utils.escapeHtml(field.label || 'Capacity preview')}</div>
+                    <div class="smart-capacity-body">Select drives to preview usable capacity.</div>
+                </div>`;
+            }
             default:
                 input = `<input type="text" id="${id}" class="form-input" data-field-key="${Utils.escapeHtml(field.key)}">`;
         }
 
-        return `<div class="form-group"${tierAttr}>${label}${input}${hint}</div>`;
+        return `<div class="form-group"${tierAttr}${vwAttr}>${label}${input}${hint}</div>`;
     },
 
     _resolveValueFrom(field, row) {
@@ -966,6 +1219,110 @@ const SmartTableComponent = {
         if (!template) return '';
         return String(template).replace(/\{row\.([a-zA-Z0-9_]+)\}/g, (_, key) =>
             row && row[key] != null ? String(row[key]) : '');
+    },
+
+    // Render a grid of clickable cards for `multi-select` with
+    // `variant: "cards"`. The hidden <select> is the canonical source of
+    // truth; card clicks flip the matching option.selected and fire a
+    // change event so visible_when + capacity preview react.
+    _renderDiskCards(modalEl, field, items, metaMap) {
+        const grid = modalEl.querySelector(`.smart-disk-grid[data-for-field="${CSS.escape(field.key)}"]`);
+        if (!grid) return;
+        const valueKey = field.option_value || 'value';
+        const labelKey = field.option_label || 'label';
+        const detailKey = field.option_detail;
+        if (items.length === 0) {
+            grid.innerHTML = `<div class="smart-disk-grid-empty">No available drives.</div>`;
+            return;
+        }
+        grid.innerHTML = items.map(it => {
+            const v = String(it[valueKey] ?? '');
+            const name = Utils.escapeHtml(String(it[labelKey] ?? v));
+            const detail = detailKey && it[detailKey] ? Utils.escapeHtml(String(it[detailKey])) : '';
+            const size = it.size ? this._formatBytes(it.size) : '';
+            const serial = it.serial ? Utils.escapeHtml(String(it.serial)) : '';
+            return `
+                <div class="smart-disk-card" data-value="${Utils.escapeHtml(v)}" onclick="SmartTableComponent._toggleDiskCard(this, '${this._escapeJS(field.key)}')">
+                    <div class="smart-disk-card-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></div>
+                    <div class="smart-disk-card-body">
+                        <div class="smart-disk-card-name">${name}</div>
+                        ${detail ? `<div class="smart-disk-card-detail">${detail}</div>` : ''}
+                        <div class="smart-disk-card-meta">
+                            ${size ? `<span>${size}</span>` : ''}
+                            ${serial ? `<span class="smart-disk-card-serial">${serial}</span>` : ''}
+                        </div>
+                        <div class="smart-disk-card-conflict"></div>
+                    </div>
+                </div>`;
+        }).join('');
+        this._refreshDiskConflicts(modalEl);
+    },
+
+    _toggleDiskCard(cardEl, fieldKey) {
+        const modalEl = cardEl.closest('.modal');
+        if (!modalEl) return;
+        if (cardEl.classList.contains('smart-disk-card-conflict-disabled')) return;
+        const sel = modalEl.querySelector(`select[data-field-key="${CSS.escape(fieldKey)}"]`);
+        if (!sel) return;
+        const value = cardEl.dataset.value;
+        const opt = sel.querySelector(`option[value="${CSS.escape(value)}"]`);
+        if (!opt) return;
+        opt.selected = !opt.selected;
+        cardEl.classList.toggle('smart-disk-card-selected', opt.selected);
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        this._refreshDiskConflicts(modalEl);
+        this._updateDiskSelectionCount(modalEl, fieldKey);
+    },
+
+    // When multiple disk pickers exist in the same form (Data / Log / Cache /
+    // Spare), a drive picked in one should render disabled + "in use as X" in
+    // the others. This runs after any card toggle.
+    _refreshDiskConflicts(modalEl) {
+        const grids = modalEl.querySelectorAll('.smart-disk-grid');
+        if (grids.length === 0) return;
+        const claimed = {}; // value → field label
+        grids.forEach(grid => {
+            const fieldKey = grid.dataset.forField;
+            const sel = modalEl.querySelector(`select[data-field-key="${CSS.escape(fieldKey)}"]`);
+            if (!sel) return;
+            const label = this._fieldLabelFor(modalEl, fieldKey);
+            Array.from(sel.selectedOptions).forEach(o => {
+                if (o.value) claimed[o.value] = label;
+            });
+        });
+        grids.forEach(grid => {
+            const fieldKey = grid.dataset.forField;
+            const label = this._fieldLabelFor(modalEl, fieldKey);
+            grid.querySelectorAll('.smart-disk-card').forEach(card => {
+                const v = card.dataset.value;
+                const owner = claimed[v];
+                const selfSelected = card.classList.contains('smart-disk-card-selected');
+                const conflictEl = card.querySelector('.smart-disk-card-conflict');
+                if (owner && owner !== label && !selfSelected) {
+                    card.classList.add('smart-disk-card-conflict-disabled');
+                    if (conflictEl) conflictEl.textContent = `In use as ${owner}`;
+                } else {
+                    card.classList.remove('smart-disk-card-conflict-disabled');
+                    if (conflictEl) conflictEl.textContent = '';
+                }
+            });
+            this._updateDiskSelectionCount(modalEl, fieldKey);
+        });
+    },
+
+    _fieldLabelFor(modalEl, fieldKey) {
+        const sel = modalEl.querySelector(`select[data-field-key="${CSS.escape(fieldKey)}"]`);
+        if (!sel) return fieldKey;
+        const labelEl = modalEl.querySelector(`label[for="${sel.id}"]`);
+        return labelEl ? labelEl.textContent.trim().replace(/\s*\*$/, '') : fieldKey;
+    },
+
+    _updateDiskSelectionCount(modalEl, fieldKey) {
+        const sel = modalEl.querySelector(`select[data-field-key="${CSS.escape(fieldKey)}"]`);
+        const counter = modalEl.querySelector(`.smart-disk-grid-count[data-count-for="${CSS.escape(fieldKey)}"]`);
+        if (!sel || !counter) return;
+        const n = Array.from(sel.selectedOptions).filter(o => o.value).length;
+        counter.textContent = n > 0 ? `${n} selected` : '';
     },
 
     // ─── options_from loader ─────────────────────────────────────────────
@@ -1002,16 +1359,35 @@ const SmartTableComponent = {
                 return;
             }
 
+            // `option_meta` maps item-fields → data-* attributes so downstream
+            // code (capacity preview, grouped disk picker) can read metadata
+            // without re-fetching. Declare `{"size": "size-bytes"}` on disk
+            // pickers to make the capacity calculator work.
+            const metaMap = { ...(field.option_meta || {}) };
+
             const opts = items.map(it => {
                 const v = String(it[valueKey] ?? '');
                 let l = String(it[labelKey] ?? v);
                 if (detailKey && it[detailKey]) l += ` — ${it[detailKey]}`;
-                return `<option value="${Utils.escapeHtml(v)}">${Utils.escapeHtml(l)}</option>`;
+                const attrs = Object.entries(metaMap)
+                    .filter(([k]) => it[k] != null && it[k] !== '')
+                    .map(([k, attr]) => `data-${attr}="${Utils.escapeHtml(String(it[k]))}"`)
+                    .join(' ');
+                return `<option value="${Utils.escapeHtml(v)}" ${attrs}>${Utils.escapeHtml(l)}</option>`;
             }).join('');
 
             // Single-select: leading blank if not required.
             const blank = (field.type === 'select' && !field.required) ? `<option value="">— unchanged —</option>` : '';
             sel.innerHTML = blank + opts;
+
+            // Cards variant: render the visible grid from the same items. The
+            // hidden <select> remains the source of truth for form collection.
+            if (sel.dataset.variant === 'cards') {
+                this._renderDiskCards(modalEl, field, items, metaMap);
+            }
+
+            // Capacity preview may need to recalc now that size metadata is available.
+            this._updateCapacityPreviews(modalEl, []);
         } catch (e) {
             console.error(`[SmartTable] options_from ${path}:`, e);
             sel.innerHTML = `<option disabled>Could not load options</option>`;
@@ -1129,6 +1505,9 @@ const SmartTableComponent = {
         modalEl.querySelectorAll('[data-field-key]').forEach(el => {
             const key = el.dataset.fieldKey;
             if (!key) return;
+            // Skip fields hidden by `visible_when` — the user never chose them.
+            const group = el.closest('.form-group[data-visible-when]');
+            if (group && group.style.display === 'none') return;
             let value;
             if (el.type === 'checkbox') {
                 value = el.checked;
@@ -1139,6 +1518,11 @@ const SmartTableComponent = {
                 value = Number.isFinite(n) ? n : null;
             } else {
                 value = el.value;
+            }
+            // `allow_custom` sentinel → substitute the sibling text input.
+            if (value === '__custom__' && el.dataset.allowCustom === '1') {
+                const custom = modalEl.querySelector(`.smart-custom-input[data-custom-for="${CSS.escape(key)}"]`);
+                value = custom ? custom.value : '';
             }
             this._setNestedValue(out, key, value);
         });

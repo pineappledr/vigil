@@ -176,6 +176,11 @@ const ManifestRenderer = {
                     ? ConfigCardComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">Config Card component not loaded</p>';
 
+            case 'discovery-card':
+                return typeof DiscoveryCardComponent !== 'undefined'
+                    ? DiscoveryCardComponent.render(comp.id, config, this.addon.id)
+                    : '<p class="component-unavailable">Discovery Card component not loaded</p>';
+
             default:
                 return `<p class="component-unavailable">Unknown component type: ${Utils.escapeHtml(comp.type)}</p>`;
         }
@@ -302,6 +307,11 @@ const ManifestRenderer = {
                 case 'config-card':
                     if (typeof ConfigCardComponent !== 'undefined') {
                         ConfigCardComponent.refresh(comp.id);
+                    }
+                    break;
+                case 'discovery-card':
+                    if (typeof DiscoveryCardComponent !== 'undefined') {
+                        DiscoveryCardComponent.refresh(comp.id);
                     }
                     break;
             }
