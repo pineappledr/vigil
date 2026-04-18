@@ -1389,9 +1389,11 @@ const SmartTableComponent = {
                             ${field.required ? 'required' : ''}>`;
                 break;
             case 'select': {
-                const opts = (field.options || []).map(o =>
-                    `<option value="${Utils.escapeHtml(String(o.value))}"${String(o.value) === String(initialVal) ? ' selected' : ''}>${Utils.escapeHtml(o.label)}</option>`
-                ).join('');
+                const opts = (field.options || []).map(o => {
+                    const t = typeof o.value;
+                    const typeAttr = (t === 'number' || t === 'boolean') ? ` data-value-type="${t}"` : '';
+                    return `<option value="${Utils.escapeHtml(String(o.value))}"${typeAttr}${String(o.value) === String(initialVal) ? ' selected' : ''}>${Utils.escapeHtml(o.label)}</option>`;
+                }).join('');
                 const blank = field.required ? '' : `<option value="">— unchanged —</option>`;
                 // `allow_custom` injects a sentinel option and a sibling text
                 // input that appears only when the sentinel is chosen. On
@@ -1652,14 +1654,17 @@ const SmartTableComponent = {
             const metaMap = { ...(field.option_meta || {}) };
 
             const opts = items.map(it => {
-                const v = String(it[valueKey] ?? '');
+                const raw = it[valueKey];
+                const v = String(raw ?? '');
                 let l = String(it[labelKey] ?? v);
                 if (detailKey && it[detailKey]) l += ` — ${it[detailKey]}`;
                 const attrs = Object.entries(metaMap)
                     .filter(([k]) => it[k] != null && it[k] !== '')
                     .map(([k, attr]) => `data-${attr}="${Utils.escapeHtml(String(it[k]))}"`)
                     .join(' ');
-                return `<option value="${Utils.escapeHtml(v)}" ${attrs}>${Utils.escapeHtml(l)}</option>`;
+                const t = typeof raw;
+                const typeAttr = (t === 'number' || t === 'boolean') ? ` data-value-type="${t}"` : '';
+                return `<option value="${Utils.escapeHtml(v)}"${typeAttr} ${attrs}>${Utils.escapeHtml(l)}</option>`;
             }).join('');
 
             // Single-select: leading blank if not required.
@@ -1795,7 +1800,19 @@ const SmartTableComponent = {
             if (el.type === 'checkbox') {
                 value = el.checked;
             } else if (el.tagName === 'SELECT' && el.multiple) {
-                value = Array.from(el.selectedOptions).map(o => o.value).filter(v => v !== '');
+                value = Array.from(el.selectedOptions).map(o => {
+                    const t = o.dataset.valueType;
+                    if (t === 'number') return Number(o.value);
+                    if (t === 'boolean') return o.value === 'true';
+                    return o.value;
+                }).filter(v => v !== '');
+            } else if (el.tagName === 'SELECT') {
+                const opt = el.selectedOptions[0];
+                const t = opt && opt.dataset.valueType;
+                if (el.value === '') value = '';
+                else if (t === 'number') { const n = Number(el.value); value = Number.isFinite(n) ? n : el.value; }
+                else if (t === 'boolean') value = el.value === 'true';
+                else value = el.value;
             } else if (el.type === 'number') {
                 const n = el.value === '' ? null : Number(el.value);
                 value = Number.isFinite(n) ? n : null;
