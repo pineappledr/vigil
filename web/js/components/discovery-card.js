@@ -128,21 +128,9 @@ const DiscoveryCardComponent = {
     _onCreatePool(compId) {
         const entry = this._cards[compId];
         if (!entry) return;
-        // Find the create-pool toolbar button on the target smart-table and
-        // click it. Prefill via SmartTableComponent's optional hook if
-        // present; otherwise the user selects disks manually.
         const targetTable = entry.config.target_table || 'pool-list';
-        const btn = document.querySelector(`#smart-table-${targetTable} .smart-toolbar-actions button[data-action-id="create-pool"]`);
-        if (btn) {
-            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            btn.click();
-            return;
-        }
-        // Fallback: jump to first create-pool button anywhere in the dashboard.
-        const anyBtn = document.querySelector('.smart-toolbar-actions button[data-action-id="create-pool"]');
-        if (anyBtn) {
-            anyBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            anyBtn.click();
+        if (typeof SmartTableComponent !== 'undefined' && SmartTableComponent.invokeActionById) {
+            SmartTableComponent.invokeActionById(targetTable, 'create-pool');
         }
     },
 

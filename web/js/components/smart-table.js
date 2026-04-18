@@ -121,7 +121,8 @@ const SmartTableComponent = {
             ? this._renderPageSizeSelector(compId, config.page_size)
             : '';
 
-        const toolbarActionsHtml = this._tables[compId].toolbarActions.length > 0
+        const visibleToolbarActions = this._tables[compId].toolbarActions.filter(a => !a.hidden);
+        const toolbarActionsHtml = visibleToolbarActions.length > 0
             ? `<div class="smart-toolbar-actions">${this._tables[compId].toolbarActions.map((act, i) =>
                 this._renderToolbarActionButton(compId, act, i)).join('')}</div>`
             : '';
@@ -842,6 +843,9 @@ const SmartTableComponent = {
     // addon API through the proxy route.
 
     _renderToolbarActionButton(compId, action, idx) {
+        // `hidden: true` keeps the action in the config (callable via
+        // invokeActionById) without rendering a toolbar button.
+        if (action.hidden) return '';
         const tier = action.safety_tier || 'green';
         const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
         const label = Utils.escapeHtml(action.label || action.id || 'Action');
@@ -852,6 +856,17 @@ const SmartTableComponent = {
                     onclick="SmartTableComponent._invokeToolbarAction('${this._escapeJS(compId)}', ${idx})">
                     ${icon}<span>${label}</span>
                 </button>`;
+    },
+
+    // Public: invoke a toolbar action by its manifest id. Lets external
+    // components (e.g., discovery-card) trigger an action-modal without
+    // needing a rendered button to click.
+    invokeActionById(compId, actionId) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const action = (entry.toolbarActions || []).find(a => a && a.id === actionId);
+        if (!action) return;
+        this._openActionModal(compId, action, null);
     },
 
     _renderRowActionButtons(compId, row) {
@@ -1025,7 +1040,7 @@ const SmartTableComponent = {
             const path = this._appendAgentIdToPath(basePath, row);
             const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
                 + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
-            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } };
+            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } };
             if (init.method !== 'GET') init.body = JSON.stringify(body);
 
             try {
@@ -1687,7 +1702,7 @@ const SmartTableComponent = {
             const method = (preview.method || ctx.action.action.method || 'POST').toUpperCase();
             const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
                 + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
-            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } };
+            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } };
             if (init.method !== 'GET') init.body = JSON.stringify(body);
             const resp = await fetch(proxyURL, init);
             if (!resp.ok) {
@@ -1735,7 +1750,7 @@ const SmartTableComponent = {
         try {
             const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
                 + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
-            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } };
+            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } };
             if (init.method !== 'GET') init.body = JSON.stringify(body);
             const resp = await fetch(proxyURL, init);
             const data = await resp.json().catch(() => ({}));

@@ -2105,7 +2105,12 @@
 }
 
 .smart-action-modal-wide {
-    width: min(900px, 95vw);
+    width: min(1200px, 96vw);
+    max-height: 92vh;
+}
+.smart-action-modal-wide .modal-body {
+    max-height: calc(92vh - 130px);
+    overflow-y: auto;
 }
 
 /* Let long <select> option labels wrap in the open dropdown so the
