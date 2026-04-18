@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>smart-table tests</title>
+<style>
+    body { font-family: ui-monospace, Menlo, monospace; margin: 1.5rem; background: #0d1117; color: #e6edf3; }
+    h1 { font-size: 1.1rem; }
+    .case { padding: 0.35rem 0.6rem; margin: 0.2rem 0; border-radius: 4px; }
+    .pass { background: rgba(16, 185, 129, 0.15); border-left: 3px solid #10b981; }
+    .fail { background: rgba(239, 68, 68, 0.18); border-left: 3px solid #ef4444; white-space: pre-wrap; }
+    .summary { margin-top: 1rem; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>smart-table.js — pure function tests</h1>
+<div id="results"></div>
+<div class="summary" id="summary"></div>
+
+<script src="../js/utils.js"></script>
+<script src="../js/components/smart-table.js"></script>
+<script>
+// Minimal test harness — no deps. Each `test(name, fn)` runs fn and records
+// pass/fail. `assertEq(actual, expected, label)` and `assert(cond, label)`.
+const results = [];
+function test(name, fn) {
+    try {
+        fn();
+        results.push({ name, ok: true });
+    } catch (e) {
+        results.push({ name, ok: false, err: e.message || String(e) });
+    }
+}
+function assert(cond, label) {
+    if (!cond) throw new Error(`assert failed: ${label}`);
+}
+function assertEq(actual, expected, label) {
+    const a = JSON.stringify(actual);
+    const e = JSON.stringify(expected);
+    if (a !== e) throw new Error(`${label}\n  actual:   ${a}\n  expected: ${e}`);
+}
+
+// ── _interpolate ─────────────────────────────────────────────────────
+test('_interpolate: {row.key} substitutes row field', () => {
+    const out = SmartTableComponent._interpolate('Delete {row.name}?', { name: 'tank' });
+    assertEq(out, 'Delete tank?', '{row.key} pattern');
+});
+test('_interpolate: missing {row.key} becomes empty string', () => {
+    const out = SmartTableComponent._interpolate('{row.missing}x', {});
+    assertEq(out, 'x', 'missing row key → empty');
+});
+test('_interpolate: bare {key} substitutes from context', () => {
+    const out = SmartTableComponent._interpolate('Deleted {count} items', { count: 7 });
+    assertEq(out, 'Deleted 7 items', 'bare {key} pattern');
+});
+test('_interpolate: bare {key} keeps original when missing', () => {
+    const out = SmartTableComponent._interpolate('{unknown}', { x: 1 });
+    assertEq(out, '{unknown}', 'missing bare key stays literal');
+});
+test('_interpolate: empty template → empty', () => {
+    assertEq(SmartTableComponent._interpolate('', { x: 1 }), '', 'empty template');
+    assertEq(SmartTableComponent._interpolate(null, { x: 1 }), '', 'null template');
+});
+
+// ── _sortRows ────────────────────────────────────────────────────────
+test('_sortRows: returns original array when no sort', () => {
+    const rows = [{ a: 2 }, { a: 1 }];
+    const out = SmartTableComponent._sortRows(rows, null);
+    assertEq(out, rows, 'no sort → same ref');
+});
+test('_sortRows: ascending numeric', () => {
+    const rows = [{ a: 3 }, { a: 1 }, { a: 2 }];
+    const out = SmartTableComponent._sortRows(rows, { key: 'a', dir: 'asc' });
+    assertEq(out.map(r => r.a), [1, 2, 3], 'numeric asc');
+});
+test('_sortRows: descending numeric', () => {
+    const rows = [{ a: 3 }, { a: 1 }, { a: 2 }];
+    const out = SmartTableComponent._sortRows(rows, { key: 'a', dir: 'desc' });
+    assertEq(out.map(r => r.a), [3, 2, 1], 'numeric desc');
+});
+test('_sortRows: string comparison case-insensitive', () => {
+    const rows = [{ a: 'banana' }, { a: 'Apple' }, { a: 'cherry' }];
+    const out = SmartTableComponent._sortRows(rows, { key: 'a', dir: 'asc' });
+    assertEq(out.map(r => r.a), ['Apple', 'banana', 'cherry'], 'case-insensitive sort');
+});
+
+// ── _resolveAgentId ──────────────────────────────────────────────────
+test('_resolveAgentId: prefers row.agent_id', () => {
+    const out = SmartTableComponent._resolveAgentId({ agent_id: 42 });
+    assertEq(out, '42', 'row.agent_id wins');
+});
+test('_resolveAgentId: returns empty when no row + no selector', () => {
+    const origMR = window.ManifestRenderer;
+    window.ManifestRenderer = undefined;
+    try {
+        assertEq(SmartTableComponent._resolveAgentId(null), '', 'no agent → empty');
+    } finally {
+        window.ManifestRenderer = origMR;
+    }
+});
+test('_resolveAgentId: falls back to page-level selector', () => {
+    const origMR = window.ManifestRenderer;
+    window.ManifestRenderer = { getSelectedAgentId: () => 'page-7' };
+    try {
+        assertEq(SmartTableComponent._resolveAgentId({}), 'page-7', 'empty row → selector');
+    } finally {
+        window.ManifestRenderer = origMR;
+    }
+});
+
+// ── _appendAgentIdToPath ─────────────────────────────────────────────
+test('_appendAgentIdToPath: appends ?agent_id', () => {
+    const out = SmartTableComponent._appendAgentIdToPath('/api/pools', { agent_id: 3 });
+    assertEq(out, '/api/pools?agent_id=3', 'no existing query');
+});
+test('_appendAgentIdToPath: appends &agent_id when query already present', () => {
+    const out = SmartTableComponent._appendAgentIdToPath('/api/pools?x=1', { agent_id: 3 });
+    assertEq(out, '/api/pools?x=1&agent_id=3', 'existing query uses &');
+});
+test('_appendAgentIdToPath: returns original when no agent', () => {
+    const origMR = window.ManifestRenderer;
+    window.ManifestRenderer = undefined;
+    try {
+        assertEq(SmartTableComponent._appendAgentIdToPath('/x', null), '/x', 'no mutation');
+    } finally {
+        window.ManifestRenderer = origMR;
+    }
+});
+
+// ── _setNestedValue ──────────────────────────────────────────────────
+test('_setNestedValue: sets flat key', () => {
+    const obj = {};
+    SmartTableComponent._setNestedValue(obj, 'name', 'tank');
+    assertEq(obj, { name: 'tank' }, 'flat key');
+});
+test('_setNestedValue: sets dotted nested key', () => {
+    const obj = {};
+    SmartTableComponent._setNestedValue(obj, 'a.b.c', 7);
+    assertEq(obj, { a: { b: { c: 7 } } }, 'dotted nested');
+});
+test('_setNestedValue: preserves siblings', () => {
+    const obj = { a: { other: 1 } };
+    SmartTableComponent._setNestedValue(obj, 'a.b', 2);
+    assertEq(obj, { a: { other: 1, b: 2 } }, 'sibling preserved');
+});
+
+// ── _formatBytes ─────────────────────────────────────────────────────
+test('_formatBytes: 0', () => {
+    assertEq(SmartTableComponent._formatBytes(0), '0 B', 'zero bytes');
+});
+test('_formatBytes: 1024 → 1.0 KB', () => {
+    assertEq(SmartTableComponent._formatBytes(1024), '1.0 KB', 'kilobytes');
+});
+test('_formatBytes: non-numeric returns "0 B"', () => {
+    assertEq(SmartTableComponent._formatBytes(null), '0 B', 'null → 0 B');
+});
+
+// ── Render results ───────────────────────────────────────────────────
+const container = document.getElementById('results');
+const summaryEl = document.getElementById('summary');
+let pass = 0, fail = 0;
+for (const r of results) {
+    const div = document.createElement('div');
+    div.className = 'case ' + (r.ok ? 'pass' : 'fail');
+    div.textContent = (r.ok ? '✓ ' : '✗ ') + r.name + (r.err ? '\n  ' + r.err : '');
+    container.appendChild(div);
+    if (r.ok) pass++; else fail++;
+}
+summaryEl.textContent = `${pass} passed, ${fail} failed (${results.length} total)`;
+summaryEl.style.color = fail === 0 ? '#10b981' : '#ef4444';
+console.log(`smart-table tests: ${pass} passed, ${fail} failed`);
+if (fail > 0) console.error(results.filter(r => !r.ok));
+</script>
+</body>
+</html>

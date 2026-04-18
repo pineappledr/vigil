@@ -44,6 +44,10 @@ const SmartTableComponent = {
             ? { key: config.default_sort.key, dir: config.default_sort.direction || 'asc' }
             : null;
 
+        const selectable = !!config.selectable;
+        const keyField = config.key_field || 'id';
+        const bulkActions = Array.isArray(config.bulk_actions) ? config.bulk_actions : [];
+
         this._tables[compId] = {
             rows: [],
             prevRows: {},
@@ -57,15 +61,23 @@ const SmartTableComponent = {
             currentPage: 1,
             rowActions,
             toolbarActions: Array.isArray(config.toolbar_actions) ? config.toolbar_actions : [],
+            bulkActions,
+            selectable,
+            keyField,
+            selection: new Set(),
             optionsCache: {}  // keyed by options_from path
         };
+
+        const selectHead = selectable
+            ? `<th class="smart-col-select-head"><input type="checkbox" class="smart-select-all" onchange="SmartTableComponent._toggleSelectAll('${this._escapeJS(compId)}', this.checked)"></th>`
+            : '';
 
         const expandHead = config.expand_key
             ? `<th class="smart-col-expand-head"></th>`
             : '';
 
         const headers = isStructured
-            ? expandHead + columns.map(c => {
+            ? selectHead + expandHead + columns.map(c => {
                 const isActionCol = c.format === 'actions' || c.format === 'row_actions';
                 if (config.sortable && c.key && !isActionCol) {
                     const arrow = sortState && sortState.key === c.key
@@ -80,7 +92,7 @@ const SmartTableComponent = {
             }).join('')
             : columns.map(c => `<th>${Utils.escapeHtml(c)}</th>`).join('');
 
-        const colCount = columns.length + (config.expand_key ? 1 : 0);
+        const colCount = columns.length + (config.expand_key ? 1 : 0) + (selectable ? 1 : 0);
 
         // Fetch source data after DOM insertion
         if (config.source && addonId) {
@@ -114,6 +126,15 @@ const SmartTableComponent = {
                 this._renderToolbarActionButton(compId, act, i)).join('')}</div>`
             : '';
 
+        const bulkBarHtml = selectable && bulkActions.length > 0
+            ? `<div class="smart-bulk-bar" id="smart-bulk-bar-${compId}" style="display:none">
+                   <span class="smart-bulk-count"><span class="smart-bulk-count-num">0</span> selected</span>
+                   <div class="smart-bulk-actions">${bulkActions.map((act, i) =>
+                       this._renderBulkActionButton(compId, act, i)).join('')}</div>
+                   <button class="smart-bulk-clear" onclick="SmartTableComponent._clearSelection('${this._escapeJS(compId)}')">Clear</button>
+               </div>`
+            : '';
+
         return `
             <div class="smart-table-container" id="smart-table-${compId}">
                 <div class="smart-table-toolbar">
@@ -123,6 +144,7 @@ const SmartTableComponent = {
                     ${timeFilter}
                     ${refreshBtn}
                 </div>
+                ${bulkBarHtml}
                 <table class="smart-table">
                     <thead>
                         <tr>${headers}</tr>
@@ -284,14 +306,9 @@ const SmartTableComponent = {
         }
         if (!path) return;
 
-        // Append agent_id from the page-level agent selector (if available).
-        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
-            const agentId = ManifestRenderer.getSelectedAgentId();
-            if (agentId) {
-                const sep = path.includes('?') ? '&' : '?';
-                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
-            }
-        }
+        // Source-level fetch has no row context — falls back to the page-level
+        // selector inside _appendAgentIdToPath.
+        path = this._appendAgentIdToPath(path, null);
 
         // Append time_range query parameter if a time filter is active.
         if (entry.timeRange) {
@@ -418,7 +435,7 @@ const SmartTableComponent = {
         if (!tbody) return;
 
         const expandKey = entry.config && entry.config.expand_key;
-        const totalCols = entry.columns.length + (expandKey ? 1 : 0);
+        const totalCols = entry.columns.length + (expandKey ? 1 : 0) + (entry.selectable ? 1 : 0);
 
         if (!rows || rows.length === 0) {
             const msg = (entry.config && entry.config.empty_message)
@@ -458,7 +475,11 @@ const SmartTableComponent = {
                     ? `<td class="smart-col-expand"><button type="button" class="smart-expand-toggle" onclick="SmartTableComponent._toggleExpand('${this._escapeJS(compId)}',${idx})" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg></button></td>`
                     : `<td class="smart-col-expand"></td>`)
                 : '';
-            const mainRow = `<tr data-row-idx="${idx}"${clickAttr}>${expandCell}${entry.columns.map(col => {
+            const rowKey = entry.selectable ? String(row[entry.keyField] ?? '') : '';
+            const selectCell = entry.selectable
+                ? `<td class="smart-col-select"><input type="checkbox" class="smart-row-select" data-row-key="${Utils.escapeHtml(rowKey)}" ${entry.selection.has(rowKey) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="SmartTableComponent._toggleRowSelection('${this._escapeJS(compId)}', this)"></td>`
+                : '';
+            const mainRow = `<tr data-row-idx="${idx}"${clickAttr}>${selectCell}${expandCell}${entry.columns.map(col => {
                 const val = row[col.key];
                 return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
@@ -468,8 +489,61 @@ const SmartTableComponent = {
             return mainRow + nestedRow;
         }).join('');
 
+        if (entry.selectable) {
+            // Drop selections that no longer reference a visible row.
+            const visibleKeys = new Set(rows.map(r => String(r[entry.keyField] ?? '')));
+            for (const k of Array.from(entry.selection)) {
+                if (!visibleKeys.has(k)) entry.selection.delete(k);
+            }
+            this._updateBulkBar(compId);
+        }
+
+        this._scheduleBusyPoll(compId, entry, rows);
+
         // Render pagination controls.
         this._renderPagination(compId, sorted.length, entry.pageSize, entry.currentPage);
+    },
+
+    // ─── Progress indicator (auto-refresh while any row is busy) ─────────
+    // Schema: config.progress_indicator = { field, busy_values[], interval_seconds }
+    _scheduleBusyPoll(compId, entry, rows) {
+        const pi = entry.config && entry.config.progress_indicator;
+        if (!pi || !pi.field || !Array.isArray(pi.busy_values)) return;
+
+        const busyValues = pi.busy_values.map(v => String(v).toLowerCase());
+        const isBusy = (raw) => {
+            if (raw == null) return false;
+            const s = String(raw).toLowerCase();
+            return busyValues.some(bv => s === bv || s.startsWith(bv + ' ') || s.startsWith(bv + '('));
+        };
+        const anyBusy = rows.some(r => isBusy(r && r[pi.field]));
+
+        if (entry._busyTimer) {
+            clearTimeout(entry._busyTimer);
+            entry._busyTimer = null;
+        }
+
+        if (anyBusy) {
+            const interval = Math.max(2, Number(pi.interval_seconds) || 5) * 1000;
+            entry._busyTimer = setTimeout(() => {
+                entry._busyTimer = null;
+                this._fetchSource(compId);
+            }, interval);
+        }
+
+        // Decorate busy cells in the DOM so CSS can pulse them.
+        const tbody = document.getElementById(`smart-tbody-${compId}`);
+        if (!tbody) return;
+        const colIdx = entry.columns.findIndex(c => c.key === pi.field);
+        if (colIdx < 0) return;
+        const offset = (entry.selectable ? 1 : 0) + (entry.config.expand_key ? 1 : 0);
+        const targetColIdx = colIdx + offset;
+        tbody.querySelectorAll('tr[data-row-idx]').forEach(tr => {
+            const td = tr.children[targetColIdx];
+            if (!td) return;
+            const text = (td.textContent || '').trim();
+            td.classList.toggle('smart-cell-busy', isBusy(text));
+        });
     },
 
     // Toggle the nested row sibling for the main row at `idx`. The chevron
@@ -593,13 +667,13 @@ const SmartTableComponent = {
             const resp = await fetch(`/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent('/api/agents/' + id)}&method=DELETE`);
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({}));
-                alert(err.error || `Delete failed (HTTP ${resp.status})`);
+                Utils.toast(err.error || `Delete failed (HTTP ${resp.status})`, 'error');
                 return;
             }
-            // Refresh table
+            Utils.toast(`Deleted "${id}"`, 'success');
             this.refresh(compId);
         } catch (e) {
-            alert('Failed to delete: ' + e.message);
+            Utils.toast('Failed to delete: ' + e.message, 'error');
         } finally {
             btnEl.disabled = false;
         }
@@ -812,6 +886,175 @@ const SmartTableComponent = {
         const row = entry.displayedRows ? entry.displayedRows[rowIdx] : null;
         if (!action || !row) return;
         this._openActionModal(compId, action, row);
+    },
+
+    // ─── Bulk selection ──────────────────────────────────────────────────
+
+    _renderBulkActionButton(compId, action, idx) {
+        const tier = action.safety_tier || 'green';
+        const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
+        const label = Utils.escapeHtml(action.label || action.id || 'Bulk Action');
+        const icon = this._iconSvg(action.icon);
+        return `<button class="smart-action-btn smart-action-${variant}"
+                    title="${label}"
+                    data-bulk-action-id="${Utils.escapeHtml(action.id || '')}"
+                    onclick="SmartTableComponent._invokeBulkAction('${this._escapeJS(compId)}', ${idx})">
+                    ${icon}<span>${label}</span>
+                </button>`;
+    },
+
+    _toggleRowSelection(compId, inputEl) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const key = inputEl.dataset.rowKey;
+        if (inputEl.checked) entry.selection.add(key);
+        else entry.selection.delete(key);
+        this._updateBulkBar(compId);
+    },
+
+    _toggleSelectAll(compId, checked) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const tbody = document.getElementById(`smart-tbody-${compId}`);
+        if (!tbody) return;
+        tbody.querySelectorAll('input.smart-row-select').forEach(cb => {
+            cb.checked = checked;
+            const key = cb.dataset.rowKey;
+            if (checked) entry.selection.add(key);
+            else entry.selection.delete(key);
+        });
+        this._updateBulkBar(compId);
+    },
+
+    _clearSelection(compId) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        entry.selection.clear();
+        const tbody = document.getElementById(`smart-tbody-${compId}`);
+        if (tbody) tbody.querySelectorAll('input.smart-row-select').forEach(cb => { cb.checked = false; });
+        const selectAll = document.querySelector(`#smart-table-${compId} .smart-select-all`);
+        if (selectAll) selectAll.checked = false;
+        this._updateBulkBar(compId);
+    },
+
+    _updateBulkBar(compId) {
+        const bar = document.getElementById(`smart-bulk-bar-${compId}`);
+        if (!bar) return;
+        const entry = this._tables[compId];
+        const count = entry ? entry.selection.size : 0;
+        bar.style.display = count > 0 ? '' : 'none';
+        const numEl = bar.querySelector('.smart-bulk-count-num');
+        if (numEl) numEl.textContent = String(count);
+        const selectAll = document.querySelector(`#smart-table-${compId} .smart-select-all`);
+        if (selectAll && entry) {
+            const visibleCount = entry.displayedRows ? entry.displayedRows.length : 0;
+            selectAll.checked = count > 0 && count >= visibleCount;
+            selectAll.indeterminate = count > 0 && count < visibleCount;
+        }
+    },
+
+    async _invokeBulkAction(compId, actionIdx) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        const action = entry.bulkActions[actionIdx];
+        if (!action) return;
+        const selectedKeys = Array.from(entry.selection);
+        if (selectedKeys.length === 0) return;
+        const rows = (entry.rows || []).filter(r => selectedKeys.includes(String(r[entry.keyField] ?? '')));
+        if (rows.length === 0) return;
+
+        const cfg = action.confirm || {};
+        const count = rows.length;
+        const title = this._interpolate(cfg.title || action.label || 'Bulk Action', { count });
+        const message = this._interpolate(cfg.message || `Run ${action.label || 'this action'} on ${count} items?`, { count });
+        const tier = action.safety_tier || 'green';
+        const tierBadge = tier !== 'green'
+            ? `<span class="smart-tier-badge smart-tier-${tier}">${tier.toUpperCase()} TIER</span>`
+            : '';
+        const submitVariant = cfg.button_variant || (tier === 'red' ? 'danger' : 'primary');
+        const submitLabel = Utils.escapeHtml(cfg.button_label || `Run on ${count}`);
+
+        const modal = Modals.create(`
+            <div class="modal smart-action-modal">
+                <div class="modal-header">
+                    <h3>${Utils.escapeHtml(title)} ${tierBadge}</h3>
+                    <button class="modal-close" onclick="Modals.close(this)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="smart-action-message">${Utils.escapeHtml(message)}</p>
+                    <div class="smart-bulk-progress" id="smart-bulk-progress" style="display:none">
+                        <div class="smart-bulk-progress-label">Processing <span class="smart-bulk-progress-current">0</span> of ${count}…</div>
+                    </div>
+                    <div class="form-error" id="smart-action-error"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="Modals.close(this)">Cancel</button>
+                    <button class="btn btn-${submitVariant}" id="smart-bulk-submit">${submitLabel}</button>
+                </div>
+            </div>
+        `);
+
+        const submitBtn = modal.querySelector('#smart-bulk-submit');
+        submitBtn.onclick = () => this._submitBulkAction(modal, compId, action, rows);
+    },
+
+    async _submitBulkAction(modalEl, compId, action, rows) {
+        const entry = this._tables[compId];
+        if (!entry || !entry.addonId) return;
+        const submitBtn = modalEl.querySelector('#smart-bulk-submit');
+        const errEl = modalEl.querySelector('#smart-action-error');
+        const progress = modalEl.querySelector('#smart-bulk-progress');
+        const currentEl = modalEl.querySelector('.smart-bulk-progress-current');
+        submitBtn.disabled = true;
+        progress.style.display = '';
+        errEl.textContent = '';
+
+        const actionSpec = action.action || {};
+        const basePath = actionSpec.endpoint;
+        const method = (actionSpec.method || 'POST').toUpperCase();
+        let succeeded = 0;
+        const failures = [];
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            currentEl.textContent = String(i + 1);
+
+            const body = this._buildRequestBody(action, row, {}, actionSpec);
+            const path = this._appendAgentIdToPath(basePath, row);
+            const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
+                + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
+            const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } };
+            if (init.method !== 'GET') init.body = JSON.stringify(body);
+
+            try {
+                const resp = await fetch(proxyURL, init);
+                if (resp.ok) {
+                    succeeded++;
+                } else {
+                    const data = await resp.json().catch(() => ({}));
+                    failures.push(`${row[entry.keyField]}: ${data.error || `HTTP ${resp.status}`}`);
+                }
+            } catch (e) {
+                failures.push(`${row[entry.keyField]}: ${e.message}`);
+            }
+        }
+
+        Modals.close(submitBtn);
+        entry.selection.clear();
+        const total = rows.length;
+        const ctx = { count: total, total, succeeded, failed: failures.length };
+        if (failures.length === 0) {
+            const tmpl = action.success_message || `${action.label || 'Action'} completed for ${total} item${total === 1 ? '' : 's'}`;
+            Utils.toast(this._interpolate(tmpl, ctx), 'success');
+        } else if (succeeded > 0) {
+            Utils.toast(`${succeeded} of ${total} succeeded. ${failures.length} failed: ${failures[0]}`, 'warning');
+        } else {
+            const tmpl = action.error_message || `All ${total} operations failed: ${failures[0]}`;
+            Utils.toast(this._interpolate(tmpl, { ...ctx, error: failures[0] }), 'error');
+        }
+        this.refresh(compId);
     },
 
     // ─── Modal ───────────────────────────────────────────────────────────
@@ -1063,7 +1306,9 @@ const SmartTableComponent = {
                 confirm_value: action.form.confirm_value,
                 confirm_key: action.form.confirm_key || 'confirm',
                 confirm_label: action.form.confirm_label,
-                message: action.form.message
+                message: action.form.message,
+                success_message: action.form.success_message,
+                error_message: action.form.error_message
             };
         }
         if (action.confirm) {
@@ -1086,7 +1331,9 @@ const SmartTableComponent = {
                 require_type_confirm: action.confirm.require_type_confirm || false,
                 confirm_value: action.confirm.confirm_value,
                 confirm_key: action.confirm.confirm_key || 'confirm',
-                confirm_label: action.confirm.confirm_label
+                confirm_label: action.confirm.confirm_label,
+                success_message: action.confirm.success_message,
+                error_message: action.confirm.error_message
             };
         }
         // No form, no confirm — bare action. Treat as a one-tap confirm.
@@ -1215,10 +1462,34 @@ const SmartTableComponent = {
         return undefined;
     },
 
+    // Resolve the agent_id for a given row: prefer `row.agent_id` so cross-
+    // agent lists (e.g., aggregated drives) dispatch each action to its owning
+    // host, and fall back to the page-level selector for single-agent tables.
+    _resolveAgentId(row) {
+        if (row && row.agent_id != null && row.agent_id !== '') {
+            return String(row.agent_id);
+        }
+        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
+            const id = ManifestRenderer.getSelectedAgentId();
+            if (id) return String(id);
+        }
+        return '';
+    },
+
+    _appendAgentIdToPath(path, row) {
+        const id = this._resolveAgentId(row);
+        if (!id) return path;
+        const sep = path.includes('?') ? '&' : '?';
+        return `${path}${sep}agent_id=${encodeURIComponent(id)}`;
+    },
+
     _interpolate(template, row) {
         if (!template) return '';
-        return String(template).replace(/\{row\.([a-zA-Z0-9_]+)\}/g, (_, key) =>
-            row && row[key] != null ? String(row[key]) : '');
+        return String(template)
+            .replace(/\{row\.([a-zA-Z0-9_]+)\}/g, (_, key) =>
+                row && row[key] != null ? String(row[key]) : '')
+            .replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (m, key) =>
+                row && row[key] != null ? String(row[key]) : m);
     },
 
     // Render a grid of clickable cards for `multi-select` with
@@ -1410,14 +1681,7 @@ const SmartTableComponent = {
         const formValues = this._collectFormValues(modalEl);
         const body = this._buildRequestBody(ctx.action, ctx.row, formValues, preview);
 
-        let path = preview.endpoint;
-        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
-            const agentId = ManifestRenderer.getSelectedAgentId();
-            if (agentId) {
-                const sep = path.includes('?') ? '&' : '?';
-                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
-            }
-        }
+        const path = this._appendAgentIdToPath(preview.endpoint, ctx.row);
 
         try {
             const method = (preview.method || ctx.action.action.method || 'POST').toUpperCase();
@@ -1462,16 +1726,8 @@ const SmartTableComponent = {
             }
         }
 
-        let path = ctx.action.action.endpoint;
+        const path = this._appendAgentIdToPath(ctx.action.action.endpoint, ctx.row);
         const method = (ctx.action.action.method || 'POST').toUpperCase();
-
-        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
-            const agentId = ManifestRenderer.getSelectedAgentId();
-            if (agentId) {
-                const sep = path.includes('?') ? '&' : '?';
-                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
-            }
-        }
 
         submitBtn.disabled = true;
         const origLabel = submitBtn.textContent;
@@ -1484,16 +1740,28 @@ const SmartTableComponent = {
             const resp = await fetch(proxyURL, init);
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok) {
-                errEl.textContent = (data && (data.error || data.message)) || `Request failed (HTTP ${resp.status})`;
+                const serverMsg = (data && (data.error || data.message)) || `Request failed (HTTP ${resp.status})`;
+                errEl.textContent = serverMsg;
                 if (data && data.command) {
                     errEl.textContent += `\nCommand: ${data.command}`;
                 }
+                const errorTmpl = ctx.cfg.error_message;
+                const toastMsg = errorTmpl
+                    ? this._interpolate(errorTmpl, { ...(ctx.row || {}), ...formValues, error: serverMsg })
+                    : serverMsg;
+                Utils.toast(toastMsg, 'error');
                 return;
             }
             Modals.close(submitBtn);
+            const successTmpl = ctx.cfg.success_message;
+            const successMsg = successTmpl
+                ? this._interpolate(successTmpl, { ...(ctx.row || {}), ...formValues })
+                : `${ctx.action.label || 'Action'} completed`;
+            Utils.toast(successMsg, 'success');
             this.refresh(ctx.compId);
         } catch (e) {
             errEl.textContent = `Request failed: ${e.message}`;
+            Utils.toast(`Request failed: ${e.message}`, 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = origLabel;

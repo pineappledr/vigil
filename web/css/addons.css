@@ -2557,3 +2557,79 @@
     gap: 0.5rem;
     flex-wrap: wrap;
 }
+
+/* Bulk selection on smart-table */
+.smart-col-select-head, .smart-col-select {
+    width: 32px;
+    text-align: center;
+    padding: 0 4px;
+}
+.smart-col-select input[type="checkbox"],
+.smart-col-select-head input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+}
+.smart-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0.5rem 0;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid var(--accent-primary, #3b82f6);
+    border-radius: 6px;
+}
+.smart-bulk-count {
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+}
+.smart-bulk-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    flex: 1;
+}
+.smart-bulk-clear {
+    background: transparent;
+    border: 1px solid var(--border, #30363d);
+    color: var(--text-secondary, #b1bac4);
+    padding: 0.3rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.smart-bulk-clear:hover {
+    border-color: var(--text-secondary, #b1bac4);
+    color: var(--text-primary, #e6edf3);
+}
+.smart-bulk-progress {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary, #0d1117);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #b1bac4);
+}
+
+/* Busy-cell pulse for progress_indicator */
+.smart-cell-busy {
+    position: relative;
+    color: var(--accent-primary, #3b82f6);
+    font-weight: 600;
+}
+.smart-cell-busy::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: var(--accent-primary, #3b82f6);
+    animation: smart-busy-pulse 1.2s ease-in-out infinite;
+    vertical-align: middle;
+}
+@keyframes smart-busy-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.15); }
+}
