@@ -24,6 +24,7 @@ const ManifestRenderer = {
         this.addon = addon;
         this.manifest = manifest;
         this.activePage = manifest.pages[0]?.id || null;
+        this._selectedAgentId = '';
 
         const container = document.getElementById('addons-view');
         if (!container) return;
