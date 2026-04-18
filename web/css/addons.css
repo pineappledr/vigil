@@ -2018,59 +2018,116 @@
     margin-right: auto;
 }
 
-.smart-action-btn,
+.smart-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    white-space: nowrap;
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    color: var(--text-primary, #f0f6fc);
+    border-color: var(--border, #30363d);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.smart-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    filter: brightness(1.08);
+}
+
+.smart-action-btn:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+
+.smart-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    filter: none;
+}
+
+.smart-action-primary {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #fff;
+    border-color: transparent;
+}
+.smart-action-primary:hover {
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45);
+}
+
+.smart-action-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #fff;
+    border-color: transparent;
+}
+.smart-action-warning:hover {
+    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.45);
+}
+
+.smart-action-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    color: #fff;
+    border-color: transparent;
+}
+.smart-action-danger:hover {
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.45);
+}
+
+/* Per-row action buttons stay compact — they live inside tight table rows. */
 .smart-row-action-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
     border-radius: 4px;
-    border: 1px solid transparent;
+    border: 1px solid var(--border, #30363d);
     font-family: var(--font-sans);
     font-size: 0.78rem;
     font-weight: 500;
     cursor: pointer;
     background: var(--bg-secondary, #161b22);
     color: var(--text-secondary, #c9d1d9);
-    border-color: var(--border, #30363d);
     transition: background 0.12s, border-color 0.12s, color 0.12s;
     white-space: nowrap;
 }
-
-.smart-action-btn:hover,
 .smart-row-action-btn:hover {
     background: var(--bg-hover, #1c2128);
     color: var(--text-primary, #f0f6fc);
 }
 
-.smart-action-primary,
 .smart-row-action-primary {
     border-color: var(--success, #10b981);
     color: var(--success, #10b981);
 }
-.smart-action-primary:hover,
 .smart-row-action-primary:hover {
     background: rgba(16, 185, 129, 0.12);
     color: var(--success, #10b981);
 }
 
-.smart-action-warning,
 .smart-row-action-warning {
     border-color: var(--warning, #f59e0b);
     color: var(--warning, #f59e0b);
 }
-.smart-action-warning:hover,
 .smart-row-action-warning:hover {
     background: rgba(245, 158, 11, 0.12);
     color: var(--warning, #f59e0b);
 }
 
-.smart-action-danger,
 .smart-row-action-danger {
     border-color: var(--danger, #ef4444);
     color: var(--danger, #ef4444);
 }
-.smart-action-danger:hover,
 .smart-row-action-danger:hover {
     background: rgba(239, 68, 68, 0.12);
     color: var(--danger, #ef4444);
