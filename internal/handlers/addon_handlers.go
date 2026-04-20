@@ -27,7 +27,11 @@ var TelemetryBroker *addons.TelemetryBroker
 var WebSocketHub *addons.WebSocketHub
 
 // addonClient is a shared HTTP client for outbound requests to add-ons.
-var addonClient = &http.Client{Timeout: 30 * time.Second}
+// Long timeout because some add-on actions (ZFS `zpool create`, `zpool scrub`,
+// long running SMART long-selftests, etc.) legitimately take minutes — a short
+// timeout would cancel the context mid-operation and SIGKILL the agent's child
+// process. The per-request context still cuts off if the client disconnects.
+var addonClient = &http.Client{Timeout: 5 * time.Minute}
 
 // registryClient is a shared HTTP client for container registry lookups.
 var registryClient = &http.Client{Timeout: 10 * time.Second}
