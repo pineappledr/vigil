@@ -1207,3 +1207,48 @@
     outline: none;
     border-color: var(--accent-primary);
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Per-dataset collapse chevron (inside the Name cell of the datasets table)
+   ─────────────────────────────────────────────────────────────────── */
+
+.zfs-node-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    width: 18px;
+    height: 18px;
+    margin-right: 0.3rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    vertical-align: -3px;
+    transition: color var(--transition-fast);
+}
+
+.zfs-node-toggle > svg {
+    width: 12px;
+    height: 12px;
+    transition: transform var(--transition-fast);
+}
+
+.zfs-node-toggle:hover {
+    color: var(--text-primary);
+}
+
+.drive-table-row.is-node-collapsed .zfs-node-toggle > svg {
+    transform: rotate(-90deg);
+}
+
+/* Placeholder keeps leaf-row names aligned with rows that do have a chevron. */
+.zfs-node-toggle-placeholder {
+    display: inline-block;
+    width: 18px;
+    margin-right: 0.3rem;
+}
+
+.drive-table-row.is-hidden-by-ancestor {
+    display: none;
+}

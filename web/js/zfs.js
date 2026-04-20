@@ -65,8 +65,16 @@ const ZFS = {
         'zfs-section-datasets': true,
     },
 
+    // Per-dataset collapse state. Keys are `${hostname}|${dataset_name}` so
+    // a dataset of the same name on two hosts is tracked independently.
+    _collapsedDatasets: new Set(),
+
     _isCollapsed(id) {
         return this._collapsedSections[id] === true;
+    },
+
+    _datasetKey(hostname, name) {
+        return `${hostname || ''}|${name || ''}`;
     },
 
     async render() {
@@ -321,12 +329,56 @@ const ZFS = {
             return (a.dataset_name || '').localeCompare(b.dataset_name || '');
         });
 
+        // Precompute "has children" per dataset. A row has children when any
+        // other dataset on the same host+pool starts with `${name}/`. Using a
+        // set of qualified names keeps the check O(1) per row.
+        const pathSet = new Set(sorted.map(d => `${d.hostname}|${d.pool_name}|${d.dataset_name || ''}`));
+        const hasChildren = (d) => {
+            const prefix = `${d.hostname}|${d.pool_name}|${d.dataset_name || ''}/`;
+            for (const p of pathSet) if (p.startsWith(prefix)) return true;
+            return false;
+        };
+
+        // A row is hidden when any collapsed ancestor's dataset_name is a
+        // prefix of this row's dataset_name (on the same host).
+        const isHidden = (d) => {
+            const name = d.dataset_name || '';
+            for (const k of this._collapsedDatasets) {
+                const sep = k.indexOf('|');
+                if (sep < 0) continue;
+                const host = k.slice(0, sep);
+                const ancestor = k.slice(sep + 1);
+                if (host !== d.hostname) continue;
+                if (name !== ancestor && name.startsWith(ancestor + '/')) return true;
+            }
+            return false;
+        };
+
         let lastKey = '';
         const rows = sorted.map(d => {
             const key = `${d.hostname}|${d.pool_name}`;
             const depth = Math.max(0, (d.dataset_name || '').split('/').length - 1);
             const isPoolBoundary = key !== lastKey;
             lastKey = key;
+
+            const dsKey = this._datasetKey(d.hostname, d.dataset_name);
+            const collapsed = this._collapsedDatasets.has(dsKey);
+            const hidden = isHidden(d);
+            const children = hasChildren(d);
+
+            const toggleBtn = children
+                ? `<button class="zfs-node-toggle"
+                        onclick="event.stopPropagation(); ZFS.toggleDataset('${Utils.escapeHtml(dsKey)}')"
+                        aria-label="${collapsed ? 'Expand' : 'Collapse'}">
+                        ${this.icons.chevron}
+                    </button>`
+                : `<span class="zfs-node-toggle-placeholder"></span>`;
+
+            const rowCls = [
+                'drive-table-row',
+                collapsed ? 'is-node-collapsed' : '',
+                hidden ? 'is-hidden-by-ancestor' : '',
+            ].filter(Boolean).join(' ');
 
             const groupHeader = isPoolBoundary ? `
                 <tr class="zfs-dataset-pool-row">
@@ -338,9 +390,9 @@ const ZFS = {
                 </tr>` : '';
 
             return groupHeader + `
-                <tr class="drive-table-row">
+                <tr class="${rowCls}" data-ds-key="${Utils.escapeHtml(dsKey)}">
                     <td class="drive-table-name zfs-tree-cell" data-depth="${depth}">
-                        <span class="zfs-tree-indent" style="--depth:${depth}"></span>${Utils.escapeHtml(d.dataset_name || '')}
+                        <span class="zfs-tree-indent" style="--depth:${depth}"></span>${toggleBtn}${Utils.escapeHtml(d.dataset_name || '')}
                     </td>
                     <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
                     <td>${Utils.escapeHtml(d.pool_name || '')}</td>
@@ -356,7 +408,23 @@ const ZFS = {
         return this._tableSection('Datasets', this.icons.drive, datasets.length,
             headers.map(h => `<th>${h}</th>`).join(''),
             rows, 'zfs-datasets-table',
-            { sectionId: 'zfs-section-datasets', collapsible: true, collapsed: true });
+            { sectionId: 'zfs-section-datasets', collapsible: true, collapsed: this._isCollapsed('zfs-section-datasets') });
+    },
+
+    toggleDataset(key) {
+        if (!key) return;
+        if (this._collapsedDatasets.has(key)) {
+            this._collapsedDatasets.delete(key);
+        } else {
+            this._collapsedDatasets.add(key);
+        }
+        // Re-render just the Datasets section so the other tables and scroll
+        // position stay put. renderDatasetsTable reads _collapsedDatasets so
+        // the new state is reflected in the fresh HTML.
+        const section = document.getElementById('zfs-section-datasets');
+        if (section && this._datasets) {
+            section.outerHTML = this.renderDatasetsTable(this._datasets);
+        }
     },
 
     // Build a parent→children map keyed by parent device_name so we can emit
