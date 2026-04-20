@@ -74,6 +74,20 @@ type ZFSReport struct {
 	Timestamp time.Time `json:"timestamp"`
 	Available bool      `json:"zfs_available"` // Whether ZFS is installed/available
 	Pools     []Pool    `json:"pools"`
+	Datasets  []Dataset `json:"datasets,omitempty"`
+}
+
+// Dataset represents a ZFS filesystem or volume.
+// JSON tags match the server-side ZFSAgentDataset in internal/zfs/ingest.go.
+type Dataset struct {
+	Name            string  `json:"name"`
+	PoolName        string  `json:"pool_name"`
+	UsedBytes       int64   `json:"used_bytes"`
+	AvailableBytes  int64   `json:"available_bytes"`
+	ReferencedBytes int64   `json:"referenced_bytes"`
+	Mountpoint      string  `json:"mountpoint"`
+	CompressRatio   float64 `json:"compress_ratio"`
+	QuotaBytes      int64   `json:"quota_bytes"`
 }
 
 // ─── Scrub History ───────────────────────────────────────────────────────────

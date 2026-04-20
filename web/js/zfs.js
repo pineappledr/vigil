@@ -77,7 +77,7 @@ const ZFS = {
         const [dsResp, devResp, scrubResp] = await Promise.allSettled([
             API.getZFSDatasets(),
             API.getZFSAllDevices(),
-            API.getZFSAllScrubs(100),
+            API.getZFSAllScrubs(5),
         ]);
 
         this._datasets = await this._readJSON(dsResp);
