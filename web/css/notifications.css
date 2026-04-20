@@ -50,6 +50,52 @@
     border-radius: 8px;
     cursor: pointer;
     transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.notif-service-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-service-test-btn {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.notif-service-test-btn:hover:not(:disabled) {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.notif-service-test-btn:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+.notif-service-test-btn.success {
+    color: var(--success);
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.notif-service-test-btn.error {
+    color: var(--danger, #ef4444);
+    border-color: var(--danger, #ef4444);
+    background: rgba(239, 68, 68, 0.12);
 }
 
 .notif-service-item:hover {
