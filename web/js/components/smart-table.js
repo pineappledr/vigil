@@ -449,14 +449,52 @@ const SmartTableComponent = {
         entry.rows = rows;
         const sorted = this._sortRows(rows, entry.sort);
 
+        // Tree hierarchy (opt-in via `tree: { key, separator }` in the table
+        // config). Renders TrueNAS-style parent/child nesting in the named
+        // column: parents are placed above their descendants, each row is
+        // tagged with a depth for CSS indentation, and rows with children get
+        // a chevron that collapses the subtree.
+        const treeCfg = entry.config && entry.config.tree;
+        let preparedRows = sorted;
+        if (treeCfg && treeCfg.key) {
+            const sep = treeCfg.separator || '/';
+            const hasChild = new Set();
+            const names = new Set(sorted.map(r => String(r[treeCfg.key] ?? '')));
+            names.forEach(n => {
+                const idx = n.lastIndexOf(sep);
+                if (idx > 0) {
+                    const parent = n.slice(0, idx);
+                    if (names.has(parent)) hasChild.add(parent);
+                }
+            });
+            preparedRows = sorted
+                .map(r => {
+                    const name = String(r[treeCfg.key] ?? '');
+                    const depth = name ? (name.split(sep).length - 1) : 0;
+                    return { ...r, __treeName: name, __treeDepth: depth, __treeHasChildren: hasChild.has(name) };
+                })
+                .sort((a, b) => a.__treeName.localeCompare(b.__treeName));
+            // Filter out rows whose ancestor is collapsed.
+            entry.collapsedPaths = entry.collapsedPaths || new Set();
+            preparedRows = preparedRows.filter(r => {
+                if (!entry.collapsedPaths.size) return true;
+                const parts = r.__treeName.split(sep);
+                for (let i = 1; i < parts.length; i++) {
+                    const anc = parts.slice(0, i).join(sep);
+                    if (entry.collapsedPaths.has(anc)) return false;
+                }
+                return true;
+            });
+        }
+
         // Apply pagination if configured.
-        let displayRows = sorted;
+        let displayRows = preparedRows;
         if (entry.pageSize > 0) {
-            const totalPages = Math.ceil(sorted.length / entry.pageSize);
+            const totalPages = Math.ceil(preparedRows.length / entry.pageSize);
             if (entry.currentPage > totalPages) entry.currentPage = totalPages;
             if (entry.currentPage < 1) entry.currentPage = 1;
             const start = (entry.currentPage - 1) * entry.pageSize;
-            displayRows = sorted.slice(start, start + entry.pageSize);
+            displayRows = preparedRows.slice(start, start + entry.pageSize);
         }
 
         const isJobHistory = entry.config.source === 'job_history';
@@ -482,6 +520,15 @@ const SmartTableComponent = {
                 : '';
             const mainRow = `<tr data-row-idx="${idx}"${clickAttr}>${selectCell}${expandCell}${entry.columns.map(col => {
                 const val = row[col.key];
+                // Tree-column: inject indent + chevron before the cell value.
+                if (treeCfg && col.key === treeCfg.key) {
+                    const depth = row.__treeDepth || 0;
+                    const isCollapsed = entry.collapsedPaths && entry.collapsedPaths.has(row.__treeName);
+                    const chevron = row.__treeHasChildren
+                        ? `<button type="button" class="smart-tree-toggle${isCollapsed ? ' smart-tree-collapsed' : ''}" onclick="SmartTableComponent._toggleTreeNode('${this._escapeJS(compId)}', this.dataset.path)" data-path="${Utils.escapeHtml(row.__treeName)}" aria-expanded="${isCollapsed ? 'false' : 'true'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="9 18 15 12 9 6"/></svg></button>`
+                        : `<span class="smart-tree-spacer"></span>`;
+                    return `<td class="smart-tree-cell" style="--tree-depth:${depth}">${chevron}<span class="smart-tree-label">${this._formatValue(val, col.format, row, col)}</span></td>`;
+                }
                 return `<td>${this._formatValue(val, col.format, row, col)}</td>`;
             }).join('')}</tr>`;
             const nestedRow = hasChildren
@@ -545,6 +592,19 @@ const SmartTableComponent = {
             const text = (td.textContent || '').trim();
             td.classList.toggle('smart-cell-busy', isBusy(text));
         });
+    },
+
+    // Collapse/expand a tree subtree. `path` is the value of the tree key for
+    // the node being toggled (e.g. "Tank" to hide "Tank/data"). We just flip
+    // the collapsed set and re-render — the tree prep in
+    // `_updateStructuredTable` handles the rest.
+    _toggleTreeNode(compId, path) {
+        const entry = this._tables[compId];
+        if (!entry) return;
+        entry.collapsedPaths = entry.collapsedPaths || new Set();
+        if (entry.collapsedPaths.has(path)) entry.collapsedPaths.delete(path);
+        else entry.collapsedPaths.add(path);
+        this._updateStructuredTable(compId, entry, entry.rows);
     },
 
     // Toggle the nested row sibling for the main row at `idx`. The chevron
@@ -1092,11 +1152,13 @@ const SmartTableComponent = {
                 .filter(f => f.type !== 'hidden')
                 .map(f => this._renderField(f, row))
                 .join('');
-        // Hidden fields still need to be in the DOM so _collectFormValues can
-        // pick them up when sections are used.
-        const hiddenHtml = cfg.sections
-            ? cfg.fields.filter(f => f.type === 'hidden').map(f => this._renderField(f, row)).join('')
-            : '';
+        // Hidden fields are always appended at the form tail so
+        // _collectFormValues can read them. They carry `value_from: row.X`
+        // values the backend requires but the user should never edit.
+        const hiddenHtml = (cfg.fields || [])
+            .filter(f => f.type === 'hidden')
+            .map(f => this._renderField(f, row))
+            .join('');
 
         const wideClass = cfg.sections ? ' smart-action-modal-wide' : '';
 
@@ -1704,7 +1766,11 @@ const SmartTableComponent = {
         const path = this._appendAgentIdToPath(preview.endpoint, ctx.row);
 
         try {
-            const method = (preview.method || ctx.action.action.method || 'POST').toUpperCase();
+            // Preview endpoints are read-only POSTs by convention (they receive
+            // a JSON body describing the desired change and return a `command`
+            // string). Don't inherit the parent action's method — PUT/DELETE
+            // would 405 against a handler registered for POST.
+            const method = (preview.method || 'POST').toUpperCase();
             const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
                 + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
             const init = { method: method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } };
@@ -1778,7 +1844,14 @@ const SmartTableComponent = {
                 ? this._interpolate(successTmpl, { ...(ctx.row || {}), ...formValues })
                 : `${ctx.action.label || 'Action'} completed`;
             Utils.toast(successMsg, 'success');
-            this.refresh(ctx.compId);
+            // Refresh every smart-table on the page that belongs to the same
+            // add-on. Creating a pool makes a root dataset appear in the
+            // datasets table; deleting a dataset removes entries from the
+            // snapshots table; etc. Users shouldn't have to hit refresh.
+            const addonId = entry.addonId;
+            Object.keys(this._tables).forEach(id => {
+                if (this._tables[id].addonId === addonId) this.refresh(id);
+            });
         } catch (e) {
             errEl.textContent = `Request failed: ${e.message}`;
             Utils.toast(`Request failed: ${e.message}`, 'error');

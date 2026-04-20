@@ -2632,6 +2632,65 @@
     background: var(--bg-tertiary, #0d1117);
 }
 
+/* ── Tree hierarchy (smart-table `tree: { key, separator }`) ─────
+   Indents the named column by 20px per ancestor, renders a chevron that
+   collapses the subtree, and a spacer for leaf rows so columns stay
+   vertically aligned. Depth is passed in via `--tree-depth` on the <td>. */
+.smart-tree-cell {
+    padding-left: calc(8px + var(--tree-depth, 0) * 20px);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.smart-tree-toggle {
+    background: transparent;
+    border: none;
+    padding: 2px;
+    color: var(--text-muted, #8b949e);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, color 0.12s;
+    transform: rotate(90deg);
+    flex: 0 0 auto;
+}
+.smart-tree-toggle:hover {
+    color: var(--text-primary, #f0f6fc);
+}
+.smart-tree-toggle.smart-tree-collapsed {
+    transform: rotate(0deg);
+}
+.smart-tree-spacer {
+    display: inline-block;
+    width: 16px;
+    flex: 0 0 16px;
+}
+.smart-tree-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* Subtle guideline connecting indented rows to their parent. */
+.smart-tree-cell[style*="--tree-depth:1"],
+.smart-tree-cell[style*="--tree-depth:2"],
+.smart-tree-cell[style*="--tree-depth:3"],
+.smart-tree-cell[style*="--tree-depth:4"] {
+    position: relative;
+}
+.smart-tree-cell[style*="--tree-depth:1"]::before,
+.smart-tree-cell[style*="--tree-depth:2"]::before,
+.smart-tree-cell[style*="--tree-depth:3"]::before,
+.smart-tree-cell[style*="--tree-depth:4"]::before {
+    content: "";
+    position: absolute;
+    left: calc(12px + (var(--tree-depth, 1) - 1) * 20px);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border, #30363d);
+    opacity: 0.5;
+}
+
 .smart-table-nested {
     width: 100%;
     margin: 0;
