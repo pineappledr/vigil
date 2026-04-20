@@ -933,13 +933,14 @@ const SmartTableComponent = {
         const entry = this._tables[compId];
         if (!entry || !entry.rowActions || entry.rowActions.length === 0) return '';
         const rowIdx = row.__rowIdx;
-        // Past 3 actions per row, labels alongside icons push the Actions
-        // column wider than the data columns and make the table look like
-        // a toolbar. Drop to icon-only (label stays as `title` tooltip) so
-        // tables like ZFS Pools with 5 row actions still read as a table.
-        const compact = entry.rowActions.length > 3;
-        const containerCls = compact ? 'smart-row-actions smart-row-actions-compact' : 'smart-row-actions';
-        return `<div class="${containerCls}">${entry.rowActions.map((act, i) => {
+        // Filter by `visible_when` so manifests can show e.g. Pause only when
+        // a scrub is running and Resume only when it's paused — the same row
+        // action slot swaps based on state instead of showing both.
+        const visible = entry.rowActions
+            .map((act, i) => ({ act, i }))
+            .filter(({ act }) => this._evalVisibleWhen(act.visible_when, row));
+        if (visible.length === 0) return '';
+        return `<div class="smart-row-actions">${visible.map(({ act, i }) => {
             const tier = act.safety_tier || 'green';
             const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
             const label = Utils.escapeHtml(act.label || act.id || 'Action');
@@ -950,6 +951,27 @@ const SmartTableComponent = {
                         ${icon}<span>${label}</span>
                     </button>`;
         }).join('')}</div>`;
+    },
+
+    // Evaluate a manifest `visible_when` clause against a row. Supported forms:
+    //   { "field": "scrub_status", "equals": "paused" }
+    //   { "field": "scrub_status", "not_equals": "none" }
+    //   { "field": "scrub_status", "in": ["in_progress", "paused"] }
+    //   { "field": "scrub_status", "not_in": ["none", "completed"] }
+    //   { "field": "scrub_status", "starts_with": "in_progress" }
+    // starts_with is there because scrub_status can be "in_progress (42% done)".
+    // Missing clause means the action is always visible.
+    _evalVisibleWhen(rule, row) {
+        if (!rule || typeof rule !== 'object') return true;
+        if (!row) return true;
+        const actual = row[rule.field];
+        const s = actual == null ? '' : String(actual);
+        if (rule.equals !== undefined) return s === String(rule.equals);
+        if (rule.not_equals !== undefined) return s !== String(rule.not_equals);
+        if (Array.isArray(rule.in)) return rule.in.map(String).includes(s);
+        if (Array.isArray(rule.not_in)) return !rule.not_in.map(String).includes(s);
+        if (rule.starts_with !== undefined) return s.startsWith(String(rule.starts_with));
+        return true;
     },
 
     _invokeToolbarAction(compId, actionIdx) {
@@ -1859,10 +1881,21 @@ const SmartTableComponent = {
             // add-on. Creating a pool makes a root dataset appear in the
             // datasets table; deleting a dataset removes entries from the
             // snapshots table; etc. Users shouldn't have to hit refresh.
+            //
+            // Double refresh: immediate + delayed. Add-ons typically refresh
+            // their local state asynchronously after a write (zfs-manager's
+            // agent does `go refreshAndFlush()`), so the hub-side cache the
+            // first refresh reads from may still be stale. The delayed one
+            // catches the freshly-pushed frame without needing the user to
+            // click refresh.
             const addonId = entry.addonId;
-            Object.keys(this._tables).forEach(id => {
-                if (this._tables[id].addonId === addonId) this.refresh(id);
-            });
+            const refreshAll = () => {
+                Object.keys(this._tables).forEach(id => {
+                    if (this._tables[id] && this._tables[id].addonId === addonId) this.refresh(id);
+                });
+            };
+            refreshAll();
+            setTimeout(refreshAll, 1500);
         } catch (e) {
             errEl.textContent = `Request failed: ${e.message}`;
             Utils.toast(`Request failed: ${e.message}`, 'error');

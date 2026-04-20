@@ -2146,18 +2146,6 @@
     font-size: 0.72rem;
 }
 
-/* When a table has >3 row actions, smart-table renders buttons in compact
-   mode: icon-only, label becomes a tooltip. Keeps the Actions column from
-   overwhelming the data columns (see ZFS Pools: Edit / Start / Pause /
-   Cancel / Export is 5 actions). */
-.smart-row-actions-compact .smart-row-action-btn {
-    padding: 4px 6px;
-    gap: 0;
-}
-.smart-row-actions-compact .smart-row-action-btn span {
-    display: none;
-}
-
 .smart-col-actions-head {
     text-align: right;
     width: 1%;
