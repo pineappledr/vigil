@@ -933,7 +933,13 @@ const SmartTableComponent = {
         const entry = this._tables[compId];
         if (!entry || !entry.rowActions || entry.rowActions.length === 0) return '';
         const rowIdx = row.__rowIdx;
-        return `<div class="smart-row-actions">${entry.rowActions.map((act, i) => {
+        // Past 3 actions per row, labels alongside icons push the Actions
+        // column wider than the data columns and make the table look like
+        // a toolbar. Drop to icon-only (label stays as `title` tooltip) so
+        // tables like ZFS Pools with 5 row actions still read as a table.
+        const compact = entry.rowActions.length > 3;
+        const containerCls = compact ? 'smart-row-actions smart-row-actions-compact' : 'smart-row-actions';
+        return `<div class="${containerCls}">${entry.rowActions.map((act, i) => {
             const tier = act.safety_tier || 'green';
             const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
             const label = Utils.escapeHtml(act.label || act.id || 'Action');
@@ -1556,10 +1562,15 @@ const SmartTableComponent = {
     },
 
     _appendAgentIdToPath(path, row) {
+        // Interpolate {row.X} tokens in the endpoint so manifests can declare
+        // RESTful paths like `/api/tasks/{row.id}` without the UI sending
+        // them literally. Without this the agent's router tries to parse
+        // "{row.id}" as an integer and rejects the request.
+        const resolved = this._interpolate(path, row || {});
         const id = this._resolveAgentId(row);
-        if (!id) return path;
-        const sep = path.includes('?') ? '&' : '?';
-        return `${path}${sep}agent_id=${encodeURIComponent(id)}`;
+        if (!id) return resolved;
+        const sep = resolved.includes('?') ? '&' : '?';
+        return `${resolved}${sep}agent_id=${encodeURIComponent(id)}`;
     },
 
     _interpolate(template, row) {

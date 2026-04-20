@@ -738,9 +738,13 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	// Forward request body for methods that carry a payload.
+	// Forward request body for methods that carry a payload. DELETE is
+	// included because some add-on endpoints (e.g. zfs-manager's delete
+	// dataset / delete snapshot) require a JSON body with confirmation
+	// fields. RFC 9110 allows DELETE to carry a body with no defined
+	// semantics, and Go's http client forwards it unchanged.
 	var bodyReader io.Reader
-	if r.Body != nil && (upstreamMethod == http.MethodPost || upstreamMethod == http.MethodPut || upstreamMethod == http.MethodPatch) {
+	if r.Body != nil && (upstreamMethod == http.MethodPost || upstreamMethod == http.MethodPut || upstreamMethod == http.MethodPatch || upstreamMethod == http.MethodDelete) {
 		bodyReader = io.LimitReader(r.Body, 64*1024) // 64 KiB limit
 	}
 
