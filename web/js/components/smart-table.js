@@ -1867,7 +1867,7 @@ const SmartTableComponent = {
             // `allow_custom` wrap with `data-custom-for` instead.
             const key = inp.dataset.fieldKey || inp.dataset.customFor;
             if (!key) return;
-            const preview = modalEl.querySelector(`[data-cron-preview-for="${key.replace(/"/g, '\\"')}"]`);
+            const preview = modalEl.querySelector(`[data-cron-preview-for="${CSS.escape(key)}"]`);
             if (!preview) return;
             const desc = this._describeCron(inp.value);
             preview.textContent = desc;
@@ -2035,7 +2035,7 @@ const SmartTableComponent = {
     // ─── options_from loader ─────────────────────────────────────────────
 
     async _loadFieldOptions(modalEl, field, addonId, row) {
-        const sel = modalEl.querySelector(`[data-field-key="${field.key.replace(/"/g, '\\"')}"]`);
+        const sel = modalEl.querySelector(`[data-field-key="${CSS.escape(field.key)}"]`);
         if (!sel) return;
         if (!addonId) return;
 
@@ -2576,9 +2576,18 @@ const SmartTableComponent = {
 
     _setNestedValue(obj, dottedKey, value) {
         const parts = dottedKey.split('.');
+        // Guard against prototype pollution: a manifest that sends a form key
+        // like "__proto__.polluted" would otherwise walk onto Object.prototype.
+        if (parts.some(p => p === '__proto__' || p === 'prototype' || p === 'constructor')) {
+            return;
+        }
         let cur = obj;
         for (let i = 0; i < parts.length - 1; i++) {
-            if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+            if (!Object.prototype.hasOwnProperty.call(cur, parts[i])
+                || cur[parts[i]] == null
+                || typeof cur[parts[i]] !== 'object') {
+                cur[parts[i]] = {};
+            }
             cur = cur[parts[i]];
         }
         cur[parts[parts.length - 1]] = value;
@@ -2615,7 +2624,7 @@ const SmartTableComponent = {
         const expected = this._interpolate(ctx.cfg.confirm_value || '', ctx.row);
         if (!expected) return;
         const key = ctx.cfg.confirm_key || 'confirm';
-        const sel = modalEl.querySelector(`[data-field-key="${key.replace(/"/g, '\\"')}"]`);
+        const sel = modalEl.querySelector(`[data-field-key="${CSS.escape(key)}"]`);
         const submit = modalEl.querySelector('#smart-action-submit');
         if (!sel || !submit) return;
         const update = () => {
