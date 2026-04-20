@@ -214,7 +214,19 @@ const ZFS = {
     },
 
     renderDatasetsTable(datasets) {
-        if (datasets.length === 0) return '';
+        const headers = ['Name', 'Host', 'Pool', 'Used', 'Available', 'Referenced', 'Compression', 'Mountpoint'];
+
+        if (datasets.length === 0) {
+            const emptyRow = `
+                <tr class="drive-table-row">
+                    <td colspan="${headers.length}" class="zfs-table-empty">
+                        No datasets reported yet — agents will populate this list on their next check-in.
+                    </td>
+                </tr>`;
+            return this._tableSection('Datasets', this.icons.drive, 0,
+                headers.map(h => `<th>${h}</th>`).join(''),
+                emptyRow, 'zfs-datasets-table');
+        }
 
         // Sort so that within a pool the root dataset comes first and children
         // follow depth-first alphabetically. Depth is the number of "/" in the
@@ -228,7 +240,6 @@ const ZFS = {
             return (a.dataset_name || '').localeCompare(b.dataset_name || '');
         });
 
-        const headers = ['Name', 'Host', 'Pool', 'Used', 'Available', 'Referenced', 'Compression', 'Mountpoint'];
         let lastKey = '';
         const rows = sorted.map(d => {
             const key = `${d.hostname}|${d.pool_name}`;

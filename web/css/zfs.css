@@ -1115,3 +1115,11 @@
 .drive-table-row.clickable:hover {
     background: var(--bg-hover, var(--bg-elevated));
 }
+
+.zfs-table-empty {
+    text-align: center;
+    padding: 1.25rem 1rem;
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.85rem;
+}
