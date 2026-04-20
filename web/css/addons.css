@@ -2170,6 +2170,38 @@
     overflow-y: auto;
 }
 
+/* Two-pane layout on wide viewports: form on the left, command preview
+   pinned to the right so the user sees what `zpool create` will run
+   without scrolling. Falls back to stacked single-column below 1024px. */
+@media (min-width: 1024px) {
+    .smart-action-modal-wide .modal-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        grid-template-rows: auto 1fr;
+        column-gap: 16px;
+        align-items: start;
+    }
+    .smart-action-modal-wide .smart-action-message {
+        grid-column: 1 / -1;
+    }
+    .smart-action-modal-wide .smart-action-form {
+        grid-column: 1;
+        grid-row: 2;
+        min-width: 0;
+    }
+    .smart-action-modal-wide .smart-action-preview {
+        grid-column: 2;
+        grid-row: 2;
+        position: sticky;
+        top: 0;
+        align-self: start;
+        margin-top: 0;
+    }
+    .smart-action-modal-wide .form-error {
+        grid-column: 1 / -1;
+    }
+}
+
 /* Let long <select> option labels wrap in the open dropdown so the
    "Mirror — 2+ drives, highest durability, lose 50% capacity" text doesn't
    clip on narrow columns. The closed-state summary still truncates. */
@@ -2262,8 +2294,8 @@
 
 .smart-disk-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 6px;
     margin-top: 4px;
 }
 
@@ -2287,12 +2319,12 @@
 
 .smart-disk-card {
     display: grid;
-    grid-template-columns: 22px 1fr;
-    gap: 8px;
+    grid-template-columns: 18px 1fr;
+    gap: 6px;
     align-items: start;
-    padding: 10px 12px;
+    padding: 6px 8px;
     border: 1px solid var(--border, #30363d);
-    border-radius: 6px;
+    border-radius: 5px;
     background: var(--bg-secondary, #161b22);
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
@@ -2303,15 +2335,15 @@
     background: var(--bg-hover, #1c2128);
 }
 .smart-disk-card-check {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 4px;
     border: 1.5px solid var(--border, #30363d);
     color: transparent;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-top: 2px;
+    margin-top: 1px;
     transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .smart-disk-card-selected {
@@ -2325,20 +2357,26 @@
 }
 .smart-disk-card-name {
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     color: var(--text-primary, #f0f6fc);
+    line-height: 1.15;
 }
 .smart-disk-card-detail {
-    font-size: 0.74rem;
+    font-size: 0.68rem;
     color: var(--text-secondary, #c9d1d9);
-    margin-top: 2px;
+    margin-top: 1px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .smart-disk-card-meta {
     display: flex;
-    gap: 10px;
-    margin-top: 4px;
-    font-size: 0.7rem;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 0.66rem;
     color: var(--text-muted, #8b949e);
+    line-height: 1.15;
 }
 .smart-disk-card-serial {
     font-family: var(--font-mono, SFMono-Regular, Menlo, monospace);
