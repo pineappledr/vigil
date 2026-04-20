@@ -301,6 +301,26 @@ func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) 
 	return &t, nil
 }
 
+// GetRegistrationTokenByAddonID returns the token value currently bound to the
+// given addon ID, or "" if no bound token exists. Used by the proxy to forward
+// the shared secret on the vigil-core → addon hop.
+func GetRegistrationTokenByAddonID(db *sql.DB, addonID int64) (string, error) {
+	var token string
+	err := db.QueryRow(`
+		SELECT token FROM addon_registration_tokens
+		WHERE used_by_addon_id = ?
+		ORDER BY used_at DESC
+		LIMIT 1
+	`, addonID).Scan(&token)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get registration token by addon id: %w", err)
+	}
+	return token, nil
+}
+
 // ListRegistrationTokens returns all add-on registration tokens.
 func ListRegistrationTokens(db *sql.DB) ([]RegistrationToken, error) {
 	rows, err := db.Query(`

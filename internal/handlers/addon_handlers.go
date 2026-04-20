@@ -757,6 +757,14 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	}
 
+	// Forward the registration token as a bearer credential so the add-on can
+	// authenticate this call. Without this the add-on would have to accept
+	// unauthenticated requests on its proxy path, allowing anyone with network
+	// access to the add-on to bypass vigil-core entirely.
+	if token, err := addons.GetRegistrationTokenByAddonID(db.DB, id); err == nil && token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
 	resp, err := addonClient.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
 	if err != nil {
 		log.Printf("❌ Proxy request to addon %d: %v", id, err)
