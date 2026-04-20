@@ -8,6 +8,8 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* Header */
@@ -637,6 +639,7 @@
 .toast-error { border-color: var(--danger); background: rgba(239, 68, 68, 0.12); }
 .toast-warning { border-color: var(--warning); background: rgba(245, 158, 11, 0.12); }
 .toast-info { border-color: var(--accent-primary); background: rgba(59, 130, 246, 0.12); }
+.toast-success { border-color: var(--success, #10b981); background: rgba(16, 185, 129, 0.12); }
 
 /* ─── Confirmation Dialog ──────────────────────────────────────────────────── */
 

@@ -96,6 +96,24 @@ func GetDatasetsByHostname(db *sql.DB, hostname string) ([]ZFSDataset, error) {
 	return scanDatasets(rows)
 }
 
+// GetAllDatasets retrieves datasets across every hostname
+func GetAllDatasets(db *sql.DB) ([]ZFSDataset, error) {
+	rows, err := db.Query(`
+		SELECT id, pool_id, hostname, pool_name, dataset_name,
+			used_bytes, available_bytes, referenced_bytes,
+			mountpoint, compress_ratio, quota_bytes,
+			last_seen, created_at
+		FROM zfs_datasets
+		ORDER BY hostname, pool_name, dataset_name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query all datasets: %w", err)
+	}
+	defer rows.Close()
+
+	return scanDatasets(rows)
+}
+
 // DeleteStaleDatasets removes datasets not seen since cutoff
 func DeleteStaleDatasets(db *sql.DB, poolID int64, cutoff time.Time) (int64, error) {
 	result, err := db.Exec(

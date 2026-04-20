@@ -10,7 +10,7 @@
   <p>
     <img src="https://github.com/pineappledr/vigil/actions/workflows/ci.yml/badge.svg" alt="Build Status">
     <img src="https://img.shields.io/github/license/pineappledr/vigil" alt="License">
-    <img src="https://img.shields.io/badge/Go-1.26.1-00ADD8?logo=go&logoColor=white" alt="Go Version">
+    <img src="https://img.shields.io/badge/Go-1.26.2-00ADD8?logo=go&logoColor=white" alt="Go Version">
     <img src="https://img.shields.io/badge/SQLite-v1.44.0-003B57?logo=sqlite&logoColor=white" alt="SQLite Version">
   </p>
 
@@ -260,6 +260,7 @@ docker run -d \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -e TZ=${TZ:-UTC} \
+  -e AGENT_LISTEN=:8081 \
   -v /dev:/dev:ro \
   -v vigil_agent_data:/var/lib/vigil-agent \
   ghcr.io/pineappledr/vigil-agent:latest
@@ -289,6 +290,7 @@ services:
       TOKEN: YOUR_REGISTRATION_TOKEN
       HOSTNAME: my-truenas       # Optional: custom display name
       TZ: ${TZ:-UTC}
+      AGENT_LISTEN: ":8081"      # Optional: enable LED identify
     volumes:
       - /dev:/dev:ro
       - /dev/zfs:/dev/zfs
@@ -324,6 +326,7 @@ docker run -d \
   -e SERVER=http://YOUR_SERVER_IP:9080 \
   -e TOKEN=YOUR_REGISTRATION_TOKEN \
   -e TZ=${TZ:-UTC} \
+  -e AGENT_LISTEN=:8081 \
   -v /dev:/dev:ro \
   -v /dev/zfs:/dev/zfs \
   -v /sbin/zpool:/sbin/zpool:ro \
@@ -479,6 +482,7 @@ sudo systemctl start vigil-agent
 | `--data-dir` | - | `/var/lib/vigil-agent` | Directory for agent keys and auth state |
 | `--register` | - | - | Run one-time registration, then exit |
 | `--token` | `TOKEN` | - | Registration token (auto-enables `--register` if set) |
+| `--listen` | `AGENT_LISTEN` | - | Start command server on this address (e.g. `:8081`) for LED identify |
 | `--version` | - | - | Show version |
 | - | `TZ` | `UTC` | Timezone (should match server for consistent timestamps) |
 
@@ -496,6 +500,38 @@ You can set custom names for your drives to make them easier to identify:
 4. Click **Save**
 
 Aliases are stored in the database and persist across reboots.
+
+---
+
+## 💡 Drive Bay LED Identification (Optional)
+
+If the agent host has `ledctl` installed (from the `ledmon` package), Vigil can blink drive bay LEDs to help you physically locate a drive in the chassis.
+
+### Prerequisites
+
+- `ledctl` binary on the agent host (`apt install ledmon` / `yum install ledmon`)
+- SES-capable enclosure or SGPIO-enabled HBA (most server-class hardware)
+- Agent started with `--listen` flag to enable the command server
+
+### Setup
+
+```bash
+# Install ledmon on the agent host
+sudo apt install ledmon   # Debian/Ubuntu
+sudo yum install ledmon   # RHEL/CentOS
+
+# Start agent with command server enabled
+sudo vigil-agent --server http://YOUR_SERVER_IP:9080 --listen :8081
+
+# Or via environment variable
+AGENT_LISTEN=:8081 sudo vigil-agent --server http://YOUR_SERVER_IP:9080
+```
+
+### Usage
+
+When LED identification is available, an **Identify Drive** button appears in the drive detail sidebar. Click it to blink the drive bay LED; click again to stop. The server proxies the request to the agent's command server, which calls `ledctl` to control the enclosure LED.
+
+> **Note:** LED identification requires hardware support (SES enclosure or SGPIO). It will not work with consumer motherboards or USB-attached drives. The button only appears when the agent reports LED capability.
 
 ---
 

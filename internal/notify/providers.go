@@ -458,7 +458,7 @@ func buildGotifyURL(f map[string]string) (string, error) {
 	return u, nil
 }
 
-// signal://host:port/number[?recipients=...]
+// signal://host:port/source/recipient1/recipient2
 func buildSignalURL(f map[string]string) (string, error) {
 	host := strings.TrimSpace(f["host"])
 	number := strings.TrimSpace(f["number"])
@@ -471,10 +471,16 @@ func buildSignalURL(f map[string]string) (string, error) {
 	host = strings.TrimPrefix(host, "https://")
 	host = strings.TrimRight(host, "/")
 
-	params := url.Values{}
-	params.Set("recipients", recipients)
+	// Build path: /source/recipient1/recipient2
+	parts := []string{url.PathEscape(number)}
+	for _, r := range strings.Split(recipients, ",") {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			parts = append(parts, url.PathEscape(r))
+		}
+	}
 
-	return fmt.Sprintf("signal://%s/%s?%s", host, url.PathEscape(number), params.Encode()), nil
+	return fmt.Sprintf("signal://%s/%s", host, strings.Join(parts, "/")), nil
 }
 
 // generic+https://example.com/path  or  generic://example.com/path

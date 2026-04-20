@@ -52,6 +52,12 @@
     .sidebar.open ~ .main-content .nav-item {
         pointer-events: auto;
     }
+
+    /* Prevent any child from forcing horizontal page scroll when the sidebar is
+       collapsed. Tables/toolbars scroll inside their own overflow-x containers. */
+    .main-content {
+        overflow-x: hidden;
+    }
 }
 
 /* ─── Small Tablet / Large Phone (≤768px) ───────────────────────────────────── */

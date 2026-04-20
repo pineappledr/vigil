@@ -141,7 +141,7 @@ func preloadJSON() string {
 }
 
 // serveIndex injects preloaded data into index.html so the first paint is instant.
-func serveIndex(w http.ResponseWriter, r *http.Request) {
+func serveIndex(w http.ResponseWriter, _ *http.Request) {
 	indexHTML.once.Do(loadIndex)
 	if indexHTML.loadErr != nil {
 		http.Error(w, "index.html not found", http.StatusInternalServerError)

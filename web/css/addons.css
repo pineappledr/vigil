@@ -14,6 +14,19 @@
     font-weight: 600;
 }
 
+.addons-repo-hint {
+    margin: -12px 0 16px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+.addons-repo-hint a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.addons-repo-hint a:hover {
+    text-decoration: underline;
+}
+
 .addons-summary {
     margin-bottom: 24px;
 }
@@ -259,6 +272,8 @@
 
 .manifest-shell {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .manifest-header {
@@ -935,6 +950,18 @@
     font-family: var(--font-sans);
 }
 
+.smart-empty-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+.smart-empty-state svg {
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+
 .smart-col-name {
     font-family: var(--font-sans);
 }
@@ -1378,9 +1405,17 @@
         gap: 8px;
     }
 
-    /* Refresh toolbar: auto-refresh label stays compact */
+    /* Refresh toolbar: wrap to a second line when the agent selector + dropdown
+       don't fit on one row, and keep each control from forcing overflow. */
     .manifest-refresh-toolbar {
         gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .manifest-refresh-toolbar .manifest-agent-select,
+    .manifest-refresh-toolbar .manifest-refresh-auto {
+        max-width: 100%;
+        min-width: 0;
     }
 
     .manifest-refresh-toolbar .manifest-refresh-auto {
@@ -1391,6 +1426,18 @@
     .manifest-refresh-toolbar .manifest-refresh-btn {
         font-size: 0.75rem;
         padding: 5px 10px;
+    }
+
+    /* Ensure the smart-table actually scrolls inside its container rather than
+       stretching the parent. width:100% on the container caps it to the
+       manifest-component's content box; the table then overflows horizontally. */
+    .smart-table-container {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .manifest-component {
+        min-width: 0;
     }
 
     /* Progress: wrap phases, truncate long job IDs */
@@ -1967,4 +2014,1050 @@
 
 .smart-row-clickable:hover {
     background: var(--bg-hover);
+}
+
+/* ── Manifest-driven actions (toolbar + per-row) ─────────────── */
+
+.smart-toolbar-spacer {
+    flex: 1;
+}
+
+.smart-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-right: auto;
+}
+
+.smart-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    white-space: nowrap;
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    color: var(--text-primary, #f0f6fc);
+    border-color: var(--border, #30363d);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.smart-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    filter: brightness(1.08);
+}
+
+.smart-action-btn:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+
+.smart-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    filter: none;
+}
+
+.smart-action-primary {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #fff;
+    border-color: transparent;
+}
+.smart-action-primary:hover {
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45);
+}
+
+.smart-action-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #fff;
+    border-color: transparent;
+}
+.smart-action-warning:hover {
+    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.45);
+}
+
+.smart-action-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+    color: #fff;
+    border-color: transparent;
+}
+.smart-action-danger:hover {
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.45);
+}
+
+/* Black (irreversible) tier — solid red fill + outline so it visually
+   outweighs the red-bordered danger variant. Used for pool destroy and force
+   imports where there is no undo. */
+.smart-action-irreversible {
+    background: #b91c1c;
+    color: #fff;
+    border: 2px solid #7f1d1d;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.smart-action-irreversible:hover {
+    background: #991b1b;
+    box-shadow: 0 6px 18px rgba(185, 28, 28, 0.6);
+}
+
+/* Per-row action buttons stay compact — they live inside tight table rows. */
+.smart-row-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border, #30363d);
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--bg-secondary, #161b22);
+    color: var(--text-secondary, #c9d1d9);
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
+}
+.smart-row-action-btn:hover {
+    background: var(--bg-hover, #1c2128);
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-row-action-primary {
+    border-color: var(--success, #10b981);
+    color: var(--success, #10b981);
+}
+.smart-row-action-primary:hover {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--success, #10b981);
+}
+
+.smart-row-action-warning {
+    border-color: var(--warning, #f59e0b);
+    color: var(--warning, #f59e0b);
+}
+.smart-row-action-warning:hover {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--warning, #f59e0b);
+}
+
+.smart-row-action-danger {
+    border-color: var(--danger, #ef4444);
+    color: var(--danger, #ef4444);
+}
+.smart-row-action-danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger, #ef4444);
+}
+
+.smart-row-action-irreversible {
+    background: #b91c1c;
+    border-color: #7f1d1d;
+    color: #fff;
+    font-weight: 700;
+}
+.smart-row-action-irreversible:hover {
+    background: #991b1b;
+    color: #fff;
+}
+
+.smart-row-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.smart-row-action-btn {
+    padding: 3px 8px;
+    font-size: 0.72rem;
+}
+
+.smart-col-actions-head {
+    text-align: right;
+    width: 1%;
+    white-space: nowrap;
+}
+
+/* ── Action modal ─────────────────────────────────────────────── */
+
+.smart-action-modal {
+    width: min(640px, 92vw);
+    max-width: min(640px, 92vw); /* override base .modal max-width: 400px */
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.smart-action-modal-wide {
+    width: min(1400px, 98vw);
+    max-width: min(1400px, 98vw); /* override base .modal max-width: 400px */
+    max-height: 94vh;
+}
+.smart-action-modal-wide .modal-body {
+    max-height: calc(94vh - 120px);
+    overflow-y: auto;
+    padding: 14px 16px;
+}
+
+/* ≥1024px: two-pane — form on left, sticky command preview on right. Within
+   the form, sections flow in a 2-column grid so all options are visible at
+   once; identity + data-vdev span both columns. Below 1024px everything
+   stacks into a single column for tablet/mobile. */
+@media (min-width: 1024px) {
+    .smart-action-modal-wide .modal-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+        column-gap: 16px;
+        align-items: start;
+    }
+    .smart-action-modal-wide .smart-action-message { grid-column: 1 / -1; }
+    .smart-action-modal-wide .smart-action-form {
+        grid-column: 1;
+        min-width: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 12px;
+        row-gap: 12px;
+        align-content: start;
+    }
+    .smart-action-modal-wide .smart-action-form > .smart-section {
+        margin-bottom: 0;
+    }
+    /* First two sections (Identity + Data Vdev) take full width so the
+       disk-card grid and capacity preview have room. */
+    .smart-action-modal-wide .smart-action-form > .smart-section:nth-child(-n+2) {
+        grid-column: 1 / -1;
+    }
+    .smart-action-modal-wide .smart-action-preview {
+        grid-column: 2;
+        position: sticky;
+        top: 0;
+        align-self: start;
+        margin-top: 0;
+        max-height: calc(94vh - 140px);
+        overflow-y: auto;
+    }
+    .smart-action-modal-wide .form-error { grid-column: 1 / -1; }
+    /* Auto-expand all sections on wide viewports so the user sees every
+       option without having to click headers. The collapse toggle still
+       works — users can re-collapse if they want. */
+    .smart-action-modal-wide .smart-section.smart-section-collapsed .smart-section-body {
+        display: block;
+    }
+    .smart-action-modal-wide .smart-section.smart-section-collapsed .smart-section-chevron {
+        transform: rotate(90deg);
+        color: var(--accent-primary, #6366f1);
+    }
+}
+
+/* Tablet (768-1023px): single column form, preview below. */
+@media (max-width: 1023px) {
+    .smart-action-modal-wide {
+        width: min(900px, 96vw);
+    }
+}
+
+/* Mobile (<640px): full-width modal, compact padding, single-column
+   everything, disk-card grid collapses to 2 columns. */
+@media (max-width: 640px) {
+    .smart-action-modal-wide {
+        width: 96vw;
+        max-height: 96vh;
+    }
+    .smart-action-modal-wide .modal-body {
+        padding: 10px;
+        max-height: calc(96vh - 110px);
+    }
+    .smart-action-modal-wide .smart-section {
+        margin-bottom: 8px;
+    }
+    .smart-action-modal-wide .smart-section-body {
+        padding: 10px;
+    }
+    .smart-action-modal-wide .smart-section-body.smart-section-columns {
+        grid-template-columns: 1fr;
+        row-gap: 8px;
+    }
+}
+
+/* Phone (<=480px): modal form inputs need 16px to prevent iOS focus-zoom
+   and a taller touch target. The base .form-input rule in responsive.css
+   already does this globally, but `.smart-action-modal .form-input` has
+   higher specificity, so we repeat the override here. */
+@media (max-width: 480px) {
+    .smart-action-modal .form-input {
+        font-size: 16px;
+        padding: 10px 12px;
+    }
+    .smart-action-modal .smart-cron-preview {
+        font-size: 0.82rem;
+        overflow-wrap: anywhere;
+    }
+}
+
+/* Let long <select> option labels wrap in the open dropdown so the
+   "Mirror — 2+ drives, highest durability, lose 50% capacity" text doesn't
+   clip on narrow columns. The closed-state summary still truncates. */
+.smart-action-modal select.form-input option {
+    white-space: normal;
+}
+
+/* ── Form sections ───────────────────────────────────────────── */
+
+.smart-section {
+    border: 1px solid var(--border, #30363d);
+    border-radius: 6px;
+    margin-bottom: 14px;
+    background: var(--bg-secondary, #161b22);
+    overflow: hidden;
+}
+.smart-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary, #f0f6fc);
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-tertiary, #0d1117);
+    border-bottom: 1px solid var(--border, #30363d);
+}
+.smart-section-header:hover {
+    background: var(--bg-hover, #1c2128);
+}
+.smart-section-chevron {
+    transition: transform 0.15s ease;
+    color: var(--text-muted, #8b949e);
+}
+.smart-section-collapsed .smart-section-chevron {
+    transform: rotate(0deg);
+}
+.smart-section:not(.smart-section-collapsed) .smart-section-chevron {
+    transform: rotate(90deg);
+    color: var(--accent-primary, #6366f1);
+}
+.smart-section-body {
+    padding: 14px;
+}
+.smart-section-collapsed .smart-section-body {
+    display: none;
+}
+.smart-section-body.smart-section-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
+}
+.smart-section-body.smart-section-columns .smart-capacity-preview {
+    grid-column: 1 / -1;
+}
+
+/* ── Capacity preview ────────────────────────────────────────── */
+
+.smart-capacity-preview {
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid var(--accent-primary, #6366f1);
+    border-radius: 4px;
+    padding: 10px 12px;
+}
+.smart-capacity-body {
+    font-size: 0.82rem;
+    color: var(--text-primary, #f0f6fc);
+    margin-top: 4px;
+}
+.smart-capacity-note {
+    font-size: 0.72rem;
+    color: var(--text-muted, #8b949e);
+    margin-top: 4px;
+}
+
+/* ── Custom select input (`allow_custom` + __custom__ sentinel) ─ */
+
+.smart-custom-input-group {
+    margin-top: 6px;
+    margin-bottom: 0;
+}
+
+/* ── Disk picker cards (`multi-select` with `variant: "cards"`) ── */
+
+.smart-hidden-select {
+    display: none !important;
+}
+
+.smart-disk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.smart-disk-grid-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 14px;
+    color: var(--text-muted, #8b949e);
+    font-size: 0.82rem;
+    background: var(--bg-secondary, #161b22);
+    border: 1px dashed var(--border, #30363d);
+    border-radius: 4px;
+}
+
+.smart-disk-grid-count {
+    font-size: 0.72rem;
+    color: var(--text-muted, #8b949e);
+    margin-top: 6px;
+    text-align: right;
+}
+
+.smart-disk-card {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 6px;
+    align-items: start;
+    padding: 6px 8px;
+    border: 1px solid var(--border, #30363d);
+    border-radius: 5px;
+    background: var(--bg-secondary, #161b22);
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    user-select: none;
+}
+.smart-disk-card:hover {
+    border-color: var(--accent-primary, #6366f1);
+    background: var(--bg-hover, #1c2128);
+}
+.smart-disk-card-check {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border, #30363d);
+    color: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.smart-disk-card-selected {
+    border-color: var(--success, #10b981);
+    background: rgba(16, 185, 129, 0.08);
+}
+.smart-disk-card-selected .smart-disk-card-check {
+    background: var(--success, #10b981);
+    border-color: var(--success, #10b981);
+    color: #fff;
+}
+.smart-disk-card-name {
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--text-primary, #f0f6fc);
+    line-height: 1.15;
+}
+.smart-disk-card-detail {
+    font-size: 0.68rem;
+    color: var(--text-secondary, #c9d1d9);
+    margin-top: 1px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.smart-disk-card-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 0.66rem;
+    color: var(--text-muted, #8b949e);
+    line-height: 1.15;
+}
+.smart-disk-card-serial {
+    font-family: var(--font-mono, SFMono-Regular, Menlo, monospace);
+}
+.smart-disk-card-conflict {
+    font-size: 0.68rem;
+    color: var(--warning, #f59e0b);
+    margin-top: 4px;
+    min-height: 0;
+}
+.smart-disk-card-conflict-disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    border-style: dashed;
+}
+.smart-disk-card-conflict-disabled:hover {
+    border-color: var(--border, #30363d);
+    background: var(--bg-secondary, #161b22);
+}
+.smart-action-modal .modal-body {
+    overflow-y: auto;
+}
+
+.smart-action-modal .form-group {
+    margin-bottom: 14px;
+}
+
+.smart-action-modal .form-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-action-modal .form-req {
+    color: var(--danger, #ef4444);
+}
+
+.smart-action-modal .form-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-secondary, #161b22);
+    color: var(--text-primary, #f0f6fc);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+}
+.smart-action-modal .form-input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #58a6ff);
+}
+
+.smart-action-modal .form-multi-select {
+    height: auto;
+    min-height: 120px;
+}
+
+.smart-action-modal .form-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted, #8b949e);
+    margin-top: 4px;
+    line-height: 1.35;
+}
+
+.smart-action-modal .form-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-primary, #f0f6fc);
+}
+
+.smart-action-modal .form-group[data-tier="red"] {
+    padding: 8px 10px;
+    border-left: 3px solid var(--danger, #ef4444);
+    background: rgba(239, 68, 68, 0.06);
+    border-radius: 4px;
+}
+.smart-action-modal .form-group[data-tier="yellow"] {
+    border-left: 3px solid var(--warning, #f59e0b);
+    padding-left: 10px;
+}
+
+.smart-action-message {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: var(--bg-secondary, #161b22);
+    border-left: 3px solid var(--accent-primary, #58a6ff);
+    border-radius: 3px;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-secondary, #c9d1d9);
+}
+
+.smart-action-preview {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+}
+
+.smart-action-preview-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #8b949e);
+    margin-bottom: 6px;
+}
+
+.smart-action-preview-cmd {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.78rem;
+    color: var(--text-primary, #f0f6fc);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+#smart-action-error {
+    margin-top: 10px;
+    color: var(--danger, #ef4444);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+}
+
+/* ── Safety tier badge in modal header ───────────────────────── */
+
+.smart-tier-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+}
+.smart-tier-yellow {
+    background: rgba(245, 158, 11, 0.18);
+    color: var(--warning, #f59e0b);
+    border: 1px solid var(--warning, #f59e0b);
+}
+.smart-tier-red {
+    background: rgba(239, 68, 68, 0.18);
+    color: var(--danger, #ef4444);
+    border: 1px solid var(--danger, #ef4444);
+}
+
+/* ── Generic row badge (used by `format: badge` columns) ─────── */
+
+.smart-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.smart-badge-success { background: rgba(16, 185, 129, 0.18); color: var(--success, #10b981); }
+.smart-badge-warning { background: rgba(245, 158, 11, 0.18); color: var(--warning, #f59e0b); }
+.smart-badge-danger,
+.smart-badge-critical { background: rgba(239, 68, 68, 0.18); color: var(--danger, #ef4444); }
+.smart-badge-muted   { background: rgba(139, 148, 158, 0.18); color: var(--text-muted, #8b949e); }
+
+/* ── Expandable rows (`expand_key`) ──────────────────────────── */
+
+.smart-col-expand-head,
+.smart-col-expand {
+    width: 28px;
+    padding: 4px 2px 4px 8px;
+}
+
+.smart-expand-toggle {
+    background: transparent;
+    border: none;
+    padding: 2px;
+    color: var(--text-muted, #8b949e);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, color 0.12s;
+}
+.smart-expand-toggle:hover {
+    color: var(--text-primary, #f0f6fc);
+}
+.smart-expand-toggle.smart-expand-open {
+    transform: rotate(90deg);
+    color: var(--accent-primary, #6366f1);
+}
+
+.smart-expand-row > td {
+    padding: 0 8px 10px 36px;
+    background: var(--bg-tertiary, #0d1117);
+}
+
+/* ── Tree hierarchy (smart-table `tree: { key, separator }`) ─────
+   Indents the named column by 20px per ancestor, renders a chevron that
+   collapses the subtree, and a spacer for leaf rows so columns stay
+   vertically aligned. Depth is passed in via `--tree-depth` on the <td>. */
+.smart-tree-cell {
+    padding-left: calc(8px + var(--tree-depth, 0) * 20px);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.smart-tree-toggle {
+    background: transparent;
+    border: none;
+    padding: 2px;
+    color: var(--text-muted, #8b949e);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, color 0.12s;
+    transform: rotate(90deg);
+    flex: 0 0 auto;
+}
+.smart-tree-toggle:hover {
+    color: var(--text-primary, #f0f6fc);
+}
+.smart-tree-toggle.smart-tree-collapsed {
+    transform: rotate(0deg);
+}
+.smart-tree-spacer {
+    display: inline-block;
+    width: 16px;
+    flex: 0 0 16px;
+}
+.smart-tree-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* Subtle guideline connecting indented rows to their parent. */
+.smart-tree-cell[style*="--tree-depth:1"],
+.smart-tree-cell[style*="--tree-depth:2"],
+.smart-tree-cell[style*="--tree-depth:3"],
+.smart-tree-cell[style*="--tree-depth:4"] {
+    position: relative;
+}
+.smart-tree-cell[style*="--tree-depth:1"]::before,
+.smart-tree-cell[style*="--tree-depth:2"]::before,
+.smart-tree-cell[style*="--tree-depth:3"]::before,
+.smart-tree-cell[style*="--tree-depth:4"]::before {
+    content: "";
+    position: absolute;
+    left: calc(12px + (var(--tree-depth, 1) - 1) * 20px);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border, #30363d);
+    opacity: 0.5;
+}
+
+.smart-table-nested {
+    width: 100%;
+    margin: 0;
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    background: var(--bg-secondary, #161b22);
+}
+.smart-table-nested th,
+.smart-table-nested td {
+    font-size: 0.78rem;
+    padding: 4px 8px;
+}
+.smart-table-nested thead th {
+    background: var(--bg-tertiary, #0d1117);
+    color: var(--text-muted, #8b949e);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.smart-error-count {
+    display: inline-block;
+    min-width: 1.5em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.smart-error-count-ok {
+    background: var(--bg-tertiary, #0d1117);
+    color: var(--text-muted, #8b949e);
+}
+.smart-error-count-bad {
+    background: var(--danger, #ef4444);
+    color: #fff;
+}
+
+.smart-cron-input {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.02em;
+}
+.smart-cron-preview {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b949e);
+    font-style: italic;
+}
+.smart-cron-preview-error {
+    color: var(--danger, #ef4444);
+    font-style: normal;
+    font-weight: 500;
+}
+
+.smart-test-button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.smart-test-button-group .smart-test-button {
+    align-self: flex-start;
+}
+.smart-test-button-result {
+    font-size: 0.82rem;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+}
+.smart-test-button-result:not(:empty) { display: block; }
+.smart-test-button-result-pending {
+    color: var(--text-muted, #8b949e);
+    background: var(--bg-tertiary, #0d1117);
+    border-color: var(--border, #30363d);
+}
+.smart-test-button-result-ok {
+    color: #86efac;
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.smart-test-button-result-error {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.smart-remote-value-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.smart-remote-value-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.smart-remote-value-display {
+    flex: 1;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8rem;
+    resize: vertical;
+    min-height: 2.5em;
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+.smart-remote-value-display[readonly] {
+    background: var(--bg-tertiary, #0d1117);
+    color: var(--text-primary, #e6edf3);
+    cursor: text;
+}
+.smart-remote-value-copy {
+    align-self: flex-start;
+    white-space: nowrap;
+}
+.smart-remote-value-status {
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b949e);
+    min-height: 1em;
+}
+.smart-remote-value-status-pending { color: var(--text-muted, #8b949e); font-style: italic; }
+.smart-remote-value-status-error   { color: var(--danger, #ef4444); font-weight: 500; }
+
+.smart-progress-overlay {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 4px;
+    min-width: 380px;
+}
+.smart-progress-phase {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary, #e6edf3);
+}
+.smart-progress-bar-outer {
+    height: 10px;
+    background: var(--bg-tertiary, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 5px;
+    overflow: hidden;
+}
+.smart-progress-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #3b82f6), #60a5fa);
+    transition: width 200ms ease-out;
+}
+.smart-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #8b949e);
+    font-variant-numeric: tabular-nums;
+}
+.smart-progress-percent {
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+}
+.smart-progress-message {
+    font-size: 0.82rem;
+    color: var(--text-muted, #8b949e);
+    padding: 6px 8px;
+    background: var(--bg-tertiary, #0d1117);
+    border-radius: 4px;
+    border: 1px solid var(--border, #30363d);
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    min-height: 1em;
+}
+.smart-progress-message:empty { display: none; }
+.smart-progress-error {
+    font-size: 0.85rem;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    padding: 8px 10px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+}
+
+/* Discovery card — TrueNAS-style unused-disk callout */
+.discovery-card-container {
+    margin: 1rem 0;
+}
+.discovery-card {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1rem 1.25rem;
+    background: var(--bg-secondary, #161b22);
+    border: 1px solid var(--accent, #3b82f6);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+.discovery-card-icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--accent, #3b82f6);
+    font-size: 1.3rem;
+}
+.discovery-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.discovery-card-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+}
+.discovery-card-summary {
+    margin: 0 0 0.75rem 0;
+    color: var(--text-secondary, #b1bac4);
+    font-size: 0.875rem;
+}
+.discovery-card-group {
+    display: inline-block;
+    margin-right: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-tertiary, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #8b949e);
+}
+.discovery-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Bulk selection on smart-table */
+.smart-col-select-head, .smart-col-select {
+    width: 32px;
+    text-align: center;
+    padding: 0 4px;
+}
+.smart-col-select input[type="checkbox"],
+.smart-col-select-head input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+}
+.smart-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0.5rem 0;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid var(--accent-primary, #3b82f6);
+    border-radius: 6px;
+}
+.smart-bulk-count {
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+}
+.smart-bulk-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    flex: 1;
+}
+.smart-bulk-clear {
+    background: transparent;
+    border: 1px solid var(--border, #30363d);
+    color: var(--text-secondary, #b1bac4);
+    padding: 0.3rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.smart-bulk-clear:hover {
+    border-color: var(--text-secondary, #b1bac4);
+    color: var(--text-primary, #e6edf3);
+}
+.smart-bulk-progress {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary, #0d1117);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #b1bac4);
+}
+
+/* Busy-cell pulse for progress_indicator */
+.smart-cell-busy {
+    position: relative;
+    color: var(--accent-primary, #3b82f6);
+    font-weight: 600;
+}
+.smart-cell-busy::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: var(--accent-primary, #3b82f6);
+    animation: smart-busy-pulse 1.2s ease-in-out infinite;
+    vertical-align: middle;
+}
+@keyframes smart-busy-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.15); }
 }

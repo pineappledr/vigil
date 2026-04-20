@@ -27,7 +27,11 @@ var TelemetryBroker *addons.TelemetryBroker
 var WebSocketHub *addons.WebSocketHub
 
 // addonClient is a shared HTTP client for outbound requests to add-ons.
-var addonClient = &http.Client{Timeout: 30 * time.Second}
+// Long timeout because some add-on actions (ZFS `zpool create`, `zpool scrub`,
+// long running SMART long-selftests, etc.) legitimately take minutes — a short
+// timeout would cancel the context mid-operation and SIGKILL the agent's child
+// process. The per-request context still cuts off if the client disconnects.
+var addonClient = &http.Client{Timeout: 5 * time.Minute}
 
 // registryClient is a shared HTTP client for container registry lookups.
 var registryClient = &http.Client{Timeout: 10 * time.Second}
@@ -444,7 +448,8 @@ func ListAddonTokens(w http.ResponseWriter, r *http.Request) {
 		tokens = []addons.RegistrationToken{}
 	}
 
-	// Mask full token values — never expose secrets in list views
+	// Mask all tokens — never expose full token values via the list endpoint.
+	// Users can only see a token's full value at the moment it is rotated.
 	for i := range tokens {
 		if len(tokens[i].Token) > 16 {
 			tokens[i].Token = tokens[i].Token[:16] + "…"
@@ -472,6 +477,35 @@ func DeleteAddonToken(w http.ResponseWriter, r *http.Request) {
 		audit.LogEvent(db.DB, r, s.UserID, s.Username, "addon_token_delete", "addon_token", fmt.Sprintf("%d", id), "", "success")
 	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
+}
+
+// RotateAddonToken generates a new token for a connected add-on.
+// POST /api/addons/{id}/rotate-token
+func RotateAddonToken(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		JSONError(w, "Invalid add-on ID", http.StatusBadRequest)
+		return
+	}
+
+	addon, _ := addons.Get(db.DB, id)
+	if addon == nil {
+		JSONError(w, "Add-on not found", http.StatusNotFound)
+		return
+	}
+
+	tok, err := addons.RotateAddonToken(db.DB, id)
+	if err != nil {
+		log.Printf("❌ Rotate addon token: %v", err)
+		JSONError(w, "Failed to rotate token", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("🔑 Add-on token rotated: %s (id=%d, token=%.16s…)", addon.Name, id, tok.Token)
+	if s := auth.GetSessionFromContext(r); s != nil {
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "addon_token_rotate", "addon", fmt.Sprintf("%d", id), addon.Name, "success")
+	}
+	JSONResponse(w, map[string]string{"token": tok.Token})
 }
 
 // ─── SSE Telemetry Stream ────────────────────────────────────────────────
@@ -704,9 +738,13 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 		upstreamMethod = strings.ToUpper(m)
 	}
 
-	// Forward request body for methods that carry a payload.
+	// Forward request body for methods that carry a payload. DELETE is
+	// included because some add-on endpoints (e.g. zfs-manager's delete
+	// dataset / delete snapshot) require a JSON body with confirmation
+	// fields. RFC 9110 allows DELETE to carry a body with no defined
+	// semantics, and Go's http client forwards it unchanged.
 	var bodyReader io.Reader
-	if r.Body != nil && (upstreamMethod == http.MethodPost || upstreamMethod == http.MethodPut || upstreamMethod == http.MethodPatch) {
+	if r.Body != nil && (upstreamMethod == http.MethodPost || upstreamMethod == http.MethodPut || upstreamMethod == http.MethodPatch || upstreamMethod == http.MethodDelete) {
 		bodyReader = io.LimitReader(r.Body, 64*1024) // 64 KiB limit
 	}
 
@@ -717,6 +755,14 @@ func ProxyAddonRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if bodyReader != nil {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+	}
+
+	// Forward the registration token as a bearer credential so the add-on can
+	// authenticate this call. Without this the add-on would have to accept
+	// unauthenticated requests on its proxy path, allowing anyone with network
+	// access to the add-on to bypass vigil-core entirely.
+	if token, err := addons.GetRegistrationTokenByAddonID(db.DB, id); err == nil && token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	resp, err := addonClient.Do(req) // #nosec G107 G704 -- URL validated: scheme whitelisted, host from admin-registered addon, path restricted to /api/*
@@ -875,10 +921,24 @@ func queryRegistryTags(ctx context.Context, image string) ([]string, error) {
 
 	req.Header.Set("Accept", "application/json")
 
-	// For ghcr.io private packages, use a GitHub token if available.
+	// For ghcr.io, get a token (explicit or anonymous).
 	if strings.Contains(registry, "ghcr.io") {
-		if token := os.Getenv("GHCR_TOKEN"); token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
+		if envToken := os.Getenv("GHCR_TOKEN"); envToken != "" {
+			req.Header.Set("Authorization", "Bearer "+envToken)
+		} else {
+			// Obtain an anonymous pull token from ghcr.io
+			tokenURL := fmt.Sprintf("https://ghcr.io/token?service=ghcr.io&scope=repository:%s:pull", repo)
+			tokenReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+			tokenResp, err := registryClient.Do(tokenReq)
+			if err == nil {
+				defer tokenResp.Body.Close()
+				var tokenData struct {
+					Token string `json:"token"`
+				}
+				if json.NewDecoder(tokenResp.Body).Decode(&tokenData) == nil && tokenData.Token != "" {
+					req.Header.Set("Authorization", "Bearer "+tokenData.Token)
+				}
+			}
 		}
 	}
 
@@ -1006,6 +1066,7 @@ func RegisterAddonRoutes(mux *http.ServeMux, protect func(http.HandlerFunc) http
 	mux.HandleFunc("PUT /api/addons/{id}/enabled", protect(SetAddonEnabled))
 	mux.HandleFunc("GET /api/addons/{id}/telemetry", protect(AddonTelemetrySSE))
 	mux.HandleFunc("GET /api/addons/{id}/check-updates", protect(CheckAddonUpdates))
+	mux.HandleFunc("POST /api/addons/{id}/rotate-token", protect(RotateAddonToken))
 
 	// Admin UI registration flow
 	mux.HandleFunc("POST /api/addons/register", protect(CreateAddonFromUI))

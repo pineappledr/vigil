@@ -102,6 +102,40 @@ func GetZFSPoolDevices(db *sql.DB, poolID int64) ([]ZFSPoolDevice, error) {
 	return devices, rows.Err()
 }
 
+// GetAllZFSPoolDevices returns every pool-device across every host.
+// Used by the global "Pool Devices" table on the ZFS page.
+func GetAllZFSPoolDevices(db *sql.DB) ([]ZFSPoolDevice, error) {
+	rows, err := db.Query(`
+		SELECT id, pool_id, hostname, pool_name, device_name, device_path, device_guid,
+			   serial_number, vdev_type, vdev_parent, vdev_index, state,
+			   read_errors, write_errors, checksum_errors, size_bytes, allocated_bytes,
+			   is_spare, is_log, is_cache, is_replacing, last_seen, created_at
+		FROM zfs_pool_devices
+		ORDER BY hostname, pool_name, vdev_index`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devices []ZFSPoolDevice
+	for rows.Next() {
+		var d ZFSPoolDevice
+		err := rows.Scan(
+			&d.ID, &d.PoolID, &d.Hostname, &d.PoolName, &d.DeviceName, &d.DevicePath,
+			&d.DeviceGUID, &d.SerialNumber, &d.VdevType, &d.VdevParent, &d.VdevIndex,
+			&d.State, &d.ReadErrors, &d.WriteErrors, &d.ChecksumErrors,
+			&d.SizeBytes, &d.AllocatedBytes, &d.IsSpare, &d.IsLog, &d.IsCache,
+			&d.IsReplacing, &d.LastSeen, &d.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		devices = append(devices, d)
+	}
+
+	return devices, rows.Err()
+}
+
 // CountZFSDevices returns total device count for a pool
 func CountZFSDevices(db *sql.DB, poolID int64) (int, error) {
 	var count int

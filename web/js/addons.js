@@ -8,6 +8,31 @@ const Addons = {
     activeAddonId: null,
     _updateCache: {},  // keyed by addon ID → { update_available, latest_tag, checked_at }
 
+    // Official add-on presets
+    _presets: {
+        'burnin-hub': {
+            name: 'Burn-In Hub',
+            image: 'ghcr.io/pineappledr/vigil-addons-burnin-hub',
+            port: '9100',
+            description: 'Disk burn-in, SMART testing, and pre-clear formatting tool for new and repurposed drives.',
+            envExtra: '      BURNIN_HUB_DATA_DIR: "/data"',
+        },
+        'snapraid-hub': {
+            name: 'SnapRaid Hub',
+            image: 'ghcr.io/pineappledr/vigil-addons-snapraid-hub',
+            port: '9300',
+            description: 'SnapRAID array management and automation.',
+            envExtra: '      VIGIL_SNAPRAID_HUB_DATA_REGISTRY_PATH: "/data/agents.json"',
+        },
+        'zfs-manager': {
+            name: 'ZFS Manager',
+            image: 'ghcr.io/pineappledr/vigil-addons-zfs-manager',
+            port: '9500',
+            description: 'Visual ZFS pool, dataset, and snapshot management for homelab servers.',
+            envExtra: '      VIGIL_ZFS_MANAGER_DATA_REGISTRY_PATH: "/data/agents.json"',
+        },
+    },
+
     // ─── Data Fetching & Render ──────────────────────────────────────────
 
     async render() {
@@ -60,11 +85,15 @@ const Addons = {
         }
     },
 
-    async _fetch(url) {
+    async _fetch(url, opts = {}) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 8000);
+        // Automatically include CSRF header for mutating requests.
+        if (opts.method && opts.method !== 'GET') {
+            opts.headers = { 'X-Requested-With': 'XMLHttpRequest', ...opts.headers };
+        }
         try {
-            return await fetch(url, { signal: controller.signal });
+            return await fetch(url, { ...opts, signal: controller.signal });
         } catch (e) {
             if (e.name === 'AbortError') throw new Error(`Request timed out`);
             throw e;
@@ -84,7 +113,7 @@ const Addons = {
             <div class="addons-empty">
                 ${this._icons.addonLarge}
                 <p>No add-ons registered</p>
-                <span class="hint">Click "Add Add-on" to register your first add-on</span>
+                <span class="hint">Click "Add" to register your first add-on</span>
             </div>
         `;
     },
@@ -123,9 +152,10 @@ const Addons = {
                         <line x1="12" y1="5" x2="12" y2="19"/>
                         <line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
-                    Add Add-on
+                    Add
                 </button>
             </div>
+            <p class="addons-repo-hint">Browse and discover add-ons at <a href="https://github.com/pineappledr/vigil-addons" target="_blank" rel="noopener">github.com/pineappledr/vigil-addons</a></p>
             <div class="addons-summary">
                 ${this._summaryCards()}
             </div>
@@ -174,12 +204,12 @@ const Addons = {
                 <div class="addon-token-row" onclick="event.stopPropagation()">
                     <label>Token</label>
                     <div class="addon-token-field">
-                        <span class="addon-token-value" id="addon-token-${addon.id}" data-token="${Utils.escapeHtml(token.token)}" data-masked="true">${'*'.repeat(20)}</span>
-                        <button class="btn-token-action" onclick="Addons.toggleTokenVisibility(${addon.id})" title="Show/hide token">
-                            ${this._icons.eye}
-                        </button>
-                        <button class="btn-token-action" onclick="Addons.copyToken(${addon.id})" title="Copy token">
+                        <span class="addon-token-value" id="addon-token-${addon.id}" data-masked="true">${'*'.repeat(20)}</span>
+                        <button class="btn-token-action" onclick="Addons.copyToken(${addon.id})" title="Copy token" style="display:none">
                             ${this._icons.copy}
+                        </button>
+                        <button class="btn-token-action btn-token-rotate" onclick="Addons.rotateToken(${addon.id})" title="Rotate token">
+                            ${this._icons.rotate}
                         </button>
                     </div>
                 </div>
@@ -285,7 +315,7 @@ const Addons = {
         const modal = Modals.create(`
             <div class="modal modal-add-agent">
                 <div class="modal-header">
-                    <h3>Add Add-on</h3>
+                    <h3>New Add-on</h3>
                     <button class="modal-close" onclick="Modals.close(this)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -301,6 +331,15 @@ const Addons = {
                     <p class="agent-tab-hint" id="addon-tab-hint">
                         Deploy the add-on with Docker, then register it below.
                     </p>
+                    <div class="form-group">
+                        <label>Add-on</label>
+                        <select id="addon-preset" class="form-input" onchange="Addons._applyPreset()">
+                            <option value="">Custom add-on</option>
+                            ${Object.entries(this._presets).map(([k, p]) =>
+                                `<option value="${k}">${Utils.escapeHtml(p.name)}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
                     <div class="form-group">
                         <label>Name</label>
                         <input type="text" id="addon-name" class="form-input" placeholder="e.g., Burn-in Hub" maxlength="128">
@@ -358,7 +397,7 @@ const Addons = {
                             <span id="addon-copy-label">Copy docker compose</span>
                         </button>
                     </div>
-                    <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register Add-on</button>
+                    <button class="btn btn-primary" onclick="Addons.submitAddAddon()">Register</button>
                 </div>
             </div>
         `);
@@ -381,11 +420,15 @@ const Addons = {
             if (errorEl) errorEl.textContent = 'Name must be 128 characters or fewer';
             return;
         }
+        if (!url) {
+            if (errorEl) errorEl.textContent = 'Add-on URL is required';
+            return;
+        }
         if (!token) {
             if (errorEl) errorEl.textContent = 'Token is missing — close and reopen the modal';
             return;
         }
-        if (url && url.length > 512) {
+        if (url.length > 512) {
             if (errorEl) errorEl.textContent = 'URL must be 512 characters or fewer';
             return;
         }
@@ -434,6 +477,31 @@ const Addons = {
         }
     },
 
+    _applyPreset() {
+        const key = document.getElementById('addon-preset')?.value;
+        const preset = this._presets[key];
+        const nameEl = document.getElementById('addon-name');
+        const imageEl = document.getElementById('addon-image');
+        const urlEl = document.getElementById('addon-url');
+
+        if (preset) {
+            if (nameEl) nameEl.value = preset.name;
+            if (imageEl) imageEl.value = preset.image;
+            // Pre-fill URL with port from preset if empty or from another preset
+            if (urlEl) {
+                const current = urlEl.value.trim();
+                if (!current || Object.values(this._presets).some(p => current.endsWith(':' + p.port))) {
+                    urlEl.value = '';
+                    urlEl.placeholder = `e.g., http://192.168.1.50:${preset.port}`;
+                }
+            }
+        } else {
+            if (nameEl) nameEl.value = '';
+            if (imageEl) imageEl.value = '';
+            if (urlEl) { urlEl.value = ''; urlEl.placeholder = 'e.g., http://192.168.1.50:9100'; }
+        }
+    },
+
     _copyAddonInstall() {
         const overlay = document.querySelector('.modal-overlay');
         const st = overlay?._addonState;
@@ -471,6 +539,8 @@ const Addons = {
         const serverURL = document.getElementById('addon-server-url')?.value || '';
         const pubKey = document.getElementById('addon-pubkey')?.value || '';
         const token = document.getElementById('addon-token')?.value || '';
+        const presetKey = document.getElementById('addon-preset')?.value || '';
+        const preset = this._presets[presetKey];
 
         if (!image) {
             alert('Enter a Docker image to generate the docker-compose.');
@@ -481,11 +551,11 @@ const Addons = {
         const containerName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
         // Extract port from addon URL if provided (e.g., "http://192.168.1.50:9100" → "9100")
-        let port = '';
+        let port = preset ? preset.port : '';
         if (addonURL) {
             try {
                 const parsed = new URL(addonURL);
-                port = parsed.port || '';
+                if (parsed.port) port = parsed.port;
             } catch {}
         }
 
@@ -502,13 +572,18 @@ services:
 
         yaml += `\n    environment:
       VIGIL_URL: ${serverURL}
-      VIGIL_AGENT_TOKEN: ${token}
+      VIGIL_TOKEN: ${token}
       VIGIL_SERVER_PUBKEY: ${pubKey}
-      TZ: \${TZ:-UTC}
-      BURNIN_HUB_DATA_DIR: "/data"
-    volumes:
-      - ${containerName}-data:/data
+      TZ: \${TZ:-UTC}`;
 
+        if (preset?.envExtra) {
+            yaml += `\n${preset.envExtra}`;
+        }
+
+        yaml += `\n    volumes:
+      - ${containerName}-data:/data`;
+
+        yaml += `\n
 volumes:
   ${containerName}-data:`;
 
@@ -521,7 +596,7 @@ volumes:
         const token = document.getElementById('addon-token')?.value || '';
 
         return `VIGIL_URL="${serverURL}"
-VIGIL_AGENT_TOKEN="${token}"
+VIGIL_TOKEN="${token}"
 VIGIL_SERVER_PUBKEY="${pubKey}"`;
     },
 
@@ -750,6 +825,33 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         this._copyText(el.dataset.token, el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[1]);
     },
 
+    async rotateToken(addonId) {
+        if (!confirm('Rotate the registration token for this add-on?\n\nThe add-on will need to be restarted with the new token to reconnect.')) return;
+        try {
+            const resp = await this._fetch(`/api/addons/${addonId}/rotate-token`, { method: 'POST' });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to rotate token');
+            }
+            const data = await resp.json();
+            // Show the full new token temporarily until page reload
+            const el = document.getElementById(`addon-token-${addonId}`);
+            if (el) {
+                el.dataset.token = data.token;
+                el.dataset.masked = 'false';
+                el.textContent = data.token;
+                // Show the copy button while token is visible
+                const copyBtn = el.closest('.addon-token-field')?.querySelectorAll('.btn-token-action')[0];
+                if (copyBtn) copyBtn.style.display = '';
+            }
+            // Auto-copy to clipboard
+            this._copyText(data.token);
+            alert('Token rotated and copied to clipboard.\n\nUpdate the add-on with the new token and restart it.\nThe token will be hidden on next page load.');
+        } catch (err) {
+            alert(`Failed to rotate token: ${err.message}`);
+        }
+    },
+
     _copyText(text, btn) {
         const flash = () => {
             if (!btn) return;
@@ -781,16 +883,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
     },
 
     // ─── Token Visibility Toggle ─────────────────────────────────────────
-
-    toggleTokenVisibility(addonId) {
-        const el = document.getElementById(`addon-token-${addonId}`);
-        if (!el) return;
-        const isMasked = el.dataset.masked === 'true';
-        el.textContent = isMasked ? el.dataset.token : '*'.repeat(20);
-        el.dataset.masked = isMasked ? 'false' : 'true';
-        const eyeBtn = el.closest('.addon-token-field')?.querySelector('.btn-token-action');
-        if (eyeBtn) eyeBtn.innerHTML = isMasked ? this._icons.eyeOff : this._icons.eye;
-    },
+    // Removed: tokens are only visible immediately after rotation.
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -811,6 +904,7 @@ VIGIL_SERVER_PUBKEY="${pubKey}"`;
         eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
         eyeOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
         update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
-        updateArrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`
+        updateArrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+        rotate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`
     }
 };

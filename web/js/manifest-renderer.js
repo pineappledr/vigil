@@ -24,6 +24,7 @@ const ManifestRenderer = {
         this.addon = addon;
         this.manifest = manifest;
         this.activePage = manifest.pages[0]?.id || null;
+        this._selectedAgentId = '';
 
         const container = document.getElementById('addons-view');
         if (!container) return;
@@ -176,6 +177,11 @@ const ManifestRenderer = {
                     ? ConfigCardComponent.render(comp.id, config, this.addon.id)
                     : '<p class="component-unavailable">Config Card component not loaded</p>';
 
+            case 'discovery-card':
+                return typeof DiscoveryCardComponent !== 'undefined'
+                    ? DiscoveryCardComponent.render(comp.id, config, this.addon.id)
+                    : '<p class="component-unavailable">Discovery Card component not loaded</p>';
+
             default:
                 return `<p class="component-unavailable">Unknown component type: ${Utils.escapeHtml(comp.type)}</p>`;
         }
@@ -235,7 +241,7 @@ const ManifestRenderer = {
 
             for (const a of agents) {
                 const id = a.agent_id || a.id || a.ID;
-                const label = a.hostname || id;
+                const label = a.alias || a.hostname || id;
                 const status = a.status || '';
                 const opt = document.createElement('option');
                 opt.value = id;
@@ -302,6 +308,11 @@ const ManifestRenderer = {
                 case 'config-card':
                     if (typeof ConfigCardComponent !== 'undefined') {
                         ConfigCardComponent.refresh(comp.id);
+                    }
+                    break;
+                case 'discovery-card':
+                    if (typeof DiscoveryCardComponent !== 'undefined') {
+                        DiscoveryCardComponent.refresh(comp.id);
                     }
                     break;
             }

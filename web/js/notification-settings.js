@@ -98,14 +98,46 @@ const NotificationSettings = {
             ${this.services.map(s => `
                 <div class="notif-service-item ${s.id === this.activeServiceId ? 'active' : ''} ${s.enabled ? '' : 'disabled'}"
                      onclick="NotificationSettings.selectService(${s.id})">
-                    <div class="notif-service-name">${Utils.escapeHtml(s.name)}</div>
-                    <div class="notif-service-type">${this._providerLabel(s.service_type)}</div>
-                    <span class="notif-service-badge ${s.enabled ? 'enabled' : 'disabled'}">
-                        ${s.enabled ? 'Active' : 'Disabled'}
-                    </span>
+                    <div class="notif-service-item-main">
+                        <div class="notif-service-name">${Utils.escapeHtml(s.name)}</div>
+                        <div class="notif-service-type">${this._providerLabel(s.service_type)}</div>
+                        <span class="notif-service-badge ${s.enabled ? 'enabled' : 'disabled'}">
+                            ${s.enabled ? 'Active' : 'Disabled'}
+                        </span>
+                    </div>
+                    <button class="notif-service-test-btn"
+                            title="Send test notification"
+                            onclick="event.stopPropagation(); NotificationSettings.quickTest(${s.id}, this)">
+                        ${this._icons.zap}
+                    </button>
                 </div>
             `).join('')}
         </div>`;
+    },
+
+    async quickTest(serviceId, btn) {
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '…';
+        try {
+            const resp = await API.testFireNotification(serviceId, 'Vigil test notification');
+            const data = await resp.json().catch(() => ({}));
+            if (data.success) {
+                btn.classList.add('success');
+                Utils.toast('Test notification sent', 'success');
+            } else {
+                btn.classList.add('error');
+                Utils.toast(data.error || 'Test failed', 'error');
+            }
+        } catch {
+            btn.classList.add('error');
+            Utils.toast('Connection error', 'error');
+        }
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('success', 'error');
+        }, 2000);
     },
 
     _emptyState() {

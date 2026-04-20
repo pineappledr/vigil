@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -394,5 +398,70 @@ func DeleteToken(w http.ResponseWriter, r *http.Request) {
 		audit.LogEvent(db.DB, r, s.UserID, s.Username, "token_delete", "registration_token", idStr, "", "success")
 	}
 	JSONResponse(w, map[string]string{"status": "deleted"})
+}
+
+// ─── LED Identify proxy ─────────────────────────────────────────────────────
+
+// IdentifyDrive proxies a LED identify request to the agent's command server.
+// POST /api/v1/agents/{hostname}/identify
+func IdentifyDrive(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	if hostname == "" {
+		JSONError(w, "Missing hostname", http.StatusBadRequest)
+		return
+	}
+
+	listenAddr, _, err := agents.GetAgentByHostname(db.DB, hostname)
+	if err != nil {
+		JSONError(w, "Agent not found", http.StatusNotFound)
+		return
+	}
+	if listenAddr == "" {
+		JSONError(w, "Agent does not have a command server enabled", http.StatusNotImplemented)
+		return
+	}
+
+	host, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		JSONError(w, "Invalid agent address", http.StatusBadGateway)
+		return
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		JSONError(w, "Invalid agent host", http.StatusBadGateway)
+		return
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() {
+		JSONError(w, "Agent address is not routable", http.StatusBadGateway)
+		return
+	}
+	if p, perr := strconv.Atoi(port); perr != nil || p < 1 || p > 65535 {
+		JSONError(w, "Invalid agent port", http.StatusBadGateway)
+		return
+	}
+
+	// Read and forward the request body to the agent
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		JSONError(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	agentURL := (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port), Path: "/api/identify"}).String()
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(agentURL, "application/json", bytes.NewReader(body)) // #nosec G107 G_SSRP -- host validated above
+	if err != nil {
+		log.Printf("⚠️  LED identify proxy to %s failed: %v", listenAddr, err)
+		JSONError(w, "Failed to reach agent command server", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Forward the agent's response back to the caller
+	respBody, _ := io.ReadAll(resp.Body)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(respBody) //nolint:errcheck
 }
 

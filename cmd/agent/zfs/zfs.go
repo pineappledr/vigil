@@ -911,6 +911,12 @@ func CollectZFSData(hostname string) (*ZFSReport, error) {
 	}
 
 	report.Pools = pools
+
+	// Datasets are best-effort: a failure here shouldn't drop the pool data.
+	if datasets, err := ListDatasets(); err == nil {
+		report.Datasets = datasets
+	}
+
 	return report, nil
 }
 

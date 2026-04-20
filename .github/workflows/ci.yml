@@ -11,7 +11,13 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GO_VERSION: '1.26.1'
+  GO_VERSION: '1.26.2'
+  # Opt every JavaScript action in this workflow (including transitive ones
+  # like actions/cache pulled in by setup-go and docker/build-push-action)
+  # into Node.js 24. Node 20 is deprecated on GitHub Actions runners — forced
+  # default from 2026-06-02 and removed on 2026-09-16.
+  # Ref: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════

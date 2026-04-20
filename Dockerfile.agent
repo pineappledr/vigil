@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.26.1-alpine AS builder
+FROM golang:1.26.2-alpine AS builder
 WORKDIR /app
 
 # Version build arg (set by CI or defaults to dev)
@@ -18,14 +18,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o vigil-agent ./cmd/agent
 
 # Final Stage - Alpine with ZFS tools
-FROM alpine:3.19
+FROM alpine:3.23.4
 WORKDIR /app
 
 # Install smartmontools, nvme-cli, and ZFS userspace tools
 # Note: ZFS tools require kernel modules from host - use with:
 #   - privileged: true
 #   - /dev/zfs:/dev/zfs mount
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache \
     smartmontools \
     nvme-cli \
     ca-certificates \

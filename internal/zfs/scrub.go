@@ -105,6 +105,31 @@ func GetScrubHistoryByHostname(db *sql.DB, hostname string, limit int) ([]ZFSScr
 	return scanScrubHistory(rows)
 }
 
+// GetAllScrubHistory retrieves the most recent scrub records across every host.
+func GetAllScrubHistory(db *sql.DB, limit int) ([]ZFSScrubHistory, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := db.Query(`
+		SELECT id, pool_id, hostname, pool_name, scan_type, state,
+			start_time, end_time, duration_secs,
+			data_examined, data_total, errors_found,
+			bytes_repaired, blocks_repaired,
+			progress_pct, rate_bytes_sec, time_remaining,
+			created_at
+		FROM zfs_scrub_history
+		ORDER BY start_time DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query all scrub history: %w", err)
+	}
+	defer rows.Close()
+
+	return scanScrubHistory(rows)
+}
+
 // ScrubRecordExists checks if a scrub record already exists
 func ScrubRecordExists(db *sql.DB, poolID int64, startTime time.Time) (bool, error) {
 	if startTime.IsZero() {

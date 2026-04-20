@@ -17,6 +17,7 @@ import (
 	"time"
 
 	agentcrypto "vigil/cmd/agent/crypto"
+	"vigil/cmd/agent/led"
 	"vigil/cmd/agent/smart"
 	"vigil/cmd/agent/zfs"
 )
@@ -25,11 +26,18 @@ var version = "dev"
 
 // DriveReport contains SMART data for drives
 type DriveReport struct {
-	Hostname  string                   `json:"hostname"`
-	Timestamp time.Time                `json:"timestamp"`
-	Version   string                   `json:"agent_version"`
-	Drives    []map[string]interface{} `json:"drives"`
-	ZFS       *zfs.ZFSReport           `json:"zfs,omitempty"`
+	Hostname     string                   `json:"hostname"`
+	Timestamp    time.Time                `json:"timestamp"`
+	Version      string                   `json:"agent_version"`
+	Drives       []map[string]interface{} `json:"drives"`
+	ZFS          *zfs.ZFSReport           `json:"zfs,omitempty"`
+	Capabilities *AgentCapabilities       `json:"capabilities,omitempty"`
+}
+
+// AgentCapabilities reports optional features this agent supports.
+type AgentCapabilities struct {
+	LEDIdentify bool   `json:"led_identify"`
+	ListenAddr  string `json:"listen_addr,omitempty"`
 }
 
 func main() {
@@ -47,6 +55,13 @@ func main() {
 		log.Println("✓ ZFS detected")
 	} else {
 		log.Println("ℹ️  ZFS not available (optional)")
+	}
+
+	ledCtrl := led.Detect()
+	if ledCtrl.Available() {
+		log.Println("✓ ledctl detected (LED identification available)")
+	} else {
+		log.Println("ℹ️  ledctl not found (LED identification disabled)")
 	}
 
 	hostname := getHostname(cfg.hostnameOverride)
@@ -105,19 +120,31 @@ func main() {
 		log.Println("✓ Session refreshed")
 	}
 
+	// Build capabilities for this agent.
+	caps := &AgentCapabilities{
+		LEDIdentify: ledCtrl.Available(),
+		ListenAddr:  cfg.listenAddr,
+	}
+
+	// Start optional command listener if --listen is set.
+	if cfg.listenAddr != "" {
+		go startCommandServer(cfg.listenAddr, ledCtrl)
+		log.Printf("✓ Command listener on %s", cfg.listenAddr)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	setupSignalHandler(cancel)
 
-	authSt = sendReport(ctx, cfg.serverURL, hostname, zfsAvailable, fingerprint, keys, authSt, cfg.dataDir)
+	authSt = sendReport(ctx, cfg.serverURL, hostname, zfsAvailable, caps, fingerprint, keys, authSt, cfg.dataDir)
 
 	if cfg.interval <= 0 {
 		log.Println("✅ Single run complete")
 		return
 	}
 
-	runInterval(ctx, cfg.serverURL, hostname, cfg.interval, zfsAvailable, fingerprint, keys, authSt, cfg.dataDir)
+	runInterval(ctx, cfg.serverURL, hostname, cfg.interval, zfsAvailable, caps, fingerprint, keys, authSt, cfg.dataDir)
 }
 
 type agentConfig struct {
@@ -127,6 +154,7 @@ type agentConfig struct {
 	dataDir          string
 	register         bool
 	registerToken    string
+	listenAddr       string
 }
 
 func parseFlags() agentConfig {
@@ -136,6 +164,7 @@ func parseFlags() agentConfig {
 	dataDir := flag.String("data-dir", defaultDataDir(), "Directory for agent keys and state")
 	register := flag.Bool("register", false, "Register this agent with the server (requires --token)")
 	token := flag.String("token", "", "One-time registration token (used with --register)")
+	listenAddr := flag.String("listen", "", "Optional HTTP listen address for commands (e.g. :9090)")
 	showVersion := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
@@ -152,6 +181,7 @@ func parseFlags() agentConfig {
 		dataDir:          *dataDir,
 		register:         *register,
 		registerToken:    envOrStr("TOKEN", *token),
+		listenAddr:       envOrStr("AGENT_LISTEN", *listenAddr),
 	}
 
 	// If TOKEN env is set but --register wasn't passed, enable auto-registration
@@ -213,6 +243,7 @@ func runInterval(
 	serverURL, hostname string,
 	interval int,
 	zfsAvailable bool,
+	caps *AgentCapabilities,
 	fingerprint string,
 	keys *agentcrypto.AgentKeys,
 	state *authState,
@@ -228,7 +259,7 @@ func runInterval(
 			log.Println("👋 Agent stopped")
 			return
 		case <-ticker.C:
-			state = sendReport(ctx, serverURL, hostname, zfsAvailable, fingerprint, keys, state, dataDir)
+			state = sendReport(ctx, serverURL, hostname, zfsAvailable, caps, fingerprint, keys, state, dataDir)
 		}
 	}
 }
@@ -238,6 +269,7 @@ func sendReport(
 	ctx context.Context,
 	serverURL, hostname string,
 	zfsAvailable bool,
+	caps *AgentCapabilities,
 	fingerprint string,
 	keys *agentcrypto.AgentKeys,
 	state *authState,
@@ -251,10 +283,11 @@ func sendReport(
 	}
 
 	report := DriveReport{
-		Hostname:  hostname,
-		Timestamp: time.Now().UTC(),
-		Version:   version,
-		Drives:    collectDriveData(ctx),
+		Hostname:     hostname,
+		Timestamp:    time.Now().UTC(),
+		Version:      version,
+		Drives:       collectDriveData(ctx),
+		Capabilities: caps,
 	}
 
 	if zfsAvailable {

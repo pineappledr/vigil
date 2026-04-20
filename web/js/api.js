@@ -110,6 +110,33 @@ const API = {
     },
 
     /**
+     * Get all datasets across every host (or filter to one host).
+     * @param {string} [hostname] - Optional host filter
+     * @returns {Promise<Response>}
+     */
+    async getZFSDatasets(hostname) {
+        const query = hostname ? `?hostname=${encodeURIComponent(hostname)}` : '';
+        return this.get(`/api/zfs/datasets${query}`);
+    },
+
+    /**
+     * Get every pool-device across every host.
+     * @returns {Promise<Response>}
+     */
+    async getZFSAllDevices() {
+        return this.get('/api/zfs/devices');
+    },
+
+    /**
+     * Get recent scrub history across every host.
+     * @param {number} [limit=100]
+     * @returns {Promise<Response>}
+     */
+    async getZFSAllScrubs(limit = 100) {
+        return this.get(`/api/zfs/scrubs?limit=${limit}`);
+    },
+
+    /**
      * Get aggregate ZFS statistics
      * @param {string} [hostname] - Filter by specific host
      * @returns {Promise<Response>}

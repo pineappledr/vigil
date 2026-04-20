@@ -57,7 +57,7 @@ func ProcessZFSReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, zf
 
 	// Publish dataset quota events
 	if bus != nil {
-		publishDatasetQuotaEvents(bus, db, hostname, report.Datasets, poolIDs)
+		publishDatasetQuotaEvents(bus, db, hostname, report.Datasets)
 	}
 
 	return nil
@@ -305,7 +305,7 @@ func publishScanTransitionEvents(bus *events.Bus, hostname string, pool ZFSAgent
 
 // publishDatasetQuotaEvents fires warnings when a dataset with a quota
 // approaches its limit.
-func publishDatasetQuotaEvents(bus *events.Bus, db *sql.DB, hostname string, datasets []ZFSAgentDataset, poolIDs map[string]int64) {
+func publishDatasetQuotaEvents(bus *events.Bus, db *sql.DB, hostname string, datasets []ZFSAgentDataset) {
 	quotaWarningPct := settings.GetInt(db, "zfs", "dataset_quota_warning_pct", 85)
 
 	for _, ds := range datasets {

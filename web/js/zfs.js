@@ -45,30 +45,111 @@ const ZFS = {
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
             <polyline points="15 3 21 3 21 9"/>
             <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>`,
+        chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
         </svg>`
     },
 
-    render() {
+    // Cache of data fetched from the global endpoints. Reset on each render()
+    // so switching views always gets fresh data.
+    _datasets: [],
+    _devices: [],
+    _scrubs: [],
+    _scrubLimit: 10,
+
+    // Collapsed state survives re-renders (auto-refresh) so the user's
+    // expand/collapse choice isn't reset every polling cycle.
+    // Default: Datasets collapsed, everything else open.
+    _collapsedSections: {
+        'zfs-section-datasets': true,
+    },
+
+    // Per-dataset collapse state. Keys are `${hostname}|${dataset_name}` so
+    // a dataset of the same name on two hosts is tracked independently.
+    _collapsedDatasets: new Set(),
+
+    _isCollapsed(id) {
+        return this._collapsedSections[id] === true;
+    },
+
+    _datasetKey(hostname, name) {
+        return `${hostname || ''}|${name || ''}`;
+    },
+
+    async render() {
         const container = document.getElementById('zfs-view');
         if (!container) return;
 
         const stats = State.getZFSStats();
-        const poolsByHost = State.getPoolsByHost();
-        const hostnames = Object.keys(poolsByHost).sort();
+        const pools = (State.zfsPools || []).filter(Boolean);
 
-        container.innerHTML = `
-            ${this.renderSummaryCards(stats)}
-            <div class="section-header">
-                <h2>ZFS Pools</h2>
-                ${stats.totalPools > 0 ? `<span class="section-count">${stats.totalPools} pool${stats.totalPools !== 1 ? 's' : ''}</span>` : ''}
-            </div>
-            <div id="zfs-pools-container" class="zfs-pools-container">
-                ${hostnames.length > 0 
-                    ? hostnames.map(host => this.renderHostSection(host, poolsByHost[host])).join('')
-                    : this.renderEmptyState()
-                }
-            </div>
-        `;
+        // Preserve scroll position across refreshes — without this the
+        // browser loses its anchor when we swap innerHTML and jumps to top.
+        const scrollY = window.scrollY;
+
+        // First render paints the shell; subsequent renders only update the
+        // parts that changed so scroll position and collapse state survive.
+        let tablesHost = document.getElementById('zfs-tables-container');
+        if (!tablesHost) {
+            container.innerHTML = `
+                ${this.renderSummaryCards(stats)}
+                <div id="zfs-tables-container" class="zfs-tables-container">
+                    ${pools.length === 0 ? this.renderEmptyState() : this.renderTablesLoading()}
+                </div>
+            `;
+            tablesHost = document.getElementById('zfs-tables-container');
+        } else {
+            // Refresh the summary cards in place without touching the tables.
+            const summary = container.querySelector('.zfs-summary');
+            if (summary) summary.outerHTML = this.renderSummaryCards(stats);
+        }
+
+        if (pools.length === 0) {
+            if (tablesHost) tablesHost.innerHTML = this.renderEmptyState();
+            return;
+        }
+
+        // Fan out the three global fetches in parallel. Failures are non-fatal:
+        // a missing dataset/device/scrub table simply renders as an empty row.
+        const [dsResp, devResp, scrubResp] = await Promise.allSettled([
+            API.getZFSDatasets(),
+            API.getZFSAllDevices(),
+            API.getZFSAllScrubs(this._scrubLimit),
+        ]);
+
+        this._datasets = await this._readJSON(dsResp);
+        this._devices  = await this._readJSON(devResp);
+        this._scrubs   = await this._readJSON(scrubResp);
+
+        tablesHost = document.getElementById('zfs-tables-container');
+        if (!tablesHost) return;
+        tablesHost.innerHTML = [
+            this.renderPoolsTable(pools),
+            this.renderDatasetsTable(this._datasets),
+            this.renderDevicesTable(this._devices),
+            this.renderScrubsTable(this._scrubs),
+        ].join('');
+
+        // Restore scroll — even the in-place summary replacement can shift
+        // layout by a pixel or two depending on stat counts.
+        if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+    },
+
+    async _readJSON(settled) {
+        if (settled.status !== 'fulfilled') return [];
+        const resp = settled.value;
+        if (!resp || !resp.ok) return [];
+        try {
+            const data = await resp.json();
+            return Array.isArray(data) ? data : [];
+        } catch {
+            return [];
+        }
+    },
+
+    renderTablesLoading() {
+        return `<div class="loading-spinner"><div class="spinner"></div>Loading ZFS tables…</div>`;
     },
 
     renderSummaryCards(stats) {
@@ -102,98 +183,399 @@ const ZFS = {
         `;
     },
 
-    renderHostSection(hostname, pools) {
+    // ── Grouped tables ────────────────────────────────────────────────────
+    //
+    // All four tables share the `.drive-table-*` CSS from the Servers page so
+    // the look matches exactly. Each table renders nothing when its data set
+    // is empty — keeps the page tidy for small deployments.
+
+    _tableSection(title, icon, count, headerCells, bodyRows, tableClass = '', opts = {}) {
+        const {
+            sectionId = '',
+            collapsible = false,
+            collapsed = false,
+            extraHeader = '',
+        } = opts;
+
+        const idAttr = sectionId ? ` id="${sectionId}"` : '';
+        const collapsedCls = collapsible && collapsed ? ' is-collapsed' : '';
+        const headerCls = collapsible ? ' drive-table-header-collapsible' : '';
+        const headerClick = collapsible && sectionId
+            ? ` onclick="ZFS.toggleSection('${sectionId}')"`
+            : '';
+        const toggleBtn = collapsible ? `
+            <button class="zfs-section-toggle" tabindex="-1"
+                    aria-label="${collapsed ? 'Expand' : 'Collapse'}">
+                ${this.icons.chevron}
+            </button>` : '';
+
         return `
-            <div class="zfs-host-section">
-                <div class="zfs-host-header">
-                    <div class="zfs-host-title">
-                        ${this.icons.server}
-                        <span>${Utils.escapeHtml(hostname)}</span>
-                        <span class="zfs-host-count">${pools.length} pool${pools.length !== 1 ? 's' : ''}</span>
-                    </div>
+            <div class="drive-table-section${collapsedCls}"${idAttr}>
+                <div class="drive-table-header${headerCls}"${headerClick}>
+                    ${icon}
+                    <span>${title}</span>
+                    <span class="drive-table-count">${count}</span>
+                    ${extraHeader}
+                    ${toggleBtn}
                 </div>
-                <div class="zfs-pool-grid">
-                    ${pools.map(pool => this.renderPoolCard(pool, hostname)).join('')}
+                <div class="drive-table-wrapper">
+                    <table class="drive-table ${tableClass}">
+                        <thead><tr>${headerCells}</tr></thead>
+                        <tbody>${bodyRows}</tbody>
+                    </table>
                 </div>
             </div>
         `;
     },
 
-    renderPoolCard(pool, hostname) {
-        const poolName = pool.name || pool.pool_name || 'Unknown Pool';
+    toggleSection(id) {
+        const section = document.getElementById(id);
+        if (!section) return;
+        const collapsed = section.classList.toggle('is-collapsed');
+        this._collapsedSections[id] = collapsed;
+        const btn = section.querySelector('.zfs-section-toggle');
+        if (btn) btn.setAttribute('aria-label', collapsed ? 'Expand' : 'Collapse');
+    },
+
+    async changeScrubLimit(raw) {
+        const limit = Math.max(1, parseInt(raw, 10) || 10);
+        this._scrubLimit = limit;
+
+        const section = document.getElementById('zfs-section-scrubs');
+        if (section) section.classList.add('is-loading');
+
+        const resp = await API.getZFSAllScrubs(limit);
+        const data = resp && resp.ok ? await resp.json().catch(() => []) : [];
+        this._scrubs = Array.isArray(data) ? data : [];
+
+        if (section) {
+            section.outerHTML = this.renderScrubsTable(this._scrubs);
+        }
+    },
+
+    renderPoolsTable(pools) {
+        if (pools.length === 0) return '';
+
+        const headers = ['Status', 'Name', 'Host', 'Capacity', 'Used', 'Scrub', 'Disks', 'Errors', 'Frag'];
+        const rows = pools.map(p => this._poolRow(p)).join('');
+        return this._tableSection('Pools', this.icons.pool, pools.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-pools-table');
+    },
+
+    _poolRow(pool) {
+        const poolName = pool.name || pool.pool_name || 'Unknown';
+        const hostname = pool.hostname || '';
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const stateClass = this.getStateClass(state);
         const capacity = this.parseCapacity(pool);
         const scrub = this.parseScrub(pool);
 
-        // Use device_count from API, or calculate from unique disks
         let deviceCount = pool.device_count;
-        if (deviceCount === undefined || deviceCount === 0) {
-            const devices = pool.devices || [];
-            const { uniqueDisks } = this.deduplicateDevices(devices);
+        if (!deviceCount) {
+            const { uniqueDisks } = this.deduplicateDevices(pool.devices || []);
             deviceCount = uniqueDisks.length;
         }
 
-        let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
+        const errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
         const frag = pool.fragmentation || 0;
-        const compRatio = pool.compress_ratio || 1;
-        const dedupRatio = pool.dedup_ratio || 1;
+        const pct = capacity.percent;
 
         return `
-            <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
-                <div class="zfs-pool-header">
-                    <div class="zfs-pool-status">
-                        <span class="zfs-status-dot ${stateClass}"></span>
-                        <span class="zfs-pool-name">${Utils.escapeHtml(poolName)}</span>
+            <tr class="drive-table-row ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
+                <td><span class="drive-status-dot ${stateClass}"></span></td>
+                <td class="drive-table-name">${Utils.escapeHtml(poolName)}</td>
+                <td class="drive-table-host">${Utils.escapeHtml(hostname)}</td>
+                <td>
+                    <div class="zfs-inline-bar">
+                        <div class="zfs-inline-bar-fill ${this.getCapacityClass(pct)}" style="width:${Math.min(pct, 100)}%"></div>
+                        <span class="zfs-inline-bar-label">${pct}%</span>
                     </div>
-                    <span class="zfs-state-badge ${stateClass}">${state}</span>
-                </div>
-
-                <div class="zfs-pool-capacity">
-                    <div class="zfs-capacity-info">
-                        <span class="zfs-capacity-used">${capacity.used}</span>
-                        <span class="zfs-capacity-sep">of</span>
-                        <span class="zfs-capacity-total">${capacity.total}</span>
-                        <span class="zfs-capacity-percent">(${capacity.percent}%)</span>
-                    </div>
-                    <div class="zfs-capacity-bar">
-                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
-                             style="width: ${Math.min(capacity.percent, 100)}%"></div>
-                    </div>
-                </div>
-
-                ${scrub.active ? this.renderScanProgressBar(pool) : `
-                <div class="zfs-pool-scrub scrub-${scrub.staleness}">
-                    ${this.icons.scrub}
-                    <span class="zfs-scrub-info">${scrub.text}</span>
-                </div>`}
-
-                <div class="zfs-card-footer">
-                    <div class="zfs-card-stat" title="${deviceCount} disk${deviceCount !== 1 ? 's' : ''} in pool">
-                        ${this.icons.drive}
-                        <span>${deviceCount}</span>
-                    </div>
-                    <div class="zfs-card-stat ${errors > 0 ? 'has-errors' : ''}" title="Pool errors (read + write + checksum): ${errors}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-                        <span>${errors}</span>
-                    </div>
-                    <div class="zfs-card-stat" title="Fragmentation: ${frag}% — higher values may reduce write performance">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                        <span>${frag}%</span>
-                    </div>
-                    ${compRatio > 1.00 ? `
-                    <div class="zfs-card-stat" title="Compression ratio: ${compRatio.toFixed(2)}x — data is stored ${compRatio.toFixed(1)}x more efficiently">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M8 8l4-5 4 5M8 16l4 5 4-5"/></svg>
-                        <span>${compRatio.toFixed(1)}x</span>
-                    </div>` : ''}
-                    ${dedupRatio > 1.00 ? `
-                    <div class="zfs-card-stat" title="Dedup ratio: ${dedupRatio.toFixed(2)}x — deduplication saves ${((1 - 1/dedupRatio) * 100).toFixed(0)}% space">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
-                        <span>${dedupRatio.toFixed(1)}x</span>
-                    </div>` : ''}
-                </div>
-            </div>
+                </td>
+                <td>${capacity.used} / ${capacity.total}</td>
+                <td class="zfs-scrub-cell scrub-${scrub.staleness}">${Utils.escapeHtml(scrub.text)}</td>
+                <td>${deviceCount}</td>
+                <td class="${errors > 0 ? 'zfs-cell-error' : ''}">${errors}</td>
+                <td>${frag}%</td>
+            </tr>
         `;
+    },
+
+    renderDatasetsTable(datasets) {
+        const headers = ['Name', 'Host', 'Pool', 'Used', 'Available', 'Referenced', 'Compression', 'Mountpoint'];
+
+        if (datasets.length === 0) {
+            const emptyRow = `
+                <tr class="drive-table-row">
+                    <td colspan="${headers.length}" class="zfs-table-empty">
+                        No datasets reported yet — agents will populate this list on their next check-in.
+                    </td>
+                </tr>`;
+            return this._tableSection('Datasets', this.icons.drive, 0,
+                headers.map(h => `<th>${h}</th>`).join(''),
+                emptyRow, 'zfs-datasets-table',
+                { sectionId: 'zfs-section-datasets', collapsible: true, collapsed: this._isCollapsed('zfs-section-datasets') });
+        }
+
+        // Sort so that within a pool the root dataset comes first and children
+        // follow depth-first alphabetically. Depth is the number of "/" in the
+        // dataset name — the pool's root dataset ("Tank") is depth 0, "Tank/x"
+        // is depth 1, "Tank/x/y" is depth 2.
+        const sorted = [...datasets].sort((a, b) => {
+            const ah = (a.hostname || '').localeCompare(b.hostname || '');
+            if (ah !== 0) return ah;
+            const ap = (a.pool_name || '').localeCompare(b.pool_name || '');
+            if (ap !== 0) return ap;
+            return (a.dataset_name || '').localeCompare(b.dataset_name || '');
+        });
+
+        // Precompute "has children" per dataset. A row has children when any
+        // other dataset on the same host+pool starts with `${name}/`. Using a
+        // set of qualified names keeps the check O(1) per row.
+        const pathSet = new Set(sorted.map(d => `${d.hostname}|${d.pool_name}|${d.dataset_name || ''}`));
+        const hasChildren = (d) => {
+            const prefix = `${d.hostname}|${d.pool_name}|${d.dataset_name || ''}/`;
+            for (const p of pathSet) if (p.startsWith(prefix)) return true;
+            return false;
+        };
+
+        // A row is hidden when any collapsed ancestor's dataset_name is a
+        // prefix of this row's dataset_name (on the same host).
+        const isHidden = (d) => {
+            const name = d.dataset_name || '';
+            for (const k of this._collapsedDatasets) {
+                const sep = k.indexOf('|');
+                if (sep < 0) continue;
+                const host = k.slice(0, sep);
+                const ancestor = k.slice(sep + 1);
+                if (host !== d.hostname) continue;
+                if (name !== ancestor && name.startsWith(ancestor + '/')) return true;
+            }
+            return false;
+        };
+
+        let lastKey = '';
+        const rows = sorted.map(d => {
+            const key = `${d.hostname}|${d.pool_name}`;
+            const depth = Math.max(0, (d.dataset_name || '').split('/').length - 1);
+            const isPoolBoundary = key !== lastKey;
+            lastKey = key;
+
+            const dsKey = this._datasetKey(d.hostname, d.dataset_name);
+            const collapsed = this._collapsedDatasets.has(dsKey);
+            const hidden = isHidden(d);
+            const children = hasChildren(d);
+
+            const toggleBtn = children
+                ? `<button class="zfs-node-toggle"
+                        onclick="event.stopPropagation(); ZFS.toggleDataset('${Utils.escapeHtml(dsKey)}')"
+                        aria-label="${collapsed ? 'Expand' : 'Collapse'}">
+                        ${this.icons.chevron}
+                    </button>`
+                : `<span class="zfs-node-toggle-placeholder"></span>`;
+
+            const rowCls = [
+                'drive-table-row',
+                collapsed ? 'is-node-collapsed' : '',
+                hidden ? 'is-hidden-by-ancestor' : '',
+            ].filter(Boolean).join(' ');
+
+            const groupHeader = isPoolBoundary ? `
+                <tr class="zfs-dataset-pool-row">
+                    <td colspan="${headers.length}">
+                        ${this.icons.pool}
+                        <span class="zfs-dataset-pool-label">${Utils.escapeHtml(d.pool_name || '')}</span>
+                        <span class="zfs-dataset-pool-host">${Utils.escapeHtml(d.hostname || '')}</span>
+                    </td>
+                </tr>` : '';
+
+            return groupHeader + `
+                <tr class="${rowCls}" data-ds-key="${Utils.escapeHtml(dsKey)}">
+                    <td class="drive-table-name zfs-tree-cell" data-depth="${depth}">
+                        <span class="zfs-tree-indent" style="--depth:${depth}"></span>${toggleBtn}${Utils.escapeHtml(d.dataset_name || '')}
+                    </td>
+                    <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
+                    <td>${Utils.escapeHtml(d.pool_name || '')}</td>
+                    <td>${this.formatStorageSize(d.used_bytes)}</td>
+                    <td>${this.formatStorageSize(d.available_bytes)}</td>
+                    <td>${this.formatStorageSize(d.referenced_bytes)}</td>
+                    <td>${(d.compress_ratio || 1).toFixed(2)}x</td>
+                    <td class="zfs-mountpoint">${Utils.escapeHtml(d.mountpoint || '--')}</td>
+                </tr>
+            `;
+        }).join('');
+
+        return this._tableSection('Datasets', this.icons.drive, datasets.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-datasets-table',
+            { sectionId: 'zfs-section-datasets', collapsible: true, collapsed: this._isCollapsed('zfs-section-datasets') });
+    },
+
+    toggleDataset(key) {
+        if (!key) return;
+        if (this._collapsedDatasets.has(key)) {
+            this._collapsedDatasets.delete(key);
+        } else {
+            this._collapsedDatasets.add(key);
+        }
+        // Re-render just the Datasets section so the other tables and scroll
+        // position stay put. renderDatasetsTable reads _collapsedDatasets so
+        // the new state is reflected in the fresh HTML.
+        const section = document.getElementById('zfs-section-datasets');
+        if (section && this._datasets) {
+            section.outerHTML = this.renderDatasetsTable(this._datasets);
+        }
+    },
+
+    // Build a parent→children map keyed by parent device_name so we can emit
+    // mirror/raidz vdevs with their disks nested directly underneath.
+    _buildDeviceTree(devices) {
+        const childrenByParent = new Map();
+        for (const d of devices) {
+            const p = d.vdev_parent || '';
+            if (!p) continue;
+            if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+            childrenByParent.get(p).push(d);
+        }
+        const ordered = [];
+        for (const d of devices) {
+            if (d.vdev_parent) continue;   // children emitted via their parent
+            ordered.push({ dev: d, depth: 0 });
+            const kids = childrenByParent.get(d.device_name) || [];
+            kids.sort((a, b) => (a.vdev_index || 0) - (b.vdev_index || 0));
+            for (const k of kids) ordered.push({ dev: k, depth: 1 });
+        }
+        return ordered;
+    },
+
+    renderDevicesTable(devices) {
+        if (devices.length === 0) return '';
+
+        // Group by host+pool so each pool's vdev layout sits together; then
+        // within each group, nest disks under their mirror/raidz vdev parent.
+        const groups = new Map();
+        for (const d of devices) {
+            const key = `${d.hostname}|${d.pool_name}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(d);
+        }
+
+        const headers = ['State', 'Device', 'Host', 'Pool', 'Role', 'Serial', 'Size', 'Read', 'Write', 'Cksum'];
+        const orderedKeys = [...groups.keys()].sort();
+        let lastKey = '';
+        const rows = orderedKeys.flatMap(key => {
+            const group = groups.get(key);
+            const tree = this._buildDeviceTree(group);
+            return tree.map(({ dev, depth }) => {
+                const isBoundary = key !== lastKey;
+                lastKey = key;
+                return (isBoundary ? `
+                    <tr class="zfs-dataset-pool-row">
+                        <td colspan="${headers.length}">
+                            ${this.icons.pool}
+                            <span class="zfs-dataset-pool-label">${Utils.escapeHtml(dev.pool_name || '')}</span>
+                            <span class="zfs-dataset-pool-host">${Utils.escapeHtml(dev.hostname || '')}</span>
+                        </td>
+                    </tr>` : '') + this._deviceRow(dev, depth);
+            });
+        }).join('');
+
+        return this._tableSection('Pool Devices', this.icons.drive, devices.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-devices-table');
+    },
+
+    _deviceRow(d, depth) {
+        const state = (d.state || 'UNKNOWN').toUpperCase();
+        const stateClass = this.getStateClass(state);
+        const role = d.is_spare ? 'spare'
+                   : d.is_cache ? 'cache'
+                   : d.is_log ? 'log'
+                   : (d.vdev_type || '');
+        const anyErrors = (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0) > 0;
+
+        // Only leaf disks can drill into a drive detail card — vdev rows
+        // (mirror-0 etc.) are logical groupings with no physical backing.
+        const link = (d.vdev_type === 'disk' && d.serial_number)
+            ? this.findDriveBySerial(d.hostname, d.serial_number)
+            : null;
+        const clickable = link ? ' clickable' : '';
+        const onclick = link
+            ? `onclick="ZFS.navigateToDrive(${link.serverIdx}, ${link.driveIdx})"`
+            : '';
+
+        return `
+            <tr class="drive-table-row ${stateClass}${clickable}" ${onclick}>
+                <td><span class="drive-status-dot ${stateClass}" title="${state}"></span></td>
+                <td class="drive-table-name zfs-tree-cell" data-depth="${depth}">
+                    <span class="zfs-tree-indent" style="--depth:${depth}"></span>${Utils.escapeHtml(d.device_name || '')}
+                </td>
+                <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
+                <td>${Utils.escapeHtml(d.pool_name || '')}</td>
+                <td>${Utils.escapeHtml(role)}</td>
+                <td class="drive-table-serial">${Utils.escapeHtml(d.serial_number || '--')}</td>
+                <td>${this.formatStorageSize(d.size_bytes)}</td>
+                <td class="${anyErrors && d.read_errors ? 'zfs-cell-error' : ''}">${d.read_errors || 0}</td>
+                <td class="${anyErrors && d.write_errors ? 'zfs-cell-error' : ''}">${d.write_errors || 0}</td>
+                <td class="${anyErrors && d.checksum_errors ? 'zfs-cell-error' : ''}">${d.checksum_errors || 0}</td>
+            </tr>
+        `;
+    },
+
+    renderScrubsTable(scrubs) {
+        const headers = ['State', 'Pool', 'Host', 'Type', 'Started', 'Duration', 'Examined', 'Repaired', 'Errors'];
+        const limitOptions = [5, 10, 25, 50, 100];
+        const limitSelector = `
+            <label class="zfs-limit-label" onclick="event.stopPropagation();">
+                <span>Show</span>
+                <select class="zfs-limit-select"
+                        onchange="ZFS.changeScrubLimit(this.value)"
+                        onclick="event.stopPropagation();">
+                    ${limitOptions.map(n => `<option value="${n}" ${n === this._scrubLimit ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+            </label>`;
+
+        if (scrubs.length === 0) {
+            const emptyRow = `
+                <tr class="drive-table-row">
+                    <td colspan="${headers.length}" class="zfs-table-empty">
+                        No scrub history yet — records appear after the first scrub or resilver.
+                    </td>
+                </tr>`;
+            return this._tableSection('Scrub History', this.icons.scrub, 0,
+                headers.map(h => `<th>${h}</th>`).join(''),
+                emptyRow, 'zfs-scrubs-table',
+                { sectionId: 'zfs-section-scrubs', extraHeader: limitSelector });
+        }
+
+        const rows = scrubs.map(s => {
+            const state = (s.state || 'UNKNOWN').toLowerCase();
+            const stateClass = state === 'finished' || state === 'completed' ? 'online'
+                            : state === 'canceled' ? 'offline'
+                            : state === 'scanning' || state === 'in_progress' ? 'active'
+                            : 'unknown';
+            const started = this.formatScrubDate(s.start_time);
+            const errors = s.errors_found || 0;
+
+            return `
+                <tr class="drive-table-row ${stateClass}">
+                    <td><span class="drive-status-dot ${stateClass}" title="${Utils.escapeHtml(state)}"></span></td>
+                    <td class="drive-table-name">${Utils.escapeHtml(s.pool_name || '')}</td>
+                    <td class="drive-table-host">${Utils.escapeHtml(s.hostname || '')}</td>
+                    <td>${Utils.escapeHtml(s.scan_type || 'scrub')}</td>
+                    <td>${Utils.escapeHtml(started)}</td>
+                    <td>${this.formatDurationLong(s.duration_secs)}</td>
+                    <td>${this.formatStorageSize(s.data_examined)}</td>
+                    <td>${this.formatStorageSize(s.bytes_repaired)}</td>
+                    <td class="${errors > 0 ? 'zfs-cell-error' : ''}">${errors}</td>
+                </tr>
+            `;
+        }).join('');
+
+        return this._tableSection('Scrub History', this.icons.scrub, scrubs.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-scrubs-table',
+            { sectionId: 'zfs-section-scrubs', extraHeader: limitSelector });
     },
 
     renderEmptyState() {

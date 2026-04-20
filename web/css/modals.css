@@ -178,6 +178,11 @@
 
 .form-input::placeholder { color: var(--text-muted); }
 
+select.form-input {
+    appearance: auto;
+    cursor: pointer;
+}
+
 .form-hint {
     font-size: 0.75rem;
     color: var(--text-muted);

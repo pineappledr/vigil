@@ -1,5 +1,5 @@
 # Build Stage - Alpine with CGO support for SQLite
-FROM golang:1.26.1-alpine AS builder
+FROM golang:1.26.2-alpine AS builder
 WORKDIR /app
 
 # Version build arg (set by CI or defaults to dev)
@@ -22,7 +22,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
     -o vigil-server ./cmd/server
 
 # Final Stage - Minimal Alpine runtime
-FROM alpine:3.19
+FROM alpine:3.23.4
 WORKDIR /app
 
 # Install runtime dependencies

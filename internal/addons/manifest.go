@@ -80,6 +80,7 @@ var validComponentTypes = map[string]bool{
 	"deploy-wizard":  true,
 	"config-card":    true,
 	"disk-storage":   true,
+	"discovery-card": true,
 }
 
 // ── Validation ──────────────────────────────────────────────────────────

@@ -486,6 +486,13 @@ const Renderer = {
                 ${this.infoRow('Powered On', Utils.formatAge(drive.power_on_time?.hours))}
                 ${this.infoRow('Power Cycles', drive.power_cycle_count ?? 'N/A')}
             </div>
+            ${server.details?.capabilities?.led_identify && drive.device?.name ? `
+            <div class="info-group" style="margin-top:12px">
+                <button class="btn btn-identify" onclick="Renderer.identifyDrive('${Utils.escapeHtml(Utils.escapeJSString(hostname))}', '${Utils.escapeHtml(Utils.escapeJSString(drive.device.name))}')" title="Blink the drive bay LED to locate this drive">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    Identify Drive
+                </button>
+            </div>` : ''}
         `;
 
         if (typeof SmartAttributes !== 'undefined') {
@@ -804,5 +811,34 @@ const Renderer = {
 
     infoRow(label, value, cls = '') {
         return `<div class="info-row"><span class="label">${label}</span><span class="value ${cls}">${value}</span></div>`;
+    },
+
+    async identifyDrive(hostname, device) {
+        const btn = document.querySelector('.btn-identify');
+        if (!btn) return;
+
+        const isLocating = btn.classList.toggle('active');
+        const mode = isLocating ? 'locate' : 'off';
+        btn.disabled = true;
+        btn.textContent = isLocating ? 'Locating...' : 'Stopping...';
+
+        try {
+            const resp = await fetch(`/api/v1/agents/${encodeURIComponent(hostname)}/identify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device, mode })
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                btn.classList.toggle('active');
+                alert(data.error || 'LED identify failed');
+            }
+        } catch (e) {
+            btn.classList.toggle('active');
+            alert('Failed to reach server');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = btn.classList.contains('active') ? 'Stop Identify' : 'Identify Drive';
+        }
     }
 };
