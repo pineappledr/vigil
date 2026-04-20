@@ -216,54 +216,149 @@ const ZFS = {
     renderDatasetsTable(datasets) {
         if (datasets.length === 0) return '';
 
+        // Sort so that within a pool the root dataset comes first and children
+        // follow depth-first alphabetically. Depth is the number of "/" in the
+        // dataset name — the pool's root dataset ("Tank") is depth 0, "Tank/x"
+        // is depth 1, "Tank/x/y" is depth 2.
+        const sorted = [...datasets].sort((a, b) => {
+            const ah = (a.hostname || '').localeCompare(b.hostname || '');
+            if (ah !== 0) return ah;
+            const ap = (a.pool_name || '').localeCompare(b.pool_name || '');
+            if (ap !== 0) return ap;
+            return (a.dataset_name || '').localeCompare(b.dataset_name || '');
+        });
+
         const headers = ['Name', 'Host', 'Pool', 'Used', 'Available', 'Referenced', 'Compression', 'Mountpoint'];
-        const rows = datasets.map(d => `
-            <tr class="drive-table-row">
-                <td class="drive-table-name">${Utils.escapeHtml(d.dataset_name || '')}</td>
-                <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
-                <td>${Utils.escapeHtml(d.pool_name || '')}</td>
-                <td>${this.formatStorageSize(d.used_bytes)}</td>
-                <td>${this.formatStorageSize(d.available_bytes)}</td>
-                <td>${this.formatStorageSize(d.referenced_bytes)}</td>
-                <td>${(d.compress_ratio || 1).toFixed(2)}x</td>
-                <td class="zfs-mountpoint">${Utils.escapeHtml(d.mountpoint || '--')}</td>
-            </tr>
-        `).join('');
+        let lastKey = '';
+        const rows = sorted.map(d => {
+            const key = `${d.hostname}|${d.pool_name}`;
+            const depth = Math.max(0, (d.dataset_name || '').split('/').length - 1);
+            const isPoolBoundary = key !== lastKey;
+            lastKey = key;
+
+            const groupHeader = isPoolBoundary ? `
+                <tr class="zfs-dataset-pool-row">
+                    <td colspan="${headers.length}">
+                        ${this.icons.pool}
+                        <span class="zfs-dataset-pool-label">${Utils.escapeHtml(d.pool_name || '')}</span>
+                        <span class="zfs-dataset-pool-host">${Utils.escapeHtml(d.hostname || '')}</span>
+                    </td>
+                </tr>` : '';
+
+            return groupHeader + `
+                <tr class="drive-table-row">
+                    <td class="drive-table-name zfs-tree-cell" data-depth="${depth}">
+                        <span class="zfs-tree-indent" style="--depth:${depth}"></span>${Utils.escapeHtml(d.dataset_name || '')}
+                    </td>
+                    <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
+                    <td>${Utils.escapeHtml(d.pool_name || '')}</td>
+                    <td>${this.formatStorageSize(d.used_bytes)}</td>
+                    <td>${this.formatStorageSize(d.available_bytes)}</td>
+                    <td>${this.formatStorageSize(d.referenced_bytes)}</td>
+                    <td>${(d.compress_ratio || 1).toFixed(2)}x</td>
+                    <td class="zfs-mountpoint">${Utils.escapeHtml(d.mountpoint || '--')}</td>
+                </tr>
+            `;
+        }).join('');
 
         return this._tableSection('Datasets', this.icons.drive, datasets.length,
             headers.map(h => `<th>${h}</th>`).join(''),
             rows, 'zfs-datasets-table');
     },
 
+    // Build a parent→children map keyed by parent device_name so we can emit
+    // mirror/raidz vdevs with their disks nested directly underneath.
+    _buildDeviceTree(devices) {
+        const childrenByParent = new Map();
+        for (const d of devices) {
+            const p = d.vdev_parent || '';
+            if (!p) continue;
+            if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+            childrenByParent.get(p).push(d);
+        }
+        const ordered = [];
+        for (const d of devices) {
+            if (d.vdev_parent) continue;   // children emitted via their parent
+            ordered.push({ dev: d, depth: 0 });
+            const kids = childrenByParent.get(d.device_name) || [];
+            kids.sort((a, b) => (a.vdev_index || 0) - (b.vdev_index || 0));
+            for (const k of kids) ordered.push({ dev: k, depth: 1 });
+        }
+        return ordered;
+    },
+
     renderDevicesTable(devices) {
         if (devices.length === 0) return '';
 
-        const headers = ['State', 'Device', 'Host', 'Pool', 'Vdev', 'Serial', 'Size', 'Read', 'Write', 'Cksum'];
-        const rows = devices.map(d => {
-            const state = (d.state || 'UNKNOWN').toUpperCase();
-            const stateClass = this.getStateClass(state);
-            const role = d.is_spare ? 'spare' : d.is_cache ? 'cache' : d.is_log ? 'log' : (d.vdev_type || '');
-            const anyErrors = (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0) > 0;
+        // Group by host+pool so each pool's vdev layout sits together; then
+        // within each group, nest disks under their mirror/raidz vdev parent.
+        const groups = new Map();
+        for (const d of devices) {
+            const key = `${d.hostname}|${d.pool_name}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(d);
+        }
 
-            return `
-                <tr class="drive-table-row ${stateClass}">
-                    <td><span class="drive-status-dot ${stateClass}" title="${state}"></span></td>
-                    <td class="drive-table-name">${Utils.escapeHtml(d.device_name || '')}</td>
-                    <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
-                    <td>${Utils.escapeHtml(d.pool_name || '')}</td>
-                    <td>${Utils.escapeHtml(role)}</td>
-                    <td class="drive-table-serial">${Utils.escapeHtml(d.serial_number || '--')}</td>
-                    <td>${this.formatStorageSize(d.size_bytes)}</td>
-                    <td class="${anyErrors && d.read_errors ? 'zfs-cell-error' : ''}">${d.read_errors || 0}</td>
-                    <td class="${anyErrors && d.write_errors ? 'zfs-cell-error' : ''}">${d.write_errors || 0}</td>
-                    <td class="${anyErrors && d.checksum_errors ? 'zfs-cell-error' : ''}">${d.checksum_errors || 0}</td>
-                </tr>
-            `;
+        const headers = ['State', 'Device', 'Host', 'Pool', 'Role', 'Serial', 'Size', 'Read', 'Write', 'Cksum'];
+        const orderedKeys = [...groups.keys()].sort();
+        let lastKey = '';
+        const rows = orderedKeys.flatMap(key => {
+            const group = groups.get(key);
+            const tree = this._buildDeviceTree(group);
+            return tree.map(({ dev, depth }) => {
+                const isBoundary = key !== lastKey;
+                lastKey = key;
+                return (isBoundary ? `
+                    <tr class="zfs-dataset-pool-row">
+                        <td colspan="${headers.length}">
+                            ${this.icons.pool}
+                            <span class="zfs-dataset-pool-label">${Utils.escapeHtml(dev.pool_name || '')}</span>
+                            <span class="zfs-dataset-pool-host">${Utils.escapeHtml(dev.hostname || '')}</span>
+                        </td>
+                    </tr>` : '') + this._deviceRow(dev, depth);
+            });
         }).join('');
 
         return this._tableSection('Pool Devices', this.icons.drive, devices.length,
             headers.map(h => `<th>${h}</th>`).join(''),
             rows, 'zfs-devices-table');
+    },
+
+    _deviceRow(d, depth) {
+        const state = (d.state || 'UNKNOWN').toUpperCase();
+        const stateClass = this.getStateClass(state);
+        const role = d.is_spare ? 'spare'
+                   : d.is_cache ? 'cache'
+                   : d.is_log ? 'log'
+                   : (d.vdev_type || '');
+        const anyErrors = (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0) > 0;
+
+        // Only leaf disks can drill into a drive detail card — vdev rows
+        // (mirror-0 etc.) are logical groupings with no physical backing.
+        const link = (d.vdev_type === 'disk' && d.serial_number)
+            ? this.findDriveBySerial(d.hostname, d.serial_number)
+            : null;
+        const clickable = link ? ' clickable' : '';
+        const onclick = link
+            ? `onclick="ZFS.navigateToDrive(${link.serverIdx}, ${link.driveIdx})"`
+            : '';
+
+        return `
+            <tr class="drive-table-row ${stateClass}${clickable}" ${onclick}>
+                <td><span class="drive-status-dot ${stateClass}" title="${state}"></span></td>
+                <td class="drive-table-name zfs-tree-cell" data-depth="${depth}">
+                    <span class="zfs-tree-indent" style="--depth:${depth}"></span>${Utils.escapeHtml(d.device_name || '')}
+                </td>
+                <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
+                <td>${Utils.escapeHtml(d.pool_name || '')}</td>
+                <td>${Utils.escapeHtml(role)}</td>
+                <td class="drive-table-serial">${Utils.escapeHtml(d.serial_number || '--')}</td>
+                <td>${this.formatStorageSize(d.size_bytes)}</td>
+                <td class="${anyErrors && d.read_errors ? 'zfs-cell-error' : ''}">${d.read_errors || 0}</td>
+                <td class="${anyErrors && d.write_errors ? 'zfs-cell-error' : ''}">${d.write_errors || 0}</td>
+                <td class="${anyErrors && d.checksum_errors ? 'zfs-cell-error' : ''}">${d.checksum_errors || 0}</td>
+            </tr>
+        `;
     },
 
     renderScrubsTable(scrubs) {

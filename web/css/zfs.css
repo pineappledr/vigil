@@ -966,6 +966,16 @@
     margin-top: 1rem;
 }
 
+/* ZFS icons don't carry .section-icon (used by the Servers page), so
+   constrain any raw SVG placed directly in a table-section header here
+   to stop them from filling the container. */
+.zfs-tables-container .drive-table-header > svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
 .zfs-inline-bar {
     position: relative;
     width: 100%;
@@ -1021,4 +1031,87 @@
 }
 .drive-status-dot.unknown {
     background: var(--text-muted);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Pool group header rows (datasets + pool devices tables)
+   ─────────────────────────────────────────────────────────────────── */
+
+.zfs-dataset-pool-row > td {
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.zfs-dataset-pool-row > td > svg {
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+    margin-right: 0.4rem;
+    color: var(--accent-primary);
+}
+
+.zfs-dataset-pool-label {
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+}
+
+.zfs-dataset-pool-host {
+    margin-left: 0.6rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Tree indent (nested datasets + nested disks under mirror/raidz)
+   ─────────────────────────────────────────────────────────────────── */
+
+.zfs-tree-cell {
+    white-space: nowrap;
+}
+
+.zfs-tree-indent {
+    display: inline-block;
+    width: calc(var(--depth, 0) * 18px);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.zfs-tree-cell[data-depth="0"] > .zfs-tree-indent {
+    width: 0;
+}
+
+.zfs-tree-cell[data-depth="1"] > .zfs-tree-indent::before,
+.zfs-tree-cell[data-depth="2"] > .zfs-tree-indent::before,
+.zfs-tree-cell[data-depth="3"] > .zfs-tree-indent::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--depth, 0) * 18px - 12px);
+    top: 50%;
+    width: 8px;
+    height: 1px;
+    background: var(--border-color);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Clickable device rows (leaf disks link to drive card)
+   ─────────────────────────────────────────────────────────────────── */
+
+.drive-table-row.clickable {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.drive-table-row.clickable:hover {
+    background: var(--bg-hover, var(--bg-elevated));
 }
