@@ -1123,3 +1123,87 @@
     font-style: italic;
     font-size: 0.85rem;
 }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Collapsible sections (header click toggles; chevron rotates)
+   ─────────────────────────────────────────────────────────────────── */
+
+.drive-table-header-collapsible {
+    cursor: pointer;
+    user-select: none;
+}
+
+.drive-table-header-collapsible:hover {
+    background: var(--bg-hover, var(--bg-elevated));
+}
+
+.zfs-section-toggle {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.zfs-section-toggle > svg {
+    width: 16px;
+    height: 16px;
+    transition: transform var(--transition-fast);
+}
+
+.drive-table-header-collapsible:hover .zfs-section-toggle {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+}
+
+.drive-table-section.is-collapsed .zfs-section-toggle > svg {
+    transform: rotate(-90deg);
+}
+
+.drive-table-section.is-collapsed .drive-table-wrapper {
+    display: none;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Inline "Show N" limit selector (Scrub History)
+   ─────────────────────────────────────────────────────────────────── */
+
+.zfs-limit-label {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: default;
+}
+
+/* When the selector sits next to the toggle, don't both push right. */
+.zfs-limit-label + .zfs-section-toggle {
+    margin-left: 0.5rem;
+}
+
+.zfs-limit-select {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.zfs-limit-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}

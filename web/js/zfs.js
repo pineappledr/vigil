@@ -45,6 +45,9 @@ const ZFS = {
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
             <polyline points="15 3 21 3 21 9"/>
             <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>`,
+        chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
         </svg>`
     },
 
@@ -53,6 +56,18 @@ const ZFS = {
     _datasets: [],
     _devices: [],
     _scrubs: [],
+    _scrubLimit: 10,
+
+    // Collapsed state survives re-renders (auto-refresh) so the user's
+    // expand/collapse choice isn't reset every polling cycle.
+    // Default: Datasets collapsed, everything else open.
+    _collapsedSections: {
+        'zfs-section-datasets': true,
+    },
+
+    _isCollapsed(id) {
+        return this._collapsedSections[id] === true;
+    },
 
     async render() {
         const container = document.getElementById('zfs-view');
@@ -61,37 +76,56 @@ const ZFS = {
         const stats = State.getZFSStats();
         const pools = (State.zfsPools || []).filter(Boolean);
 
-        // Paint the shell (summary cards + placeholders) immediately so the
-        // page feels responsive even if the tables take a moment to load.
-        container.innerHTML = `
-            ${this.renderSummaryCards(stats)}
-            <div id="zfs-tables-container" class="zfs-tables-container">
-                ${pools.length === 0 ? this.renderEmptyState() : this.renderTablesLoading()}
-            </div>
-        `;
+        // Preserve scroll position across refreshes — without this the
+        // browser loses its anchor when we swap innerHTML and jumps to top.
+        const scrollY = window.scrollY;
 
-        if (pools.length === 0) return;
+        // First render paints the shell; subsequent renders only update the
+        // parts that changed so scroll position and collapse state survive.
+        let tablesHost = document.getElementById('zfs-tables-container');
+        if (!tablesHost) {
+            container.innerHTML = `
+                ${this.renderSummaryCards(stats)}
+                <div id="zfs-tables-container" class="zfs-tables-container">
+                    ${pools.length === 0 ? this.renderEmptyState() : this.renderTablesLoading()}
+                </div>
+            `;
+            tablesHost = document.getElementById('zfs-tables-container');
+        } else {
+            // Refresh the summary cards in place without touching the tables.
+            const summary = container.querySelector('.zfs-summary');
+            if (summary) summary.outerHTML = this.renderSummaryCards(stats);
+        }
+
+        if (pools.length === 0) {
+            if (tablesHost) tablesHost.innerHTML = this.renderEmptyState();
+            return;
+        }
 
         // Fan out the three global fetches in parallel. Failures are non-fatal:
         // a missing dataset/device/scrub table simply renders as an empty row.
         const [dsResp, devResp, scrubResp] = await Promise.allSettled([
             API.getZFSDatasets(),
             API.getZFSAllDevices(),
-            API.getZFSAllScrubs(5),
+            API.getZFSAllScrubs(this._scrubLimit),
         ]);
 
         this._datasets = await this._readJSON(dsResp);
         this._devices  = await this._readJSON(devResp);
         this._scrubs   = await this._readJSON(scrubResp);
 
-        const host = document.getElementById('zfs-tables-container');
-        if (!host) return;
-        host.innerHTML = [
+        tablesHost = document.getElementById('zfs-tables-container');
+        if (!tablesHost) return;
+        tablesHost.innerHTML = [
             this.renderPoolsTable(pools),
             this.renderDatasetsTable(this._datasets),
             this.renderDevicesTable(this._devices),
             this.renderScrubsTable(this._scrubs),
         ].join('');
+
+        // Restore scroll — even the in-place summary replacement can shift
+        // layout by a pixel or two depending on stat counts.
+        if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
     },
 
     async _readJSON(settled) {
@@ -147,13 +181,34 @@ const ZFS = {
     // the look matches exactly. Each table renders nothing when its data set
     // is empty — keeps the page tidy for small deployments.
 
-    _tableSection(title, icon, count, headerCells, bodyRows, tableClass = '') {
+    _tableSection(title, icon, count, headerCells, bodyRows, tableClass = '', opts = {}) {
+        const {
+            sectionId = '',
+            collapsible = false,
+            collapsed = false,
+            extraHeader = '',
+        } = opts;
+
+        const idAttr = sectionId ? ` id="${sectionId}"` : '';
+        const collapsedCls = collapsible && collapsed ? ' is-collapsed' : '';
+        const headerCls = collapsible ? ' drive-table-header-collapsible' : '';
+        const headerClick = collapsible && sectionId
+            ? ` onclick="ZFS.toggleSection('${sectionId}')"`
+            : '';
+        const toggleBtn = collapsible ? `
+            <button class="zfs-section-toggle" tabindex="-1"
+                    aria-label="${collapsed ? 'Expand' : 'Collapse'}">
+                ${this.icons.chevron}
+            </button>` : '';
+
         return `
-            <div class="drive-table-section">
-                <div class="drive-table-header">
+            <div class="drive-table-section${collapsedCls}"${idAttr}>
+                <div class="drive-table-header${headerCls}"${headerClick}>
                     ${icon}
                     <span>${title}</span>
                     <span class="drive-table-count">${count}</span>
+                    ${extraHeader}
+                    ${toggleBtn}
                 </div>
                 <div class="drive-table-wrapper">
                     <table class="drive-table ${tableClass}">
@@ -163,6 +218,31 @@ const ZFS = {
                 </div>
             </div>
         `;
+    },
+
+    toggleSection(id) {
+        const section = document.getElementById(id);
+        if (!section) return;
+        const collapsed = section.classList.toggle('is-collapsed');
+        this._collapsedSections[id] = collapsed;
+        const btn = section.querySelector('.zfs-section-toggle');
+        if (btn) btn.setAttribute('aria-label', collapsed ? 'Expand' : 'Collapse');
+    },
+
+    async changeScrubLimit(raw) {
+        const limit = Math.max(1, parseInt(raw, 10) || 10);
+        this._scrubLimit = limit;
+
+        const section = document.getElementById('zfs-section-scrubs');
+        if (section) section.classList.add('is-loading');
+
+        const resp = await API.getZFSAllScrubs(limit);
+        const data = resp && resp.ok ? await resp.json().catch(() => []) : [];
+        this._scrubs = Array.isArray(data) ? data : [];
+
+        if (section) {
+            section.outerHTML = this.renderScrubsTable(this._scrubs);
+        }
     },
 
     renderPoolsTable(pools) {
@@ -225,7 +305,8 @@ const ZFS = {
                 </tr>`;
             return this._tableSection('Datasets', this.icons.drive, 0,
                 headers.map(h => `<th>${h}</th>`).join(''),
-                emptyRow, 'zfs-datasets-table');
+                emptyRow, 'zfs-datasets-table',
+                { sectionId: 'zfs-section-datasets', collapsible: true, collapsed: this._isCollapsed('zfs-section-datasets') });
         }
 
         // Sort so that within a pool the root dataset comes first and children
@@ -274,7 +355,8 @@ const ZFS = {
 
         return this._tableSection('Datasets', this.icons.drive, datasets.length,
             headers.map(h => `<th>${h}</th>`).join(''),
-            rows, 'zfs-datasets-table');
+            rows, 'zfs-datasets-table',
+            { sectionId: 'zfs-section-datasets', collapsible: true, collapsed: true });
     },
 
     // Build a parent→children map keyed by parent device_name so we can emit
@@ -373,9 +455,31 @@ const ZFS = {
     },
 
     renderScrubsTable(scrubs) {
-        if (scrubs.length === 0) return '';
-
         const headers = ['State', 'Pool', 'Host', 'Type', 'Started', 'Duration', 'Examined', 'Repaired', 'Errors'];
+        const limitOptions = [5, 10, 25, 50, 100];
+        const limitSelector = `
+            <label class="zfs-limit-label" onclick="event.stopPropagation();">
+                <span>Show</span>
+                <select class="zfs-limit-select"
+                        onchange="ZFS.changeScrubLimit(this.value)"
+                        onclick="event.stopPropagation();">
+                    ${limitOptions.map(n => `<option value="${n}" ${n === this._scrubLimit ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+            </label>`;
+
+        if (scrubs.length === 0) {
+            const emptyRow = `
+                <tr class="drive-table-row">
+                    <td colspan="${headers.length}" class="zfs-table-empty">
+                        No scrub history yet — records appear after the first scrub or resilver.
+                    </td>
+                </tr>`;
+            return this._tableSection('Scrub History', this.icons.scrub, 0,
+                headers.map(h => `<th>${h}</th>`).join(''),
+                emptyRow, 'zfs-scrubs-table',
+                { sectionId: 'zfs-section-scrubs', extraHeader: limitSelector });
+        }
+
         const rows = scrubs.map(s => {
             const state = (s.state || 'UNKNOWN').toLowerCase();
             const stateClass = state === 'finished' || state === 'completed' ? 'online'
@@ -402,7 +506,8 @@ const ZFS = {
 
         return this._tableSection('Scrub History', this.icons.scrub, scrubs.length,
             headers.map(h => `<th>${h}</th>`).join(''),
-            rows, 'zfs-scrubs-table');
+            rows, 'zfs-scrubs-table',
+            { sectionId: 'zfs-section-scrubs', extraHeader: limitSelector });
     },
 
     renderEmptyState() {
