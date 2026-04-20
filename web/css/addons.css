@@ -2292,6 +2292,21 @@
     }
 }
 
+/* Phone (<=480px): modal form inputs need 16px to prevent iOS focus-zoom
+   and a taller touch target. The base .form-input rule in responsive.css
+   already does this globally, but `.smart-action-modal .form-input` has
+   higher specificity, so we repeat the override here. */
+@media (max-width: 480px) {
+    .smart-action-modal .form-input {
+        font-size: 16px;
+        padding: 10px 12px;
+    }
+    .smart-action-modal .smart-cron-preview {
+        font-size: 0.82rem;
+        overflow-wrap: anywhere;
+    }
+}
+
 /* Let long <select> option labels wrap in the open dropdown so the
    "Mirror — 2+ drives, highest durability, lose 50% capacity" text doesn't
    clip on narrow columns. The closed-state summary still truncates. */
