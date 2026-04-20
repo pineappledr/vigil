@@ -503,16 +503,23 @@ func ProcessZFSFromReport(hostname string, payload map[string]interface{}) {
 	}
 }
 
-// ZFSDatasets returns datasets for a host or pool
+// ZFSDatasets returns datasets. With ?hostname=X it filters to that host;
+// without the parameter it returns datasets across every host so the UI
+// can render a single global table.
+// GET /api/zfs/datasets
 // GET /api/zfs/datasets?hostname=server1
 func ZFSDatasets(w http.ResponseWriter, r *http.Request) {
 	hostname := r.URL.Query().Get("hostname")
-	if hostname == "" {
-		JSONError(w, "hostname parameter required", http.StatusBadRequest)
-		return
-	}
 
-	datasets, err := zfs.GetDatasetsByHostname(db.DB, hostname)
+	var (
+		datasets interface{}
+		err      error
+	)
+	if hostname != "" {
+		datasets, err = zfs.GetDatasetsByHostname(db.DB, hostname)
+	} else {
+		datasets, err = zfs.GetAllDatasets(db.DB)
+	}
 	if err != nil {
 		log.Printf("❌ Failed to get datasets: %v", err)
 		JSONError(w, "Failed to retrieve datasets", http.StatusInternalServerError)
@@ -520,6 +527,36 @@ func ZFSDatasets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSONResponse(w, datasets)
+}
+
+// ZFSAllDevices returns every pool-device across every host.
+// GET /api/zfs/devices
+func ZFSAllDevices(w http.ResponseWriter, r *http.Request) {
+	devices, err := zfs.GetAllZFSPoolDevices(db.DB)
+	if err != nil {
+		log.Printf("❌ Failed to get all ZFS devices: %v", err)
+		JSONError(w, "Failed to retrieve devices", http.StatusInternalServerError)
+		return
+	}
+	JSONResponse(w, devices)
+}
+
+// ZFSAllScrubHistory returns the most recent scrub runs across every host.
+// GET /api/zfs/scrubs?limit=100
+func ZFSAllScrubHistory(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 1000 {
+			limit = n
+		}
+	}
+	records, err := zfs.GetAllScrubHistory(db.DB, limit)
+	if err != nil {
+		log.Printf("❌ Failed to get scrub history: %v", err)
+		JSONError(w, "Failed to retrieve scrub history", http.StatusInternalServerError)
+		return
+	}
+	JSONResponse(w, records)
 }
 
 // ─── Route Registration ──────────────────────────────────────────────────────
@@ -537,6 +574,8 @@ func RegisterZFSRoutes(mux *http.ServeMux, authMiddleware func(http.HandlerFunc)
 	mux.HandleFunc("GET /api/zfs/pools/{hostname}/{poolname}/scrubs/last", authMiddleware(ZFSLastScrub))
 
 	mux.HandleFunc("GET /api/zfs/datasets", authMiddleware(ZFSDatasets))
+	mux.HandleFunc("GET /api/zfs/devices", authMiddleware(ZFSAllDevices))
+	mux.HandleFunc("GET /api/zfs/scrubs", authMiddleware(ZFSAllScrubHistory))
 
 	mux.HandleFunc("GET /api/zfs/summary", authMiddleware(ZFSPoolSummary))
 	mux.HandleFunc("GET /api/zfs/health", authMiddleware(ZFSHealthCheck))

@@ -953,3 +953,72 @@
 .drive-card-zfs-badge.zfs-unknown .zfs-badge-icon {
     color: var(--text-muted);
 }
+/* ───────────────────────────────────────────────────────────────────────
+   ZFS view grouped tables
+   Reuses .drive-table-* classes from the Servers page so the look is
+   identical. Only the ZFS-specific cell helpers live here.
+   ─────────────────────────────────────────────────────────────────── */
+
+.zfs-tables-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    margin-top: 1rem;
+}
+
+.zfs-inline-bar {
+    position: relative;
+    width: 100%;
+    min-width: 110px;
+    height: 18px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.zfs-inline-bar-fill {
+    height: 100%;
+    transition: width var(--transition-fast);
+}
+
+.zfs-inline-bar-fill.healthy  { background: var(--success); }
+.zfs-inline-bar-fill.warning  { background: var(--warning); }
+.zfs-inline-bar-fill.critical { background: var(--danger, #ef4444); }
+
+.zfs-inline-bar-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+
+.zfs-scrub-cell              { font-size: 0.8125rem; }
+.zfs-scrub-cell.scrub-fresh   { color: var(--success); }
+.zfs-scrub-cell.scrub-aging   { color: var(--warning); }
+.zfs-scrub-cell.scrub-overdue { color: var(--danger, #ef4444); }
+.zfs-scrub-cell.scrub-active  { color: var(--accent-primary); }
+.zfs-scrub-cell.scrub-none    { color: var(--text-muted); }
+
+.zfs-cell-error {
+    color: var(--danger, #ef4444);
+    font-weight: 600;
+}
+
+.zfs-mountpoint {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.drive-status-dot.active {
+    background: var(--accent-primary);
+    box-shadow: 0 0 6px var(--accent-primary);
+}
+.drive-status-dot.unknown {
+    background: var(--text-muted);
+}

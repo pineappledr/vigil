@@ -48,27 +48,66 @@ const ZFS = {
         </svg>`
     },
 
-    render() {
+    // Cache of data fetched from the global endpoints. Reset on each render()
+    // so switching views always gets fresh data.
+    _datasets: [],
+    _devices: [],
+    _scrubs: [],
+
+    async render() {
         const container = document.getElementById('zfs-view');
         if (!container) return;
 
         const stats = State.getZFSStats();
-        const poolsByHost = State.getPoolsByHost();
-        const hostnames = Object.keys(poolsByHost).sort();
+        const pools = (State.zfsPools || []).filter(Boolean);
 
+        // Paint the shell (summary cards + placeholders) immediately so the
+        // page feels responsive even if the tables take a moment to load.
         container.innerHTML = `
             ${this.renderSummaryCards(stats)}
-            <div class="section-header">
-                <h2>ZFS Pools</h2>
-                ${stats.totalPools > 0 ? `<span class="section-count">${stats.totalPools} pool${stats.totalPools !== 1 ? 's' : ''}</span>` : ''}
-            </div>
-            <div id="zfs-pools-container" class="zfs-pools-container">
-                ${hostnames.length > 0 
-                    ? hostnames.map(host => this.renderHostSection(host, poolsByHost[host])).join('')
-                    : this.renderEmptyState()
-                }
+            <div id="zfs-tables-container" class="zfs-tables-container">
+                ${pools.length === 0 ? this.renderEmptyState() : this.renderTablesLoading()}
             </div>
         `;
+
+        if (pools.length === 0) return;
+
+        // Fan out the three global fetches in parallel. Failures are non-fatal:
+        // a missing dataset/device/scrub table simply renders as an empty row.
+        const [dsResp, devResp, scrubResp] = await Promise.allSettled([
+            API.getZFSDatasets(),
+            API.getZFSAllDevices(),
+            API.getZFSAllScrubs(100),
+        ]);
+
+        this._datasets = await this._readJSON(dsResp);
+        this._devices  = await this._readJSON(devResp);
+        this._scrubs   = await this._readJSON(scrubResp);
+
+        const host = document.getElementById('zfs-tables-container');
+        if (!host) return;
+        host.innerHTML = [
+            this.renderPoolsTable(pools),
+            this.renderDatasetsTable(this._datasets),
+            this.renderDevicesTable(this._devices),
+            this.renderScrubsTable(this._scrubs),
+        ].join('');
+    },
+
+    async _readJSON(settled) {
+        if (settled.status !== 'fulfilled') return [];
+        const resp = settled.value;
+        if (!resp || !resp.ok) return [];
+        try {
+            const data = await resp.json();
+            return Array.isArray(data) ? data : [];
+        } catch {
+            return [];
+        }
+    },
+
+    renderTablesLoading() {
+        return `<div class="loading-spinner"><div class="spinner"></div>Loading ZFS tables…</div>`;
     },
 
     renderSummaryCards(stats) {
@@ -102,98 +141,162 @@ const ZFS = {
         `;
     },
 
-    renderHostSection(hostname, pools) {
+    // ── Grouped tables ────────────────────────────────────────────────────
+    //
+    // All four tables share the `.drive-table-*` CSS from the Servers page so
+    // the look matches exactly. Each table renders nothing when its data set
+    // is empty — keeps the page tidy for small deployments.
+
+    _tableSection(title, icon, count, headerCells, bodyRows, tableClass = '') {
         return `
-            <div class="zfs-host-section">
-                <div class="zfs-host-header">
-                    <div class="zfs-host-title">
-                        ${this.icons.server}
-                        <span>${Utils.escapeHtml(hostname)}</span>
-                        <span class="zfs-host-count">${pools.length} pool${pools.length !== 1 ? 's' : ''}</span>
-                    </div>
+            <div class="drive-table-section">
+                <div class="drive-table-header">
+                    ${icon}
+                    <span>${title}</span>
+                    <span class="drive-table-count">${count}</span>
                 </div>
-                <div class="zfs-pool-grid">
-                    ${pools.map(pool => this.renderPoolCard(pool, hostname)).join('')}
+                <div class="drive-table-wrapper">
+                    <table class="drive-table ${tableClass}">
+                        <thead><tr>${headerCells}</tr></thead>
+                        <tbody>${bodyRows}</tbody>
+                    </table>
                 </div>
             </div>
         `;
     },
 
-    renderPoolCard(pool, hostname) {
-        const poolName = pool.name || pool.pool_name || 'Unknown Pool';
+    renderPoolsTable(pools) {
+        if (pools.length === 0) return '';
+
+        const headers = ['Status', 'Name', 'Host', 'Capacity', 'Used', 'Scrub', 'Disks', 'Errors', 'Frag'];
+        const rows = pools.map(p => this._poolRow(p)).join('');
+        return this._tableSection('Pools', this.icons.pool, pools.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-pools-table');
+    },
+
+    _poolRow(pool) {
+        const poolName = pool.name || pool.pool_name || 'Unknown';
+        const hostname = pool.hostname || '';
         const state = (pool.status || pool.state || pool.health || 'UNKNOWN').toUpperCase();
         const stateClass = this.getStateClass(state);
         const capacity = this.parseCapacity(pool);
         const scrub = this.parseScrub(pool);
 
-        // Use device_count from API, or calculate from unique disks
         let deviceCount = pool.device_count;
-        if (deviceCount === undefined || deviceCount === 0) {
-            const devices = pool.devices || [];
-            const { uniqueDisks } = this.deduplicateDevices(devices);
+        if (!deviceCount) {
+            const { uniqueDisks } = this.deduplicateDevices(pool.devices || []);
             deviceCount = uniqueDisks.length;
         }
 
-        let errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
+        const errors = (pool.read_errors || 0) + (pool.write_errors || 0) + (pool.checksum_errors || 0);
         const frag = pool.fragmentation || 0;
-        const compRatio = pool.compress_ratio || 1;
-        const dedupRatio = pool.dedup_ratio || 1;
+        const pct = capacity.percent;
 
         return `
-            <div class="zfs-pool-card ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
-                <div class="zfs-pool-header">
-                    <div class="zfs-pool-status">
-                        <span class="zfs-status-dot ${stateClass}"></span>
-                        <span class="zfs-pool-name">${Utils.escapeHtml(poolName)}</span>
+            <tr class="drive-table-row ${stateClass}" onclick="ZFS.showPoolDetail('${Utils.escapeJSString(hostname)}', '${Utils.escapeJSString(poolName)}')">
+                <td><span class="drive-status-dot ${stateClass}"></span></td>
+                <td class="drive-table-name">${Utils.escapeHtml(poolName)}</td>
+                <td class="drive-table-host">${Utils.escapeHtml(hostname)}</td>
+                <td>
+                    <div class="zfs-inline-bar">
+                        <div class="zfs-inline-bar-fill ${this.getCapacityClass(pct)}" style="width:${Math.min(pct, 100)}%"></div>
+                        <span class="zfs-inline-bar-label">${pct}%</span>
                     </div>
-                    <span class="zfs-state-badge ${stateClass}">${state}</span>
-                </div>
-
-                <div class="zfs-pool-capacity">
-                    <div class="zfs-capacity-info">
-                        <span class="zfs-capacity-used">${capacity.used}</span>
-                        <span class="zfs-capacity-sep">of</span>
-                        <span class="zfs-capacity-total">${capacity.total}</span>
-                        <span class="zfs-capacity-percent">(${capacity.percent}%)</span>
-                    </div>
-                    <div class="zfs-capacity-bar">
-                        <div class="zfs-capacity-fill ${this.getCapacityClass(capacity.percent)}"
-                             style="width: ${Math.min(capacity.percent, 100)}%"></div>
-                    </div>
-                </div>
-
-                ${scrub.active ? this.renderScanProgressBar(pool) : `
-                <div class="zfs-pool-scrub scrub-${scrub.staleness}">
-                    ${this.icons.scrub}
-                    <span class="zfs-scrub-info">${scrub.text}</span>
-                </div>`}
-
-                <div class="zfs-card-footer">
-                    <div class="zfs-card-stat" title="${deviceCount} disk${deviceCount !== 1 ? 's' : ''} in pool">
-                        ${this.icons.drive}
-                        <span>${deviceCount}</span>
-                    </div>
-                    <div class="zfs-card-stat ${errors > 0 ? 'has-errors' : ''}" title="Pool errors (read + write + checksum): ${errors}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-                        <span>${errors}</span>
-                    </div>
-                    <div class="zfs-card-stat" title="Fragmentation: ${frag}% — higher values may reduce write performance">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                        <span>${frag}%</span>
-                    </div>
-                    ${compRatio > 1.00 ? `
-                    <div class="zfs-card-stat" title="Compression ratio: ${compRatio.toFixed(2)}x — data is stored ${compRatio.toFixed(1)}x more efficiently">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M8 8l4-5 4 5M8 16l4 5 4-5"/></svg>
-                        <span>${compRatio.toFixed(1)}x</span>
-                    </div>` : ''}
-                    ${dedupRatio > 1.00 ? `
-                    <div class="zfs-card-stat" title="Dedup ratio: ${dedupRatio.toFixed(2)}x — deduplication saves ${((1 - 1/dedupRatio) * 100).toFixed(0)}% space">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
-                        <span>${dedupRatio.toFixed(1)}x</span>
-                    </div>` : ''}
-                </div>
-            </div>
+                </td>
+                <td>${capacity.used} / ${capacity.total}</td>
+                <td class="zfs-scrub-cell scrub-${scrub.staleness}">${Utils.escapeHtml(scrub.text)}</td>
+                <td>${deviceCount}</td>
+                <td class="${errors > 0 ? 'zfs-cell-error' : ''}">${errors}</td>
+                <td>${frag}%</td>
+            </tr>
         `;
+    },
+
+    renderDatasetsTable(datasets) {
+        if (datasets.length === 0) return '';
+
+        const headers = ['Name', 'Host', 'Pool', 'Used', 'Available', 'Referenced', 'Compression', 'Mountpoint'];
+        const rows = datasets.map(d => `
+            <tr class="drive-table-row">
+                <td class="drive-table-name">${Utils.escapeHtml(d.dataset_name || '')}</td>
+                <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
+                <td>${Utils.escapeHtml(d.pool_name || '')}</td>
+                <td>${this.formatStorageSize(d.used_bytes)}</td>
+                <td>${this.formatStorageSize(d.available_bytes)}</td>
+                <td>${this.formatStorageSize(d.referenced_bytes)}</td>
+                <td>${(d.compress_ratio || 1).toFixed(2)}x</td>
+                <td class="zfs-mountpoint">${Utils.escapeHtml(d.mountpoint || '--')}</td>
+            </tr>
+        `).join('');
+
+        return this._tableSection('Datasets', this.icons.drive, datasets.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-datasets-table');
+    },
+
+    renderDevicesTable(devices) {
+        if (devices.length === 0) return '';
+
+        const headers = ['State', 'Device', 'Host', 'Pool', 'Vdev', 'Serial', 'Size', 'Read', 'Write', 'Cksum'];
+        const rows = devices.map(d => {
+            const state = (d.state || 'UNKNOWN').toUpperCase();
+            const stateClass = this.getStateClass(state);
+            const role = d.is_spare ? 'spare' : d.is_cache ? 'cache' : d.is_log ? 'log' : (d.vdev_type || '');
+            const anyErrors = (d.read_errors || 0) + (d.write_errors || 0) + (d.checksum_errors || 0) > 0;
+
+            return `
+                <tr class="drive-table-row ${stateClass}">
+                    <td><span class="drive-status-dot ${stateClass}" title="${state}"></span></td>
+                    <td class="drive-table-name">${Utils.escapeHtml(d.device_name || '')}</td>
+                    <td class="drive-table-host">${Utils.escapeHtml(d.hostname || '')}</td>
+                    <td>${Utils.escapeHtml(d.pool_name || '')}</td>
+                    <td>${Utils.escapeHtml(role)}</td>
+                    <td class="drive-table-serial">${Utils.escapeHtml(d.serial_number || '--')}</td>
+                    <td>${this.formatStorageSize(d.size_bytes)}</td>
+                    <td class="${anyErrors && d.read_errors ? 'zfs-cell-error' : ''}">${d.read_errors || 0}</td>
+                    <td class="${anyErrors && d.write_errors ? 'zfs-cell-error' : ''}">${d.write_errors || 0}</td>
+                    <td class="${anyErrors && d.checksum_errors ? 'zfs-cell-error' : ''}">${d.checksum_errors || 0}</td>
+                </tr>
+            `;
+        }).join('');
+
+        return this._tableSection('Pool Devices', this.icons.drive, devices.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-devices-table');
+    },
+
+    renderScrubsTable(scrubs) {
+        if (scrubs.length === 0) return '';
+
+        const headers = ['State', 'Pool', 'Host', 'Type', 'Started', 'Duration', 'Examined', 'Repaired', 'Errors'];
+        const rows = scrubs.map(s => {
+            const state = (s.state || 'UNKNOWN').toLowerCase();
+            const stateClass = state === 'finished' || state === 'completed' ? 'online'
+                            : state === 'canceled' ? 'offline'
+                            : state === 'scanning' || state === 'in_progress' ? 'active'
+                            : 'unknown';
+            const started = this.formatScrubDate(s.start_time);
+            const errors = s.errors_found || 0;
+
+            return `
+                <tr class="drive-table-row ${stateClass}">
+                    <td><span class="drive-status-dot ${stateClass}" title="${Utils.escapeHtml(state)}"></span></td>
+                    <td class="drive-table-name">${Utils.escapeHtml(s.pool_name || '')}</td>
+                    <td class="drive-table-host">${Utils.escapeHtml(s.hostname || '')}</td>
+                    <td>${Utils.escapeHtml(s.scan_type || 'scrub')}</td>
+                    <td>${Utils.escapeHtml(started)}</td>
+                    <td>${this.formatDurationLong(s.duration_secs)}</td>
+                    <td>${this.formatStorageSize(s.data_examined)}</td>
+                    <td>${this.formatStorageSize(s.bytes_repaired)}</td>
+                    <td class="${errors > 0 ? 'zfs-cell-error' : ''}">${errors}</td>
+                </tr>
+            `;
+        }).join('');
+
+        return this._tableSection('Scrub History', this.icons.scrub, scrubs.length,
+            headers.map(h => `<th>${h}</th>`).join(''),
+            rows, 'zfs-scrubs-table');
     },
 
     renderEmptyState() {
