@@ -155,6 +155,156 @@ test('_formatBytes: non-numeric returns "0 B"', () => {
     assertEq(SmartTableComponent._formatBytes(null), '0 B', 'null → 0 B');
 });
 
+// ── _formatDuration ──────────────────────────────────────────────────
+test('_formatDuration: seconds only', () => {
+    assertEq(SmartTableComponent._formatDuration(45), '45s', 'sec');
+});
+test('_formatDuration: minutes + seconds', () => {
+    assertEq(SmartTableComponent._formatDuration(125), '2m 5s', 'min+sec');
+});
+test('_formatDuration: hours + minutes', () => {
+    assertEq(SmartTableComponent._formatDuration(3700), '1h 1m', 'hr+min');
+});
+test('_formatDuration: null → empty', () => {
+    assertEq(SmartTableComponent._formatDuration(null), '', 'null → empty');
+});
+test('_formatDuration: non-numeric stringifies', () => {
+    assertEq(SmartTableComponent._formatDuration('abc'), 'abc', 'str passthrough');
+});
+
+// ── _interpolate (form namespace) ────────────────────────────────────
+test('_interpolate: {form.X} resolves via form ns', () => {
+    assertEq(
+        SmartTableComponent._interpolate('{form.name}', { form: { name: 'backup-target' } }),
+        'backup-target', '{form.X} ns');
+});
+test('_interpolate: {form.X} falls back to flat ctx (legacy)', () => {
+    assertEq(
+        SmartTableComponent._interpolate('{form.count}', { count: 3 }),
+        '3', '{form.X} flat fallback');
+});
+test('_interpolate: {form.X} missing → empty', () => {
+    assertEq(SmartTableComponent._interpolate('{form.nope}', {}), '', 'missing → empty');
+});
+
+// ── _tierVariant ─────────────────────────────────────────────────────
+test('_tierVariant: red → danger',        () => assertEq(SmartTableComponent._tierVariant('red'), 'danger', 'red'));
+test('_tierVariant: yellow → warning',    () => assertEq(SmartTableComponent._tierVariant('yellow'), 'warning', 'yellow'));
+test('_tierVariant: black → irreversible',() => assertEq(SmartTableComponent._tierVariant('black'), 'irreversible', 'black'));
+test('_tierVariant: green → primary',     () => assertEq(SmartTableComponent._tierVariant('green'), 'primary', 'green'));
+test('_tierVariant: unknown → primary',   () => assertEq(SmartTableComponent._tierVariant('weird'), 'primary', 'unknown'));
+
+// ── _isTerminalStatus ────────────────────────────────────────────────
+test('_isTerminalStatus: running → false',   () => assertEq(SmartTableComponent._isTerminalStatus('running'), false, 'run'));
+test('_isTerminalStatus: pending → false',   () => assertEq(SmartTableComponent._isTerminalStatus('pending'), false, 'pend'));
+test('_isTerminalStatus: completed → true',  () => assertEq(SmartTableComponent._isTerminalStatus('completed'), true, 'done'));
+test('_isTerminalStatus: failed → true',     () => assertEq(SmartTableComponent._isTerminalStatus('failed'), true, 'fail'));
+test('_isTerminalStatus: cancelled → true',  () => assertEq(SmartTableComponent._isTerminalStatus('cancelled'), true, 'cancel'));
+test('_isTerminalStatus: case-insensitive',  () => assertEq(SmartTableComponent._isTerminalStatus('COMPLETED'), true, 'upper'));
+
+// ── _getNestedValue ──────────────────────────────────────────────────
+test('_getNestedValue: flat key', () => {
+    assertEq(SmartTableComponent._getNestedValue({ public_key: 'ssh-ed25519 AAA...' }, 'public_key'),
+        'ssh-ed25519 AAA...', 'flat');
+});
+test('_getNestedValue: dotted path', () => {
+    assertEq(SmartTableComponent._getNestedValue({ result: { key: 'abc' } }, 'result.key'), 'abc', 'dotted');
+});
+test('_getNestedValue: missing returns undefined', () => {
+    assertEq(SmartTableComponent._getNestedValue({ a: 1 }, 'a.b'), undefined, 'missing');
+});
+
+// ── _describeCron ────────────────────────────────────────────────────
+test('_describeCron: empty is invalid',          () => assertEq(SmartTableComponent._describeCron(''), 'Invalid — enter 5 space-separated fields', 'empty'));
+test('_describeCron: every 15 minutes',          () => assertEq(SmartTableComponent._describeCron('*/15 * * * *'), 'Runs every 15 minutes, every day.', 'every15'));
+test('_describeCron: midnight daily',            () => assertEq(SmartTableComponent._describeCron('0 0 * * *'), 'Runs at 00:00, every day.', 'midnight'));
+test('_describeCron: Sunday at 02:00',           () => assertEq(SmartTableComponent._describeCron('0 2 * * 0'), 'Runs at 02:00, every Sun.', 'sun'));
+test('_describeCron: multi-day list',            () => assertEq(SmartTableComponent._describeCron('30 3 * * 1,3,5'), 'Runs at 03:30, on Mon, Wed, Fri.', 'mwf'));
+test('_describeCron: bogus chars fail',          () => {
+    const d = SmartTableComponent._describeCron('a b c d e');
+    if (!d.startsWith('Invalid')) throw new Error('expected Invalid, got ' + d);
+});
+test('_describeCron: wrong field count fails',   () => {
+    const d = SmartTableComponent._describeCron('* * *');
+    if (!d.startsWith('Invalid')) throw new Error('expected Invalid, got ' + d);
+});
+
+// ── _renderField snapshots (DOM-enabled here) ────────────────────────
+// The browser harness can exercise DOM-emitting renderers that the Node
+// runner cannot. These are loose "does it contain the right markers"
+// checks, not full innerHTML diffs — whitespace churn shouldn't break tests.
+test('_renderField: test_button emits button with endpoint + require fields', () => {
+    const html = SmartTableComponent._renderField({
+        key: 'test_connection', type: 'test_button',
+        button_label: 'Test Connection', endpoint: '/api/replication/test-connection',
+        require_fields: ['dest_host', 'dest_user']
+    }, null);
+    assert(html.includes('smart-test-button'), 'has test-button class');
+    assert(html.includes('data-endpoint="/api/replication/test-connection"'), 'endpoint attr');
+    assert(html.includes('data-require-fields="dest_host,dest_user"'), 'require-fields joined');
+    assert(html.includes('_runTestButton'), 'onclick wired');
+});
+test('_renderField: cron emits monospace input + preview', () => {
+    const html = SmartTableComponent._renderField({
+        key: 'schedule', type: 'cron', label: 'Schedule'
+    }, null);
+    assert(html.includes('smart-cron-input'), 'cron input class');
+    assert(html.includes('data-cron-preview-for="schedule"'), 'preview target');
+});
+test('_renderField: select + allow_custom + custom_input_type:cron routes sibling through cron input', () => {
+    const html = SmartTableComponent._renderField({
+        key: 'schedule', type: 'select', label: 'Schedule',
+        options: [{ value: '0 0 * * *', label: 'Daily' }],
+        allow_custom: true,
+        custom_label: 'Custom (cron expression)',
+        custom_input_type: 'cron'
+    }, null);
+    assert(html.includes('smart-custom-input-group'), 'custom wrap present');
+    assert(html.includes('smart-custom-input smart-cron-input'), 'custom input is a cron input');
+    assert(html.includes('data-cron-preview-for="schedule"'), 'live preview element wired');
+    assert(html.includes('data-custom-for="schedule"'), 'sibling substitution still works');
+    // Sanity: a plain allow_custom field (no cron) should NOT emit cron markup.
+    const html2 = SmartTableComponent._renderField({
+        key: 'retention', type: 'select', label: 'Retention',
+        options: [{ value: 7, label: 'Keep 7' }],
+        allow_custom: true,
+        custom_label: 'Custom count'
+    }, null);
+    assert(!html2.includes('smart-cron-input'), 'plain custom does not render cron');
+    assert(!html2.includes('smart-cron-preview'), 'plain custom omits preview');
+});
+test('_renderField: remote_value emits textarea + copy button', () => {
+    const html = SmartTableComponent._renderField({
+        key: 'ssh_public_key', type: 'remote_value',
+        depends_on: 'ssh_key_name',
+        endpoint: '/api/replication/keys/{form.ssh_key_name}/public',
+        value_path: 'public_key'
+    }, null);
+    assert(html.includes('smart-remote-value-display'), 'display element');
+    assert(html.includes('data-remote-field="ssh_public_key"'), 'wrap key attr');
+    assert(html.includes('data-depends-on="ssh_key_name"'), 'depends_on attr');
+    assert(html.includes('data-value-path="public_key"'), 'value_path attr');
+    assert(html.includes('smart-remote-value-copy'), 'copy button present');
+});
+test('_renderField: remote_value with copy_button=false hides button', () => {
+    const html = SmartTableComponent._renderField({
+        key: 'ro', type: 'remote_value',
+        depends_on: 'x', endpoint: '/api/x', copy_button: false
+    }, null);
+    assert(!html.includes('smart-remote-value-copy'), 'copy button absent');
+});
+
+// ── _formatValue (format dispatch) ───────────────────────────────────
+test('_formatValue: error_count OK class when zero', () => {
+    const html = SmartTableComponent._formatValue(0, 'error_count', {}, { key: 'read' });
+    assert(html.includes('smart-error-count-ok'), 'ok class');
+});
+test('_formatValue: error_count bad class when nonzero', () => {
+    const html = SmartTableComponent._formatValue(3, 'error_count', {}, { key: 'read' });
+    assert(html.includes('smart-error-count-bad'), 'bad class');
+    assert(html.includes('>3<'), 'value rendered');
+});
+
 // ── Render results ───────────────────────────────────────────────────
 const container = document.getElementById('results');
 const summaryEl = document.getElementById('summary');

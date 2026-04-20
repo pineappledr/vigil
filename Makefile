@@ -23,7 +23,7 @@ YELLOW := \033[0;33m
 RED := \033[0;31m
 NC := \033[0m # No Color
 
-.PHONY: all build build-server build-agent test test-coverage test-race lint vet clean help
+.PHONY: all build build-server build-agent test test-web test-coverage test-race lint vet clean help
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Default target
@@ -71,11 +71,16 @@ build-all: clean
 # Test targets
 # ═══════════════════════════════════════════════════════════════════════════
 
-## test: Run all tests
-test:
+## test: Run all tests (Go + web)
+test: test-web
 	@echo "$(CYAN)Running tests...$(NC)"
 	$(GO) test ./...
 	@echo "$(GREEN)✓ All tests passed$(NC)"
+
+## test-web: Run smart-table.js pure-function tests via Node
+test-web:
+	@echo "$(CYAN)Running web tests...$(NC)"
+	@node web/tests/run-tests.js > /dev/null && echo "$(GREEN)✓ Web tests passed$(NC)" || (node web/tests/run-tests.js; exit 1)
 
 ## test-v: Run tests with verbose output
 test-v:

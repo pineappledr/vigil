@@ -376,7 +376,9 @@ const SmartTableComponent = {
     _showTableError(compId, entry, message) {
         const tbody = document.getElementById(`smart-tbody-${compId}`);
         if (!tbody) return;
-        tbody.innerHTML = `<tr><td colspan="${entry.columns.length}" class="smart-table-empty smart-table-error">${Utils.escapeHtml(message)}</td></tr>`;
+        const expandKey = entry.config && entry.config.expand_key;
+        const totalCols = entry.columns.length + (expandKey ? 1 : 0) + (entry.selectable ? 1 : 0);
+        tbody.innerHTML = `<tr><td colspan="${totalCols}" class="smart-table-empty smart-table-error">${Utils.escapeHtml(message)}</td></tr>`;
     },
 
     // ─── Telemetry Updates ───────────────────────────────────────────────
@@ -441,7 +443,8 @@ const SmartTableComponent = {
         if (!rows || rows.length === 0) {
             const msg = (entry.config && entry.config.empty_message)
                 || 'No data yet — agent is collecting, try refreshing in a moment';
-            tbody.innerHTML = `<tr><td colspan="${totalCols}" class="smart-table-empty">${Utils.escapeHtml(msg)}</td></tr>`;
+            const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+            tbody.innerHTML = `<tr><td colspan="${totalCols}" class="smart-table-empty"><div class="smart-empty-state">${icon}<span>${Utils.escapeHtml(msg)}</span></div></td></tr>`;
             this._renderPagination(compId, 0, entry.pageSize, 1);
             return;
         }
@@ -650,7 +653,7 @@ const SmartTableComponent = {
             // _updateStructuredTable below.
             return this._renderRowActionButtons(row.__compId, row);
         }
-        if (format === 'badge') {
+        if (format === 'badge' || (col && (col.badge_map || col.badge))) {
             return this._formatBadge(val, col);
         }
 
@@ -671,6 +674,11 @@ const SmartTableComponent = {
                 return this._formatDatetime(val);
             case 'relative_time':
                 return this._formatRelativeTime(val);
+            case 'error_count': {
+                const n = Number(val) || 0;
+                const cls = n > 0 ? 'smart-error-count smart-error-count-bad' : 'smart-error-count smart-error-count-ok';
+                return `<span class="${cls}">${n}</span>`;
+            }
             default:
                 if (Array.isArray(val)) return Utils.escapeHtml(val.join(', '));
                 return Utils.escapeHtml(String(val));
@@ -798,15 +806,19 @@ const SmartTableComponent = {
     },
 
     _formatDuration(val) {
-        if (typeof val === 'number') {
-            const h = Math.floor(val / 3600);
-            const m = Math.floor((val % 3600) / 60);
-            const s = Math.floor(val % 60);
-            if (h > 0) return `${h}h ${m}m`;
-            if (m > 0) return `${m}m ${s}s`;
-            return `${s}s`;
+        if (val == null) return '';
+        if (typeof val !== 'number') {
+            const n = Number(val);
+            if (!Number.isFinite(n)) return String(val);
+            val = n;
         }
-        return String(val);
+        if (val < 0) return String(val);
+        const h = Math.floor(val / 3600);
+        const m = Math.floor((val % 3600) / 60);
+        const s = Math.floor(val % 60);
+        if (h > 0) return `${h}h ${m}m`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
     },
 
     _formatDatetime(val) {
@@ -907,7 +919,7 @@ const SmartTableComponent = {
         // invokeActionById) without rendering a toolbar button.
         if (action.hidden) return '';
         const tier = action.safety_tier || 'green';
-        const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
+        const variant = this._tierVariant(tier);
         const label = Utils.escapeHtml(action.label || action.id || 'Action');
         const icon = this._iconSvg(action.icon);
         return `<button class="smart-action-btn smart-action-${variant}"
@@ -942,7 +954,7 @@ const SmartTableComponent = {
         if (visible.length === 0) return '';
         return `<div class="smart-row-actions">${visible.map(({ act, i }) => {
             const tier = act.safety_tier || 'green';
-            const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
+            const variant = this._tierVariant(tier);
             const label = Utils.escapeHtml(act.label || act.id || 'Action');
             const icon = this._iconSvg(act.icon);
             return `<button class="smart-row-action-btn smart-row-action-${variant}"
@@ -995,7 +1007,7 @@ const SmartTableComponent = {
 
     _renderBulkActionButton(compId, action, idx) {
         const tier = action.safety_tier || 'green';
-        const variant = tier === 'red' ? 'danger' : (tier === 'yellow' ? 'warning' : 'primary');
+        const variant = this._tierVariant(tier);
         const label = Utils.escapeHtml(action.label || action.id || 'Bulk Action');
         const icon = this._iconSvg(action.icon);
         return `<button class="smart-action-btn smart-action-${variant}"
@@ -1238,7 +1250,7 @@ const SmartTableComponent = {
         // collected — load options and prime the preview.
         for (const field of cfg.fields) {
             if (field.options_from) {
-                this._loadFieldOptions(modal, field, entry.addonId);
+                this._loadFieldOptions(modal, field, entry.addonId, row);
             }
         }
 
@@ -1250,10 +1262,12 @@ const SmartTableComponent = {
             el.addEventListener('input', () => {
                 this._applyVisibleWhen(modal, row);
                 this._updateCapacityPreviews(modal, cfg.fields);
+                this._updateCronPreviews(modal);
             });
             el.addEventListener('change', () => {
                 this._applyVisibleWhen(modal, row);
                 this._updateCapacityPreviews(modal, cfg.fields);
+                this._updateCronPreviews(modal);
             });
         });
 
@@ -1266,6 +1280,18 @@ const SmartTableComponent = {
             });
             // First fetch.
             this._refreshPreview(modal);
+        }
+
+        // remote_value fields GET a sibling field's value through the proxy.
+        // Debounced separately from preview because the watched field may
+        // lazy-create agent-side state on first hit.
+        if (modal.querySelector('.smart-remote-value-wrap')) {
+            const refreshRemote = this._debounce(() => this._updateRemoteValues(modal), 400);
+            modal.querySelectorAll('input, select, textarea').forEach(el => {
+                el.addEventListener('input', refreshRemote);
+                el.addEventListener('change', refreshRemote);
+            });
+            this._updateRemoteValues(modal);
         }
     },
 
@@ -1294,6 +1320,134 @@ const SmartTableComponent = {
         const section = headerEl.parentElement;
         if (!section) return;
         section.classList.toggle('smart-section-collapsed');
+    },
+
+    // Fetches the URL for each `remote_value` field in the modal whenever the
+    // field named in `depends_on` changes. The `depVal` → last-fetched cache
+    // on each wrap skips no-op refetches (e.g. when the user edits a
+    // different field). Errors leave the cache unset so the next input
+    // retries. Rendered via `_renderField` → case 'remote_value'.
+    async _updateRemoteValues(modalEl) {
+        const wraps = modalEl.querySelectorAll('.smart-remote-value-wrap');
+        if (!wraps.length) return;
+        const ctx = modalEl._smartAction;
+        if (!ctx) return;
+        const entry = this._tables[ctx.compId];
+        if (!entry || !entry.addonId) return;
+
+        const formValues = this._collectFormValues(modalEl);
+
+        for (const wrap of wraps) {
+            const key = wrap.dataset.remoteField;
+            const depends = wrap.dataset.dependsOn;
+            const endpoint = wrap.dataset.endpoint;
+            const method = (wrap.dataset.method || 'GET').toUpperCase();
+            const regex = wrap.dataset.validateRegex;
+            const valuePath = wrap.dataset.valuePath;
+            const displayEl = modalEl.querySelector(
+                `.smart-remote-value-display[data-display-for="${CSS.escape(key)}"]`
+            );
+            const statusEl = modalEl.querySelector(
+                `.smart-remote-value-status[data-status-for="${CSS.escape(key)}"]`
+            );
+            const copyBtn = wrap.querySelector('.smart-remote-value-copy');
+
+            const depVal = String(formValues[depends] || '').trim();
+
+            const clear = (msg, cls) => {
+                if (displayEl) displayEl.value = '';
+                if (statusEl) {
+                    statusEl.textContent = msg || '';
+                    statusEl.className = 'smart-remote-value-status' + (cls ? ' ' + cls : '');
+                }
+                if (copyBtn) copyBtn.disabled = true;
+            };
+
+            if (!depVal) {
+                wrap.dataset.lastFetched = '';
+                clear('', '');
+                continue;
+            }
+            if (regex) {
+                try {
+                    if (!new RegExp(regex).test(depVal)) {
+                        wrap.dataset.lastFetched = '';
+                        clear(`Invalid ${depends}`, 'smart-remote-value-status-error');
+                        continue;
+                    }
+                } catch (_) { /* bad regex in manifest — ignore, still fetch */ }
+            }
+
+            if (wrap.dataset.lastFetched === depVal) continue;
+            wrap.dataset.lastFetched = depVal;
+
+            if (statusEl) {
+                statusEl.textContent = 'Fetching…';
+                statusEl.className = 'smart-remote-value-status smart-remote-value-status-pending';
+            }
+
+            try {
+                const interpCtx = { ...(ctx.row || {}), ...formValues, form: formValues };
+                const path = this._interpolate(endpoint, interpCtx);
+                const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
+                    + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
+                const init = {
+                    method: method === 'GET' ? 'GET' : 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                };
+                const resp = await fetch(proxyURL, init);
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    const msg = (data && (data.error || data.message)) || `HTTP ${resp.status}`;
+                    wrap.dataset.lastFetched = '';
+                    clear(msg, 'smart-remote-value-status-error');
+                    continue;
+                }
+                const data = await resp.json().catch(() => ({}));
+                let value = '';
+                if (valuePath) {
+                    const v = this._getNestedValue(data, valuePath);
+                    value = v == null ? '' : String(v);
+                } else if (typeof data === 'string') {
+                    value = data;
+                } else if (data && typeof data === 'object') {
+                    value = String(data.public_key ?? data.value ?? data.key ?? data.message ?? '');
+                }
+                if (displayEl) displayEl.value = value;
+                if (statusEl) {
+                    statusEl.textContent = value ? '' : 'Empty response';
+                    statusEl.className = 'smart-remote-value-status';
+                }
+                if (copyBtn) copyBtn.disabled = !value;
+            } catch (e) {
+                wrap.dataset.lastFetched = '';
+                clear(`Failed: ${e.message}`, 'smart-remote-value-status-error');
+            }
+        }
+    },
+
+    async _copyRemoteValue(btnEl) {
+        const wrap = btnEl.closest('.smart-remote-value-wrap');
+        if (!wrap) return;
+        const key = wrap.dataset.remoteField || '';
+        const textarea = wrap.querySelector(
+            `.smart-remote-value-display[data-display-for="${CSS.escape(key)}"]`
+        );
+        if (!textarea || !textarea.value) return;
+        const origText = btnEl.textContent;
+        try {
+            await navigator.clipboard.writeText(textarea.value);
+        } catch (_) {
+            textarea.select();
+            try { document.execCommand('copy'); } catch (_) { /* no-op */ }
+        }
+        btnEl.textContent = 'Copied!';
+        setTimeout(() => { btnEl.textContent = origText; }, 1500);
+    },
+
+    _getNestedValue(obj, path) {
+        if (!obj || !path) return undefined;
+        return path.split('.').reduce((o, p) => (o == null ? undefined : o[p]), obj);
     },
 
     // Client-side capacity calculator for `type: "capacity_preview"` fields.
@@ -1494,9 +1648,21 @@ const SmartTableComponent = {
                 input = `<select id="${id}" class="form-input" data-field-key="${Utils.escapeHtml(field.key)}"${field.allow_custom ? ` data-allow-custom="1"` : ''}>${blank}${opts}${customOpt}<option disabled>Loading…</option></select>`;
                 if (field.allow_custom) {
                     const customId = `${id}__custom`;
+                    const isCron = field.custom_input_type === 'cron';
+                    // The custom input intentionally omits `data-field-key`;
+                    // `_collectFormValues` substitutes its value into the parent
+                    // select's key via `data-custom-for`. A `cron` variant adds
+                    // `smart-cron-input` + a sibling `.smart-cron-preview` so
+                    // live cron description works inside the custom wrap too.
+                    const cronClass = isCron ? ' smart-cron-input' : '';
+                    const placeholder = field.custom_placeholder || (isCron ? '*/15 * * * *' : 'e.g. */15 * * * *');
+                    const cronPreview = isCron
+                        ? `<div class="smart-cron-preview" data-cron-preview-for="${Utils.escapeHtml(field.key)}">Runs…</div>`
+                        : '';
                     // Nested .form-group so visible_when hides it by display:none.
                     input += `<div class="form-group smart-custom-input-group" data-visible-when='${JSON.stringify({field: field.key, equals: '__custom__'})}'>
-                        <input type="text" id="${customId}" class="form-input smart-custom-input" data-custom-for="${Utils.escapeHtml(field.key)}" placeholder="${Utils.escapeHtml(field.custom_placeholder || 'e.g. */15 * * * *')}">
+                        <input type="text" id="${customId}" class="form-input smart-custom-input${cronClass}" data-custom-for="${Utils.escapeHtml(field.key)}" placeholder="${Utils.escapeHtml(placeholder)}"${isCron ? ' autocomplete="off" spellcheck="false"' : ''}>
+                        ${cronPreview}
                         ${field.custom_hint ? `<div class="form-hint">${Utils.escapeHtml(field.custom_hint)}</div>` : ''}
                     </div>`;
                 }
@@ -1525,6 +1691,86 @@ const SmartTableComponent = {
                                 data-field-key="${Utils.escapeHtml(field.key)}"
                                 size="6"><option disabled>Loading options…</option></select>`;
                 }
+                break;
+            }
+            case 'test_button': {
+                // Standalone action button inside a form (does not submit the
+                // form). POSTs the current form values to `endpoint` and
+                // renders the agent's {ok, message, result} response inline.
+                // `require_fields` gates the button until the named sibling
+                // fields all have non-empty values.
+                const endpoint = Utils.escapeHtml(field.endpoint || '');
+                const methodAttr = Utils.escapeHtml((field.method || 'POST').toUpperCase());
+                const require = Array.isArray(field.require_fields) ? field.require_fields.join(',') : '';
+                const btnLabel = Utils.escapeHtml(field.button_label || field.label || 'Run');
+                return `<div class="form-group smart-test-button-group">
+                    ${field.label ? `<div class="form-label">${Utils.escapeHtml(field.label)}</div>` : ''}
+                    <button type="button" class="btn btn-secondary smart-test-button"
+                            data-field-key="${Utils.escapeHtml(field.key)}"
+                            data-endpoint="${endpoint}"
+                            data-method="${methodAttr}"
+                            data-require-fields="${Utils.escapeHtml(require)}"
+                            onclick="SmartTableComponent._runTestButton(this)">
+                        ${btnLabel}
+                    </button>
+                    <div class="smart-test-button-result" data-result-for="${Utils.escapeHtml(field.key)}"></div>
+                    ${hint}
+                </div>`;
+            }
+            case 'remote_value': {
+                // Read-only display field populated by GETting a sibling
+                // field's value through the add-on proxy. Watches
+                // `depends_on`; when it matches `validate_regex` (if set),
+                // interpolates `{form.X}` into `endpoint` and renders the
+                // response (via `value_path` dot-path, or the `public_key` /
+                // `value` / `key` / `message` fallback) in a readonly
+                // textarea with a Copy button. Purely display — no form
+                // value is emitted.
+                const depends = Utils.escapeHtml(field.depends_on || '');
+                const endpoint = Utils.escapeHtml(field.endpoint || '');
+                const method = Utils.escapeHtml((field.method || 'GET').toUpperCase());
+                const regex = Utils.escapeHtml(field.validate_regex || '');
+                const valuePath = Utils.escapeHtml(field.value_path || '');
+                const showCopy = field.copy_button !== false;
+                const rows = Number.isFinite(field.rows) ? field.rows : 2;
+                return `<div class="form-group smart-remote-value-group">
+                    ${field.label ? `<div class="form-label">${Utils.escapeHtml(field.label)}</div>` : ''}
+                    <div class="smart-remote-value-wrap"
+                         data-remote-field="${Utils.escapeHtml(field.key)}"
+                         data-depends-on="${depends}"
+                         data-endpoint="${endpoint}"
+                         data-method="${method}"
+                         data-validate-regex="${regex}"
+                         data-value-path="${valuePath}">
+                        <textarea readonly class="form-input smart-remote-value-display"
+                                  data-display-for="${Utils.escapeHtml(field.key)}"
+                                  placeholder="${Utils.escapeHtml(placeholder || '')}"
+                                  rows="${rows}"
+                                  spellcheck="false"></textarea>
+                        ${showCopy ? `<button type="button" class="btn btn-secondary smart-remote-value-copy"
+                                               onclick="SmartTableComponent._copyRemoteValue(this)"
+                                               disabled>Copy</button>` : ''}
+                    </div>
+                    <div class="smart-remote-value-status" data-status-for="${Utils.escapeHtml(field.key)}"></div>
+                    ${hint}
+                </div>`;
+            }
+            case 'cron': {
+                // 5-field cron expression (minute hour day month weekday) with
+                // live plain-language preview. `_updateCronPreviews` runs on
+                // every input event (wired from `_openActionModal`) and fills
+                // the preview element.
+                const cronVal = initialVal != null ? String(initialVal) : '';
+                input = `<input type="text" id="${id}" class="form-input smart-cron-input"
+                            data-field-key="${Utils.escapeHtml(field.key)}"
+                            value="${Utils.escapeHtml(cronVal)}"
+                            placeholder="${Utils.escapeHtml(placeholder || '*/15 * * * *')}"
+                            ${field.required ? 'required' : ''}
+                            autocomplete="off"
+                            spellcheck="false">
+                        <div class="smart-cron-preview" data-cron-preview-for="${Utils.escapeHtml(field.key)}">
+                            ${cronVal ? Utils.escapeHtml(this._describeCron(cronVal)) : 'Runs…'}
+                        </div>`;
                 break;
             }
             case 'checkbox':
@@ -1569,6 +1815,77 @@ const SmartTableComponent = {
         return undefined;
     },
 
+    // Translate a 5-field cron expression into plain English. Handles the
+    // common forms (`*`, `*/N`, `a,b,c`, `a-b`, single value) in each column;
+    // anything exotic falls through to a literal echo so the user can at least
+    // read back what they typed. Returns an error string for malformed input
+    // so the user gets immediate feedback before submitting.
+    _describeCron(expr) {
+        if (!expr || typeof expr !== 'string') return 'Invalid — enter 5 space-separated fields';
+        const parts = expr.trim().split(/\s+/);
+        if (parts.length !== 5) return 'Invalid — expected 5 fields (minute hour day month weekday)';
+        const [mn, hr, dom, mo, dow] = parts;
+        const valid = /^(\*|\*\/\d+|\d+(-\d+)?(\/\d+)?|(\d+)(,\d+)*)$/;
+        if (!parts.every(p => valid.test(p))) return 'Invalid cron expression';
+
+        const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const moNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        const timeOf = () => {
+            if (hr === '*' && mn === '*') return 'every minute';
+            if (hr === '*' && /^\*\/\d+$/.test(mn)) return `every ${mn.slice(2)} minutes`;
+            if (/^\*\/\d+$/.test(hr) && mn === '0') return `every ${hr.slice(2)} hours`;
+            if (mn === '0' && hr === '*') return 'at the top of every hour';
+            if (/^\d+$/.test(mn) && /^\d+$/.test(hr)) {
+                const h = String(hr).padStart(2, '0'), m = String(mn).padStart(2, '0');
+                return `at ${h}:${m}`;
+            }
+            return `at minute ${mn}, hour ${hr}`;
+        };
+
+        const dayOf = () => {
+            if (dom === '*' && mo === '*' && dow === '*') return 'every day';
+            if (dom === '*' && mo === '*' && /^\d+$/.test(dow)) return `every ${dowNames[+dow] || dow}`;
+            if (dom === '*' && mo === '*' && /^\d+(,\d+)+$/.test(dow)) {
+                return `on ${dow.split(',').map(d => dowNames[+d] || d).join(', ')}`;
+            }
+            if (/^\d+$/.test(dom) && mo === '*' && dow === '*') return `on day ${dom} of every month`;
+            if (/^\d+$/.test(dom) && /^\d+$/.test(mo) && dow === '*') return `on ${moNames[+mo] || mo} ${dom}`;
+            return `dom=${dom} mo=${mo} dow=${dow}`;
+        };
+
+        return `Runs ${timeOf()}, ${dayOf()}.`;
+    },
+
+    // Refresh every cron preview in the modal. Called on any form input so
+    // the preview tracks what the user is typing.
+    _updateCronPreviews(modalEl) {
+        if (!modalEl) return;
+        modalEl.querySelectorAll('.smart-cron-input').forEach(inp => {
+            // `data-field-key` is present on top-level cron fields; the
+            // `custom_input_type: "cron"` variant lives under a select's
+            // `allow_custom` wrap with `data-custom-for` instead.
+            const key = inp.dataset.fieldKey || inp.dataset.customFor;
+            if (!key) return;
+            const preview = modalEl.querySelector(`[data-cron-preview-for="${key.replace(/"/g, '\\"')}"]`);
+            if (!preview) return;
+            const desc = this._describeCron(inp.value);
+            preview.textContent = desc;
+            preview.classList.toggle('smart-cron-preview-error', desc.startsWith('Invalid'));
+        });
+    },
+
+    // Map a manifest `safety_tier` to the CSS variant used by action buttons.
+    // `black` is the irreversible/destructive tier (destroy pool, force import)
+    // — it renders as a solid red fill so it visually outweighs the outlined
+    // red-bordered `red` tier.
+    _tierVariant(tier) {
+        if (tier === 'red') return 'danger';
+        if (tier === 'yellow') return 'warning';
+        if (tier === 'black') return 'irreversible';
+        return 'primary';
+    },
+
     // Resolve the agent_id for a given row: prefer `row.agent_id` so cross-
     // agent lists (e.g., aggregated drives) dispatch each action to its owning
     // host, and fall back to the page-level selector for single-agent tables.
@@ -1595,13 +1912,20 @@ const SmartTableComponent = {
         return `${resolved}${sep}agent_id=${encodeURIComponent(id)}`;
     },
 
-    _interpolate(template, row) {
+    _interpolate(template, ctx) {
         if (!template) return '';
+        // Support `{row.X}` (first-class), `{form.X}` (when ctx has a `form`
+        // object — callers spread formValues into both the top level and a
+        // `form` namespace so either works), and bare `{X}` for top-level keys.
         return String(template)
             .replace(/\{row\.([a-zA-Z0-9_]+)\}/g, (_, key) =>
-                row && row[key] != null ? String(row[key]) : '')
+                ctx && ctx.row && ctx.row[key] != null ? String(ctx.row[key])
+                : ctx && ctx[key] != null ? String(ctx[key]) : '')
+            .replace(/\{form\.([a-zA-Z0-9_]+)\}/g, (_, key) =>
+                ctx && ctx.form && ctx.form[key] != null ? String(ctx.form[key])
+                : ctx && ctx[key] != null ? String(ctx[key]) : '')
             .replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (m, key) =>
-                row && row[key] != null ? String(row[key]) : m);
+                ctx && ctx[key] != null ? String(ctx[key]) : m);
     },
 
     // Render a grid of clickable cards for `multi-select` with
@@ -1710,19 +2034,20 @@ const SmartTableComponent = {
 
     // ─── options_from loader ─────────────────────────────────────────────
 
-    async _loadFieldOptions(modalEl, field, addonId) {
+    async _loadFieldOptions(modalEl, field, addonId, row) {
         const sel = modalEl.querySelector(`[data-field-key="${field.key.replace(/"/g, '\\"')}"]`);
         if (!sel) return;
         if (!addonId) return;
 
         let path = field.options_from;
         if (typeof path !== 'string') return;
-        if (typeof ManifestRenderer !== 'undefined' && ManifestRenderer.getSelectedAgentId) {
-            const agentId = ManifestRenderer.getSelectedAgentId();
-            if (agentId) {
-                const sep = path.includes('?') ? '&' : '?';
-                path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
-            }
+        // Prefer the row's agent_id (cross-agent aggregated tables) over the
+        // page-level selector so dropdowns show options from the host that
+        // owns the row being acted on.
+        const agentId = this._resolveAgentId(row);
+        if (agentId) {
+            const sep = path.includes('?') ? '&' : '?';
+            path += `${sep}agent_id=${encodeURIComponent(agentId)}`;
         }
 
         try {
@@ -1820,6 +2145,77 @@ const SmartTableComponent = {
         }
     },
 
+    // Standalone in-form action button (e.g. "Test Connection"). Validates
+    // that `require_fields` are filled, POSTs the current form values to the
+    // agent endpoint through the add-on proxy, and renders the JSON response
+    // inline below the button. Never closes the modal or refreshes tables —
+    // this is a diagnostic, not a write.
+    async _runTestButton(btnEl) {
+        const modalEl = btnEl.closest('.smart-action-modal');
+        if (!modalEl) return;
+        const ctx = modalEl._smartAction;
+        if (!ctx) return;
+        const entry = this._tables[ctx.compId];
+        if (!entry || !entry.addonId) return;
+
+        const fieldKey = btnEl.dataset.fieldKey || '';
+        const resultEl = modalEl.querySelector(
+            `.smart-test-button-result[data-result-for="${CSS.escape(fieldKey)}"]`
+        );
+        const endpoint = btnEl.dataset.endpoint || '';
+        const method = (btnEl.dataset.method || 'POST').toUpperCase();
+        const requireKeys = (btnEl.dataset.requireFields || '')
+            .split(',').map(s => s.trim()).filter(Boolean);
+
+        const formValues = this._collectFormValues(modalEl);
+        const missing = requireKeys.filter(k => {
+            const v = formValues[k];
+            return v == null || v === '' || (Array.isArray(v) && v.length === 0);
+        });
+        if (missing.length && resultEl) {
+            resultEl.className = 'smart-test-button-result smart-test-button-result-error';
+            resultEl.textContent = `Fill required fields first: ${missing.join(', ')}`;
+            return;
+        }
+
+        if (resultEl) {
+            resultEl.className = 'smart-test-button-result smart-test-button-result-pending';
+            resultEl.textContent = 'Testing…';
+        }
+        const origLabel = btnEl.textContent;
+        btnEl.disabled = true;
+        btnEl.textContent = 'Testing…';
+
+        try {
+            const path = this._appendAgentIdToPath(endpoint, ctx.row);
+            const proxyURL = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
+                + (method !== 'GET' && method !== 'POST' ? `&method=${method}` : '');
+            const init = {
+                method: method === 'GET' ? 'GET' : 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            };
+            if (init.method !== 'GET') init.body = JSON.stringify(formValues);
+            const resp = await fetch(proxyURL, init);
+            const data = await resp.json().catch(() => ({}));
+            if (resultEl) {
+                const ok = resp.ok && data.ok !== false;
+                resultEl.className = `smart-test-button-result smart-test-button-result-${ok ? 'ok' : 'error'}`;
+                const successMsg = data.message
+                    || (data.dataset ? `Connected — remote dataset ${data.dataset} is reachable` : 'Success');
+                const errorMsg = data.message || data.error || `Request failed (HTTP ${resp.status})`;
+                resultEl.textContent = ok ? successMsg : errorMsg;
+            }
+        } catch (e) {
+            if (resultEl) {
+                resultEl.className = 'smart-test-button-result smart-test-button-result-error';
+                resultEl.textContent = `Request failed: ${e.message}`;
+            }
+        } finally {
+            btnEl.disabled = false;
+            btnEl.textContent = origLabel;
+        }
+    },
+
     // ─── Submit ──────────────────────────────────────────────────────────
 
     async _submitActionFromModal(modalEl) {
@@ -1843,6 +2239,23 @@ const SmartTableComponent = {
                 errEl.textContent = `Type "${expected}" exactly to confirm.`;
                 return;
             }
+        }
+
+        // Client-side cron validation for any field declared as type=cron or
+        // a select with `allow_custom` + `custom_input_type: "cron"`. For
+        // select+cron the substituted value only reaches here when the user
+        // chose __custom__; presets are always valid so they fall through.
+        for (const f of (ctx.cfg.fields || [])) {
+            const isCronField = f.type === 'cron'
+                || (f.type === 'select' && f.allow_custom && f.custom_input_type === 'cron');
+            if (!isCronField) continue;
+            const raw = String(formValues[f.key] || '').trim();
+            if (!raw) {
+                if (f.required) { errEl.textContent = `${f.label || f.key} is required.`; return; }
+                continue;
+            }
+            const desc = this._describeCron(raw);
+            if (desc.startsWith('Invalid')) { errEl.textContent = `${f.label || f.key}: ${desc}`; return; }
         }
 
         const path = this._appendAgentIdToPath(ctx.action.action.endpoint, ctx.row);
@@ -1871,6 +2284,19 @@ const SmartTableComponent = {
                 Utils.toast(toastMsg, 'error');
                 return;
             }
+            // Async actions: agent returned a job handle instead of a final
+            // result. Swap the modal into a progress overlay that polls the
+            // job endpoint until a terminal status, then close + toast.
+            // Manifest opts in via `action.async: true`. Response must carry
+            // `{job_id}`; optional `action.poll_endpoint` / `poll_interval_seconds`
+            // / `cancel_endpoint` / `cancel_method` overrides control the
+            // polling + cancel paths (defaults: `/api/jobs/{job_id}`, 2 s,
+            // DELETE to the same path).
+            if (ctx.action.action.async && data && data.job_id) {
+                this._startProgressOverlay(modalEl, ctx, formValues, data.job_id);
+                return;
+            }
+
             Modals.close(submitBtn);
             const successTmpl = ctx.cfg.success_message;
             const successMsg = successTmpl
@@ -1905,11 +2331,213 @@ const SmartTableComponent = {
         }
     },
 
+    // ─── Async progress overlay ──────────────────────────────────────────
+    //
+    // Generic in-modal progress reporter for actions declared with
+    // `action.async: true`. Replaces the form body (keeping the modal
+    // chrome) with a progress bar + phase/ETA readout, polls the job
+    // endpoint on `poll_interval_seconds` (default 2), and closes the
+    // modal + toasts on terminal status. Cancel button fires the
+    // `cancel_endpoint` (default `DELETE /api/jobs/{job_id}`); no-op on
+    // already-terminal jobs.
+    //
+    // Expected poll response shape — all fields optional except `status`:
+    //   { status, phase, phase_detail, progress_percent, message,
+    //     fail_reason, eta_sec, elapsed_sec }
+    // Terminal statuses: completed, failed, cancelled (plus defensive
+    // aliases: succeeded, success, done, error).
+    _startProgressOverlay(modalEl, ctx, formValues, jobId) {
+        const entry = this._tables[ctx.compId];
+        if (!entry || !entry.addonId) return;
+        const cfg = ctx.action.action;
+        const pollPath = cfg.poll_endpoint || '/api/jobs/{job_id}';
+        const cancelPath = cfg.cancel_endpoint || '/api/jobs/{job_id}';
+        const cancelMethod = (cfg.cancel_method || 'DELETE').toUpperCase();
+        const intervalMs = Math.max(500,
+            Number(cfg.poll_interval_seconds) ? Number(cfg.poll_interval_seconds) * 1000 : 2000);
+        const interpCtx = { ...(ctx.row || {}), ...formValues, form: formValues, job_id: jobId };
+
+        // Replace the whole modal-body with the overlay — the form, preview
+        // pane, and error region are all superseded.
+        const body = modalEl.querySelector('.modal-body');
+        const cancelDisabled = cfg.cancel_endpoint === false || cfg.cancelable === false;
+        if (body) {
+            body.innerHTML = `
+                <div class="smart-progress-overlay">
+                    <div class="smart-progress-phase">Queued…</div>
+                    <div class="smart-progress-bar-outer">
+                        <div class="smart-progress-bar-inner" style="width: 0%"></div>
+                    </div>
+                    <div class="smart-progress-meta">
+                        <span class="smart-progress-percent">0%</span>
+                        <span class="smart-progress-elapsed"></span>
+                        <span class="smart-progress-eta"></span>
+                    </div>
+                    <div class="smart-progress-message"></div>
+                    <div class="smart-progress-error" hidden></div>
+                </div>`;
+        }
+
+        // The footer Cancel (close modal without running cancel API) stays
+        // available as a "detach" option. The primary button becomes the
+        // in-flight cancel.
+        const submitBtn = modalEl.querySelector('#smart-action-submit');
+        if (submitBtn) {
+            submitBtn.textContent = 'Cancel Operation';
+            submitBtn.className = 'btn btn-warning smart-progress-cancel';
+            submitBtn.disabled = !!cancelDisabled;
+            submitBtn.onclick = async () => {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Cancelling…';
+                try {
+                    const path = this._interpolate(cancelPath, interpCtx);
+                    const url = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`
+                        + (cancelMethod !== 'GET' && cancelMethod !== 'POST' ? `&method=${cancelMethod}` : '');
+                    const init = {
+                        method: cancelMethod === 'GET' ? 'GET' : cancelMethod === 'POST' ? 'POST' : 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                    };
+                    const r = await fetch(url, init);
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    // Don't change status locally — the next poll will see
+                    // `cancelled` and trigger the terminal branch.
+                } catch (e) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Cancel Operation';
+                    const errBox = modalEl.querySelector('.smart-progress-error');
+                    if (errBox) {
+                        errBox.hidden = false;
+                        errBox.textContent = `Cancel failed: ${e.message}`;
+                    }
+                }
+            };
+        }
+
+        // Poll loop. Stored on the modal so we can clear on close; also
+        // self-clears when the modal is detached from the DOM.
+        let pollBusy = false;
+        const tick = async () => {
+            if (!modalEl.isConnected) {
+                clearInterval(modalEl._progressTimer);
+                modalEl._progressTimer = null;
+                return;
+            }
+            if (pollBusy) return;
+            pollBusy = true;
+            try {
+                const path = this._interpolate(pollPath, interpCtx);
+                const url = `/api/addons/${entry.addonId}/proxy?path=${encodeURIComponent(path)}`;
+                const r = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                if (!r.ok) {
+                    if (r.status === 404) {
+                        // Job vanished (GC'd after completion in some agents).
+                        this._finishProgressOverlay(modalEl, ctx, formValues,
+                            { status: 'completed', message: 'Job finished' });
+                    }
+                    return;
+                }
+                const state = await r.json().catch(() => ({}));
+                this._renderProgressState(modalEl, state);
+                if (this._isTerminalStatus(state.status)) {
+                    this._finishProgressOverlay(modalEl, ctx, formValues, state);
+                }
+            } catch (_) {
+                // Transient network failures — keep polling.
+            } finally {
+                pollBusy = false;
+            }
+        };
+        modalEl._progressTimer = setInterval(tick, intervalMs);
+        tick(); // fire immediately so the first frame isn't blank for `intervalMs`
+    },
+
+    _isTerminalStatus(status) {
+        if (!status) return false;
+        const s = String(status).toLowerCase();
+        return s === 'completed' || s === 'failed' || s === 'cancelled' || s === 'canceled'
+            || s === 'succeeded' || s === 'success' || s === 'done' || s === 'error';
+    },
+
+    _renderProgressState(modalEl, state) {
+        const phaseEl = modalEl.querySelector('.smart-progress-phase');
+        const barEl = modalEl.querySelector('.smart-progress-bar-inner');
+        const pctEl = modalEl.querySelector('.smart-progress-percent');
+        const elapsedEl = modalEl.querySelector('.smart-progress-elapsed');
+        const etaEl = modalEl.querySelector('.smart-progress-eta');
+        const msgEl = modalEl.querySelector('.smart-progress-message');
+        if (!phaseEl) return;
+
+        const pct = Number(state.progress_percent ?? state.progress ?? state.percent);
+        const pctClamped = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
+        if (barEl) barEl.style.width = `${pctClamped}%`;
+        if (pctEl) pctEl.textContent = Number.isFinite(pct) ? `${pctClamped.toFixed(pctClamped < 10 ? 1 : 0)}%` : '';
+
+        const phase = state.phase ? String(state.phase) : '';
+        const phaseDetail = state.phase_detail ? String(state.phase_detail) : '';
+        const phaseText = [phase, phaseDetail].filter(Boolean).join(' — ');
+        if (phaseEl) phaseEl.textContent = phaseText || (state.status || 'Running');
+
+        if (elapsedEl) elapsedEl.textContent = state.elapsed_sec != null
+            ? `Elapsed ${this._formatDuration(state.elapsed_sec)}` : '';
+        if (etaEl) etaEl.textContent = state.eta_sec != null && state.eta_sec > 0
+            ? `ETA ${this._formatDuration(state.eta_sec)}` : '';
+        if (msgEl) msgEl.textContent = state.message || '';
+    },
+
+    _finishProgressOverlay(modalEl, ctx, formValues, state) {
+        if (modalEl._progressTimer) {
+            clearInterval(modalEl._progressTimer);
+            modalEl._progressTimer = null;
+        }
+        const submitBtn = modalEl.querySelector('#smart-action-submit');
+        if (submitBtn) {
+            submitBtn.textContent = 'Close';
+            submitBtn.className = 'btn btn-primary';
+            submitBtn.disabled = false;
+            submitBtn.onclick = () => Modals.close(submitBtn);
+        }
+
+        const s = String(state.status || '').toLowerCase();
+        const ok = s === 'completed' || s === 'succeeded' || s === 'success' || s === 'done';
+        const errBox = modalEl.querySelector('.smart-progress-error');
+        if (!ok && errBox) {
+            errBox.hidden = false;
+            errBox.textContent = state.fail_reason || state.error || state.message || `Job ${s || 'failed'}`;
+        }
+        // Fill final progress state one last time for the visual.
+        this._renderProgressState(modalEl, state);
+
+        const entry = this._tables[ctx.compId];
+        if (ok) {
+            const successTmpl = ctx.cfg.success_message;
+            const successMsg = successTmpl
+                ? this._interpolate(successTmpl, { ...(ctx.row || {}), ...formValues })
+                : `${ctx.action.label || 'Action'} completed`;
+            Utils.toast(successMsg, 'success');
+        } else {
+            const reason = state.fail_reason || state.error || state.message || 'failed';
+            Utils.toast(`${ctx.action.label || 'Action'} ${s || 'failed'}: ${reason}`, 'error');
+        }
+        if (entry && entry.addonId) {
+            const addonId = entry.addonId;
+            const refreshAll = () => {
+                Object.keys(this._tables).forEach(id => {
+                    if (this._tables[id] && this._tables[id].addonId === addonId) this.refresh(id);
+                });
+            };
+            refreshAll();
+            setTimeout(refreshAll, 1500);
+        }
+    },
+
     _collectFormValues(modalEl) {
         const out = {};
         modalEl.querySelectorAll('[data-field-key]').forEach(el => {
             const key = el.dataset.fieldKey;
             if (!key) return;
+            // Skip non-input elements that happen to carry data-field-key
+            // (e.g. test_button, smart-disk-grid wrappers).
+            if (el.tagName === 'BUTTON') return;
             // Skip fields hidden by `visible_when` — the user never chose them.
             const group = el.closest('.form-group[data-visible-when]');
             if (group && group.style.display === 'none') return;

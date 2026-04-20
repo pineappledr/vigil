@@ -950,6 +950,18 @@
     font-family: var(--font-sans);
 }
 
+.smart-empty-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+.smart-empty-state svg {
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+
 .smart-col-name {
     font-family: var(--font-sans);
 }
@@ -2084,6 +2096,21 @@
     box-shadow: 0 6px 16px rgba(239, 68, 68, 0.45);
 }
 
+/* Black (irreversible) tier — solid red fill + outline so it visually
+   outweighs the red-bordered danger variant. Used for pool destroy and force
+   imports where there is no undo. */
+.smart-action-irreversible {
+    background: #b91c1c;
+    color: #fff;
+    border: 2px solid #7f1d1d;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.smart-action-irreversible:hover {
+    background: #991b1b;
+    box-shadow: 0 6px 18px rgba(185, 28, 28, 0.6);
+}
+
 /* Per-row action buttons stay compact — they live inside tight table rows. */
 .smart-row-action-btn {
     display: inline-flex;
@@ -2131,6 +2158,17 @@
 .smart-row-action-danger:hover {
     background: rgba(239, 68, 68, 0.12);
     color: var(--danger, #ef4444);
+}
+
+.smart-row-action-irreversible {
+    background: #b91c1c;
+    border-color: #7f1d1d;
+    color: #fff;
+    font-weight: 700;
+}
+.smart-row-action-irreversible:hover {
+    background: #991b1b;
+    color: #fff;
 }
 
 .smart-row-actions {
@@ -2710,6 +2748,170 @@
     letter-spacing: 0.04em;
     font-size: 0.7rem;
     font-weight: 600;
+}
+
+.smart-error-count {
+    display: inline-block;
+    min-width: 1.5em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.smart-error-count-ok {
+    background: var(--bg-tertiary, #0d1117);
+    color: var(--text-muted, #8b949e);
+}
+.smart-error-count-bad {
+    background: var(--danger, #ef4444);
+    color: #fff;
+}
+
+.smart-cron-input {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.02em;
+}
+.smart-cron-preview {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b949e);
+    font-style: italic;
+}
+.smart-cron-preview-error {
+    color: var(--danger, #ef4444);
+    font-style: normal;
+    font-weight: 500;
+}
+
+.smart-test-button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.smart-test-button-group .smart-test-button {
+    align-self: flex-start;
+}
+.smart-test-button-result {
+    font-size: 0.82rem;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+}
+.smart-test-button-result:not(:empty) { display: block; }
+.smart-test-button-result-pending {
+    color: var(--text-muted, #8b949e);
+    background: var(--bg-tertiary, #0d1117);
+    border-color: var(--border, #30363d);
+}
+.smart-test-button-result-ok {
+    color: #86efac;
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.smart-test-button-result-error {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.smart-remote-value-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.smart-remote-value-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.smart-remote-value-display {
+    flex: 1;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8rem;
+    resize: vertical;
+    min-height: 2.5em;
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+.smart-remote-value-display[readonly] {
+    background: var(--bg-tertiary, #0d1117);
+    color: var(--text-primary, #e6edf3);
+    cursor: text;
+}
+.smart-remote-value-copy {
+    align-self: flex-start;
+    white-space: nowrap;
+}
+.smart-remote-value-status {
+    font-size: 0.78rem;
+    color: var(--text-muted, #8b949e);
+    min-height: 1em;
+}
+.smart-remote-value-status-pending { color: var(--text-muted, #8b949e); font-style: italic; }
+.smart-remote-value-status-error   { color: var(--danger, #ef4444); font-weight: 500; }
+
+.smart-progress-overlay {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 4px;
+    min-width: 380px;
+}
+.smart-progress-phase {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary, #e6edf3);
+}
+.smart-progress-bar-outer {
+    height: 10px;
+    background: var(--bg-tertiary, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 5px;
+    overflow: hidden;
+}
+.smart-progress-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #3b82f6), #60a5fa);
+    transition: width 200ms ease-out;
+}
+.smart-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #8b949e);
+    font-variant-numeric: tabular-nums;
+}
+.smart-progress-percent {
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+}
+.smart-progress-message {
+    font-size: 0.82rem;
+    color: var(--text-muted, #8b949e);
+    padding: 6px 8px;
+    background: var(--bg-tertiary, #0d1117);
+    border-radius: 4px;
+    border: 1px solid var(--border, #30363d);
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    min-height: 1em;
+}
+.smart-progress-message:empty { display: none; }
+.smart-progress-error {
+    font-size: 0.85rem;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    padding: 8px 10px;
+    border-radius: 4px;
+    white-space: pre-wrap;
 }
 
 /* Discovery card — TrueNAS-style unused-disk callout */
