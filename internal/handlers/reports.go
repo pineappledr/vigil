@@ -258,7 +258,11 @@ func Hosts(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, hosts)
 }
 
-// DeleteHost removes a host and its data
+// DeleteHost removes a host and all of its hostname-keyed data: reports,
+// drive aliases, ZFS pools (cascades to devices/scrub history/datasets),
+// wearout history, and SMART attributes. Without the full cascade, a
+// later registration under the same hostname would adopt the orphan rows
+// (e.g. ZFS pools "coming back" attached to a fresh agent).
 func DeleteHost(w http.ResponseWriter, r *http.Request) {
 	hostname := strings.TrimSpace(r.PathValue("hostname"))
 	if err := validate.Hostname(hostname); err != nil {
@@ -266,27 +270,21 @@ func DeleteHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.DB.Exec("DELETE FROM reports WHERE hostname = ?", hostname)
-	if err != nil {
-		JSONError(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
+	deleted := agents.DeleteHostData(db.DB, hostname)
+	reportCount := deleted["reports"]
+	if reportCount == 0 && len(deleted) == 0 {
 		JSONError(w, "Host not found", http.StatusNotFound)
 		return
 	}
 
-	db.DB.Exec("DELETE FROM drive_aliases WHERE hostname = ?", hostname)
-
-	log.Printf("🗑️  Deleted host: %s (%d reports)", hostname, affected)
+	log.Printf("🗑️  Deleted host: %s — cascade: %v", hostname, deleted)
 	if s := auth.GetSessionFromContext(r); s != nil {
-		audit.LogEvent(db.DB, r, s.UserID, s.Username, "host_delete", "host", hostname, fmt.Sprintf("%d reports deleted", affected), "success")
+		audit.LogEvent(db.DB, r, s.UserID, s.Username, "host_delete", "host", hostname, fmt.Sprintf("cascade: %v", deleted), "success")
 	}
 	JSONResponse(w, map[string]interface{}{
 		"status":  "deleted",
-		"deleted": affected,
+		"deleted": reportCount,
+		"cascade": deleted,
 	})
 }
 
