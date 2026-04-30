@@ -825,10 +825,16 @@ func CheckAddonUpdates(w http.ResponseWriter, r *http.Request) {
 
 	// Compare against the addon's manifest version rather than the Docker
 	// tag, since most manifests reference ":latest" which would always
-	// differ from a semver tag.
-	currentVersion := strings.TrimPrefix(addon.Version, "v")
-	latestVersion := strings.TrimPrefix(latestTag, "v")
-	updateAvailable := latestTag != "" && latestVersion != currentVersion
+	// differ from a semver tag. Only flag an update when the registry
+	// version is strictly greater than the installed version.
+	updateAvailable := false
+	if latestTag != "" {
+		if current, ok := parseSemverTag(addon.Version); ok {
+			if latest, ok := parseSemverTag(latestTag); ok {
+				updateAvailable = compareSemverTag(latest, current) > 0
+			}
+		}
+	}
 
 	JSONResponse(w, map[string]interface{}{
 		"update_available": updateAvailable,
@@ -1003,44 +1009,44 @@ func parseImageRef(image string) (registry, repo string) {
 	return "docker.io", image
 }
 
+type semverTag struct {
+	major, minor, patch int
+	original            string
+}
+
+func parseSemverTag(tag string) (semverTag, bool) {
+	t := strings.TrimPrefix(tag, "v")
+	var s semverTag
+	n, _ := fmt.Sscanf(t, "%d.%d.%d", &s.major, &s.minor, &s.patch)
+	if n >= 2 {
+		s.original = tag
+		return s, true
+	}
+	return semverTag{}, false
+}
+
+func compareSemverTag(a, b semverTag) int {
+	if a.major != b.major {
+		return a.major - b.major
+	}
+	if a.minor != b.minor {
+		return a.minor - b.minor
+	}
+	return a.patch - b.patch
+}
+
 // findLatestTag returns the highest semver tag from the list, or empty if
-// the current tag is already the latest. Non-semver tags are ignored.
+// no semver tags are present. Non-semver tags are ignored.
 func findLatestTag(tags []string) string {
-	type semver struct {
-		major, minor, patch int
-		original            string
-	}
-
-	parseSemver := func(tag string) (semver, bool) {
-		t := strings.TrimPrefix(tag, "v")
-		var s semver
-		n, _ := fmt.Sscanf(t, "%d.%d.%d", &s.major, &s.minor, &s.patch)
-		if n >= 2 {
-			s.original = tag
-			return s, true
-		}
-		return semver{}, false
-	}
-
-	compareSemver := func(a, b semver) int {
-		if a.major != b.major {
-			return a.major - b.major
-		}
-		if a.minor != b.minor {
-			return a.minor - b.minor
-		}
-		return a.patch - b.patch
-	}
-
-	var best semver
+	var best semverTag
 	var found bool
 
 	for _, tag := range tags {
-		sv, ok := parseSemver(tag)
+		sv, ok := parseSemverTag(tag)
 		if !ok {
 			continue
 		}
-		if !found || compareSemver(sv, best) > 0 {
+		if !found || compareSemverTag(sv, best) > 0 {
 			best = sv
 			found = true
 		}
