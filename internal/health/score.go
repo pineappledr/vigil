@@ -3,11 +3,29 @@ package health
 import (
 	"database/sql"
 	"strings"
+	"sync"
+	"time"
 
 	"vigil/internal/smart"
 	"vigil/internal/wearout"
 	"vigil/internal/zfs"
 )
+
+// CacheTTL is how long a computed score is reused before recomputation.
+// The underlying queries (smart_attributes GROUP BY, per-host JSON unmarshal)
+// can take 10-20s on large datasets and hold a SQLite connection while
+// running, which starves writers and produces SQLITE_BUSY on /api/report
+// and /api/auth/login. Caching keeps the dashboard responsive and the
+// DB free for writes.
+var CacheTTL = 60 * time.Second
+
+var cache struct {
+	sync.Mutex
+	score    *HealthScore
+	computed time.Time
+	// inflight ensures a single goroutine recomputes while others wait.
+	inflight chan struct{}
+}
 
 // Component holds the deduction details for one scoring dimension.
 type Component struct {
@@ -38,8 +56,50 @@ func grade(score int) string {
 	}
 }
 
-// Calculate computes the overall health score from SMART, wearout, and ZFS data.
+// Calculate returns the cached health score if it is fresh enough,
+// otherwise it recomputes. Concurrent callers during a recompute share
+// the same in-flight computation so the heavy queries run at most once
+// per cache window.
 func Calculate(db *sql.DB) (*HealthScore, error) {
+	cache.Lock()
+	if cache.score != nil && time.Since(cache.computed) < CacheTTL {
+		score := cache.score
+		cache.Unlock()
+		return score, nil
+	}
+
+	if cache.inflight != nil {
+		wait := cache.inflight
+		cache.Unlock()
+		<-wait
+		cache.Lock()
+		score := cache.score
+		cache.Unlock()
+		if score != nil {
+			return score, nil
+		}
+		return computeScore(db)
+	}
+
+	cache.inflight = make(chan struct{})
+	wait := cache.inflight
+	cache.Unlock()
+
+	score, err := computeScore(db)
+
+	cache.Lock()
+	if err == nil {
+		cache.score = score
+		cache.computed = time.Now()
+	}
+	cache.inflight = nil
+	close(wait)
+	cache.Unlock()
+
+	return score, err
+}
+
+func computeScore(db *sql.DB) (*HealthScore, error) {
 	smartComp, err := smartComponent(db)
 	if err != nil {
 		return nil, err
@@ -68,6 +128,16 @@ func Calculate(db *sql.DB) (*HealthScore, error) {
 			"zfs":     zfsComp,
 		},
 	}, nil
+}
+
+// InvalidateCache clears the cached score; use after writes that would
+// change health (new report ingestion, drive removal, etc.) if a fresher
+// number is needed sooner than CacheTTL.
+func InvalidateCache() {
+	cache.Lock()
+	cache.score = nil
+	cache.computed = time.Time{}
+	cache.Unlock()
 }
 
 // smartComponent: −20 per CRITICAL drive, −5 per WARNING drive (max 40).
