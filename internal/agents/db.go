@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -154,8 +155,14 @@ func DeleteAgent(db *sql.DB, id int64) error {
 }
 
 // DeleteHostData removes all hostname-keyed data: reports, drive aliases,
-// ZFS pools (cascades to devices/scrub history), wearout history, and
-// SMART attributes.  Call this after DeleteAgent to fully clean up.
+// ZFS pools (cascades to devices/scrub history/datasets), wearout history,
+// and SMART attributes. Call this after DeleteAgent to fully clean up.
+//
+// Hostname comparison is case-insensitive: agents sometimes report
+// "Brain" while the registry has "brain" (or vice versa); a strict
+// equality miss would leave orphan rows that get UPDATEd in place when
+// a new agent registers under the same hostname, making old pools/drives
+// appear to "come back".
 func DeleteHostData(db *sql.DB, hostname string) (deleted map[string]int64) {
 	deleted = make(map[string]int64)
 
@@ -163,17 +170,18 @@ func DeleteHostData(db *sql.DB, hostname string) (deleted map[string]int64) {
 		label string
 		sql   string
 	}{
-		{"reports", "DELETE FROM reports WHERE hostname = ?"},
-		{"drive_aliases", "DELETE FROM drive_aliases WHERE hostname = ?"},
-		{"zfs_pools", "DELETE FROM zfs_pools WHERE hostname = ?"},
-		{"wearout_history", "DELETE FROM wearout_history WHERE hostname = ?"},
-		{"smart_attributes", "DELETE FROM smart_attributes WHERE hostname = ?"},
+		{"reports", "DELETE FROM reports WHERE LOWER(hostname) = LOWER(?)"},
+		{"drive_aliases", "DELETE FROM drive_aliases WHERE LOWER(hostname) = LOWER(?)"},
+		{"zfs_pools", "DELETE FROM zfs_pools WHERE LOWER(hostname) = LOWER(?)"},
+		{"wearout_history", "DELETE FROM wearout_history WHERE LOWER(hostname) = LOWER(?)"},
+		{"smart_attributes", "DELETE FROM smart_attributes WHERE LOWER(hostname) = LOWER(?)"},
 	}
 
 	for _, t := range tables {
 		result, err := db.Exec(t.sql, hostname)
 		if err != nil {
-			continue // table may not exist yet
+			log.Printf("DeleteHostData: %s for %q: %v", t.label, hostname, err)
+			continue
 		}
 		n, _ := result.RowsAffected()
 		if n > 0 {

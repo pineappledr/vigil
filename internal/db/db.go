@@ -20,7 +20,11 @@ func Init(path string) error {
 		return err
 	}
 
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)", path)
+	// 30s busy_timeout: SQLite serialises writers, so under load (concurrent
+	// agent reports + login session inserts + dashboard polls) writes can queue.
+	// 5s was too short and caused SQLITE_BUSY → 500 on /api/report and
+	// /api/auth/login while a slow read held the lock.
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(30000)", path)
 	DB, err = sql.Open("sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database at %s: %w", path, err)
