@@ -60,10 +60,9 @@ const ZFS = {
 
     // Collapsed state survives re-renders (auto-refresh) so the user's
     // expand/collapse choice isn't reset every polling cycle.
-    // Default: Datasets collapsed, everything else open.
-    _collapsedSections: {
-        'zfs-section-datasets': true,
-    },
+    // Default: every section open. The user can collapse what they don't
+    // want to see; the choice persists for the rest of the session.
+    _collapsedSections: {},
 
     // Per-dataset collapse state. Keys are `${hostname}|${dataset_name}` so
     // a dataset of the same name on two hosts is tracked independently.

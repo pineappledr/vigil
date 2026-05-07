@@ -458,7 +458,13 @@ func buildGotifyURL(f map[string]string) (string, error) {
 	return u, nil
 }
 
-// signal://host:port/source/recipient1/recipient2
+// signal://host:port/source/recipient1/recipient2[?disabletls=yes]
+//
+// signal-cli-rest-api is almost always self-hosted on plain HTTP, but
+// shoutrrr's signal service defaults to HTTPS — without disabletls=yes the
+// runtime fails with "http: server gave HTTP response to HTTPS client".
+// We use the user's host scheme as the TLS hint: explicit https:// keeps
+// TLS, anything else (http:// or bare host:port) disables it.
 func buildSignalURL(f map[string]string) (string, error) {
 	host := strings.TrimSpace(f["host"])
 	number := strings.TrimSpace(f["number"])
@@ -467,8 +473,11 @@ func buildSignalURL(f map[string]string) (string, error) {
 		return "", fmt.Errorf("Host, Sender Number, and Recipients are required")
 	}
 
+	useTLS := strings.HasPrefix(strings.ToLower(host), "https://")
 	host = strings.TrimPrefix(host, "http://")
 	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "HTTP://")
+	host = strings.TrimPrefix(host, "HTTPS://")
 	host = strings.TrimRight(host, "/")
 
 	// Build path: /source/recipient1/recipient2
@@ -480,7 +489,11 @@ func buildSignalURL(f map[string]string) (string, error) {
 		}
 	}
 
-	return fmt.Sprintf("signal://%s/%s", host, strings.Join(parts, "/")), nil
+	u := fmt.Sprintf("signal://%s/%s", host, strings.Join(parts, "/"))
+	if !useTLS {
+		u += "?disabletls=yes"
+	}
+	return u, nil
 }
 
 // generic+https://example.com/path  or  generic://example.com/path
