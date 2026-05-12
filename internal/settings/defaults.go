@@ -24,9 +24,13 @@ var DefaultSettings = []Setting{
 	{Category: "system", Key: "data_retention_days", Value: "365", ValueType: "int", Description: "Days to keep historical data"},
 	{Category: "system", Key: "timezone", Value: "UTC", ValueType: "string", Description: "Display timezone for timestamps"},
 
-	// Retention settings
-	{Category: "retention", Key: "notification_history_days", Value: "90", ValueType: "int", Description: "Days to keep notification history"},
-	{Category: "retention", Key: "smart_data_days", Value: "90", ValueType: "int", Description: "Days to keep SMART attribute and temperature history"},
+	// Retention settings.
+	// For *_days keys: 0 means "keep forever" (no time-based pruning).
+	{Category: "retention", Key: "notification_history_days", Value: "90", ValueType: "int", Description: "Days to keep notification history (0 = forever)"},
+	{Category: "retention", Key: "smart_data_days", Value: "90", ValueType: "int", Description: "Days to keep SMART attribute and temperature history (0 = forever)"},
+	{Category: "retention", Key: "report_history_days", Value: "90", ValueType: "int", Description: "Days to keep agent report history (0 = forever)"},
+	{Category: "retention", Key: "audit_log_days", Value: "90", ValueType: "int", Description: "Days to keep audit / activity log entries (0 = forever)"},
+	{Category: "retention", Key: "addon_data_days", Value: "0", ValueType: "int", Description: "Auto-remove add-ons that have been offline this many days, and their notification history (0 = forever)"},
 	{Category: "retention", Key: "host_history_limit", Value: "50", ValueType: "int", Description: "Maximum report history entries per host"},
 	{Category: "retention", Key: "notification_display_limit", Value: "50", ValueType: "int", Description: "Default number of notification history entries to display"},
 

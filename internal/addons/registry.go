@@ -161,6 +161,36 @@ func Deregister(db *sql.DB, id int64) error {
 	return expectOneRow(res, "deregister addon")
 }
 
+// PurgeStale removes add-ons that have not been seen for at least `days` days
+// (i.e. have been offline that long) and the notification_history rows that
+// reference them by name. A days value of 0 or less is a no-op ("keep
+// forever"). Returns the number of add-ons removed.
+//
+// Add-ons that never reported a heartbeat (last_seen IS NULL) are left alone —
+// they may be freshly registered and waiting for their first heartbeat.
+func PurgeStale(db *sql.DB, days int) (int64, error) {
+	if days <= 0 {
+		return 0, nil
+	}
+
+	cutoff := fmt.Sprintf("-%d days", days)
+
+	// Best-effort: drop notification history for the addons we're about to
+	// remove. notification_history isn't FK-linked to addons, so do it first.
+	db.Exec(`DELETE FROM notification_history
+		WHERE hostname IN (
+			SELECT name FROM addons
+			WHERE last_seen IS NOT NULL AND last_seen < datetime('now', ?)
+		)`, cutoff)
+
+	res, err := db.Exec(`DELETE FROM addons
+		WHERE last_seen IS NOT NULL AND last_seen < datetime('now', ?)`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("purge stale addons: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────
 
 func scanOne(row *sql.Row) (*Addon, error) {

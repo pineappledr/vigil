@@ -14,6 +14,7 @@ import (
 
 	"vigil/internal/addons"
 	"vigil/internal/agents"
+	"vigil/internal/audit"
 	"vigil/internal/auth"
 	"vigil/internal/config"
 	"vigil/internal/crypto"
@@ -141,34 +142,16 @@ func main() {
 	}
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
-	notifyDays := settings.GetInt(db.DB, "retention", "notification_history_days", 90)
-	if err := notify.PurgeOldHistory(db.DB, notifyDays); err != nil {
-		log.Printf("⚠️  Notification history purge: %v", err)
-	}
+	runRetentionSweep()
 
-	// Periodic cleanup (sessions, notification history, SMART data retention, backups)
+	// Periodic cleanup (sessions, data retention, backups)
 	go func() {
 		var lastBackupUnix int64
 		ticker := time.NewTicker(1 * time.Hour)
 		for range ticker.C {
 			auth.CleanupExpiredSessions()
 			agents.CleanupExpiredAgentSessions(db.DB)
-			nd := settings.GetInt(db.DB, "retention", "notification_history_days", 90)
-			if err := notify.PurgeOldHistory(db.DB, nd); err != nil {
-				log.Printf("⚠️  Notification history purge: %v", err)
-			}
-			sd := settings.GetInt(db.DB, "retention", "smart_data_days", 90)
-			if deleted, err := smart.CleanupOldSmartData(db.DB, sd); err != nil {
-				log.Printf("⚠️  SMART data cleanup: %v", err)
-			} else if deleted > 0 {
-				log.Printf("🧹 SMART data cleanup: removed %d old records", deleted)
-			}
-			rl := settings.GetInt(db.DB, "retention", "host_history_limit", 50)
-			if deleted, err := handlers.CleanupOldReports(rl); err != nil {
-				log.Printf("⚠️  Report cleanup: %v", err)
-			} else if deleted > 0 {
-				log.Printf("🧹 Report cleanup: removed %d old records", deleted)
-			}
+			runRetentionSweep()
 			handlers.RunScheduledBackup(&lastBackupUnix)
 		}
 	}()
@@ -254,6 +237,49 @@ func main() {
 	}
 
 	log.Println("👋 Server stopped")
+}
+
+// runRetentionSweep applies all configured data-retention policies once.
+// Each *_days setting of 0 means "keep forever" and is skipped by the
+// underlying cleanup functions. Called on startup and hourly thereafter.
+func runRetentionSweep() {
+	if err := notify.PurgeOldHistory(db.DB, settings.GetInt(db.DB, "retention", "notification_history_days", 90)); err != nil {
+		log.Printf("⚠️  Notification history purge: %v", err)
+	}
+
+	if deleted, err := smart.CleanupOldSmartData(db.DB, settings.GetInt(db.DB, "retention", "smart_data_days", 90)); err != nil {
+		log.Printf("⚠️  SMART/temperature data cleanup: %v", err)
+	} else if deleted > 0 {
+		log.Printf("🧹 SMART/temperature data cleanup: removed %d old records", deleted)
+	}
+
+	if deleted, err := handlers.CleanupOldReportsByAge(settings.GetInt(db.DB, "retention", "report_history_days", 90)); err != nil {
+		log.Printf("⚠️  Report age cleanup: %v", err)
+	} else if deleted > 0 {
+		log.Printf("🧹 Report age cleanup: removed %d old records", deleted)
+	}
+
+	if deleted, err := audit.PurgeOld(db.DB, settings.GetInt(db.DB, "retention", "audit_log_days", 90)); err != nil {
+		log.Printf("⚠️  Audit log cleanup: %v", err)
+	} else if deleted > 0 {
+		log.Printf("🧹 Audit log cleanup: removed %d old entries", deleted)
+	}
+
+	addonDays := settings.GetInt(db.DB, "retention", "addon_data_days", 0)
+	if deleted, err := addons.PurgeStale(db.DB, addonDays); err != nil {
+		log.Printf("⚠️  Stale add-on cleanup: %v", err)
+	} else if deleted > 0 {
+		log.Printf("🧹 Stale add-on cleanup: removed %d add-on(s) offline > %dd", deleted, addonDays)
+	}
+
+	// Count-based per-host report cap (independent of the age-based policy).
+	if limit := settings.GetInt(db.DB, "retention", "host_history_limit", 50); limit > 0 {
+		if deleted, err := handlers.CleanupOldReports(limit); err != nil {
+			log.Printf("⚠️  Report count cleanup: %v", err)
+		} else if deleted > 0 {
+			log.Printf("🧹 Report count cleanup: removed %d old records", deleted)
+		}
+	}
 }
 
 func setupRoutes(cfg models.Config) *http.ServeMux {

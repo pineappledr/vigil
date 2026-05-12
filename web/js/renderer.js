@@ -655,18 +655,67 @@ const Renderer = {
                         <div class="settings-item">
                             <div class="settings-item-info">
                                 <div class="settings-item-title">Notification History</div>
-                                <div class="settings-item-desc">Days to keep notification history</div>
+                                <div class="settings-item-desc">How long to keep notification history</div>
                             </div>
-                            <input type="number" class="settings-input" id="retention-notification-days" min="1" max="3650" value="90"
+                            <select class="settings-input" id="retention-notification-days"
                                 onchange="Settings.saveRetention('notification_history_days', this.value)">
+                                <option value="30">30 days</option>
+                                <option value="60">60 days</option>
+                                <option value="90">90 days</option>
+                                <option value="0">Forever</option>
+                            </select>
                         </div>
                         <div class="settings-item">
                             <div class="settings-item-info">
-                                <div class="settings-item-title">SMART Data</div>
-                                <div class="settings-item-desc">Days to keep SMART attribute and temperature history</div>
+                                <div class="settings-item-title">SMART &amp; Temperature History</div>
+                                <div class="settings-item-desc">How long to keep SMART attribute and temperature history</div>
                             </div>
-                            <input type="number" class="settings-input" id="retention-smart-days" min="1" max="3650" value="90"
+                            <select class="settings-input" id="retention-smart-days"
                                 onchange="Settings.saveRetention('smart_data_days', this.value)">
+                                <option value="30">30 days</option>
+                                <option value="60">60 days</option>
+                                <option value="90">90 days</option>
+                                <option value="0">Forever</option>
+                            </select>
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Agent Report History</div>
+                                <div class="settings-item-desc">How long to keep agent report history (the most recent report per host is always kept)</div>
+                            </div>
+                            <select class="settings-input" id="retention-report-days"
+                                onchange="Settings.saveRetention('report_history_days', this.value)">
+                                <option value="30">30 days</option>
+                                <option value="60">60 days</option>
+                                <option value="90">90 days</option>
+                                <option value="0">Forever</option>
+                            </select>
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Activity / Audit Log</div>
+                                <div class="settings-item-desc">How long to keep audit log entries</div>
+                            </div>
+                            <select class="settings-input" id="retention-audit-days"
+                                onchange="Settings.saveRetention('audit_log_days', this.value)">
+                                <option value="30">30 days</option>
+                                <option value="60">60 days</option>
+                                <option value="90">90 days</option>
+                                <option value="0">Forever</option>
+                            </select>
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Add-on Data</div>
+                                <div class="settings-item-desc">Auto-remove add-ons that have been offline this long, plus their notification history (helps keep Vigil responsive)</div>
+                            </div>
+                            <select class="settings-input" id="retention-addon-days"
+                                onchange="Settings.saveRetention('addon_data_days', this.value)">
+                                <option value="30">30 days</option>
+                                <option value="60">60 days</option>
+                                <option value="90">90 days</option>
+                                <option value="0">Forever</option>
+                            </select>
                         </div>
                         <div class="settings-item">
                             <div class="settings-item-info">

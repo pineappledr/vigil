@@ -544,8 +544,12 @@ type TemperatureRecord struct {
 	Timestamp   time.Time `json:"timestamp"`
 }
 
-// CleanupOldSmartData removes SMART data older than specified days
+// CleanupOldSmartData removes SMART data older than specified days.
+// A daysToKeep value of 0 or less is a no-op ("keep forever").
 func CleanupOldSmartData(db *sql.DB, daysToKeep int) (int64, error) {
+	if daysToKeep <= 0 {
+		return 0, nil
+	}
 	cutoffDate := time.Now().AddDate(0, 0, -daysToKeep).Format("2006-01-02 15:04:05")
 
 	// Clean up smart_attributes

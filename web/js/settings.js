@@ -11,13 +11,35 @@ const Settings = {
             const map = {};
             for (const s of items) map[s.key] = s.value;
 
-            const fields = {
+            // <select> dropdowns: 30 / 60 / 90 / 0 (Forever). If a stored value
+            // isn't one of the presets (legacy config), inject it as an extra
+            // option so the UI still reflects reality.
+            const selects = {
                 'retention-notification-days': 'notification_history_days',
                 'retention-smart-days': 'smart_data_days',
+                'retention-report-days': 'report_history_days',
+                'retention-audit-days': 'audit_log_days',
+                'retention-addon-days': 'addon_data_days',
+            };
+            for (const [id, key] of Object.entries(selects)) {
+                const el = document.getElementById(id);
+                if (!el || map[key] === undefined) continue;
+                const val = String(map[key]);
+                if (!Array.from(el.options).some(o => o.value === val)) {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = val === '0' ? 'Forever' : `${val} days`;
+                    el.appendChild(opt);
+                }
+                el.value = val;
+            }
+
+            // Plain numeric inputs.
+            const numbers = {
                 'retention-host-limit': 'host_history_limit',
                 'retention-notify-limit': 'notification_display_limit',
             };
-            for (const [id, key] of Object.entries(fields)) {
+            for (const [id, key] of Object.entries(numbers)) {
                 const el = document.getElementById(id);
                 if (el && map[key]) el.value = map[key];
             }
