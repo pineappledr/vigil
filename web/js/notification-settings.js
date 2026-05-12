@@ -287,7 +287,7 @@ const NotificationSettings = {
         });
 
         // Render order: match the category order from metadata.
-        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'System', 'Other'];
+        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'ZFS Manager', 'System', 'Other'];
         const sortedCategories = categoryOrder.filter(c => groups[c]);
 
         const severityLabel = (meta) => {
@@ -1032,7 +1032,7 @@ const NotificationSettings = {
             categories[cat].push(m);
         });
 
-        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'System', 'Other'];
+        const categoryOrder = ['Monitoring', 'Add-on / Job', 'SnapRAID', 'ZFS Manager', 'System', 'Other'];
         const sorted = categoryOrder.filter(c => categories[c]);
 
         return sorted.map(cat => {

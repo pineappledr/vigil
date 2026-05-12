@@ -53,6 +53,27 @@ func CleanupOldReports(limit int) (int64, error) {
 	return result.RowsAffected()
 }
 
+// CleanupOldReportsByAge deletes report rows older than the given number of
+// days, but always keeps at least the most recent report per host so a host
+// that hasn't reported in a while doesn't vanish from the dashboard.
+// A days value of 0 or less is a no-op ("keep forever").
+func CleanupOldReportsByAge(days int) (int64, error) {
+	if days <= 0 {
+		return 0, nil
+	}
+	result, err := db.DB.Exec(`DELETE FROM reports WHERE timestamp < datetime('now', ?)
+		AND id NOT IN (
+			SELECT id FROM (
+				SELECT id, ROW_NUMBER() OVER (PARTITION BY hostname ORDER BY timestamp DESC) AS rn
+				FROM reports
+			) WHERE rn = 1
+		)`, fmt.Sprintf("-%d days", days))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func init() {
 	go reportWorker()
 }

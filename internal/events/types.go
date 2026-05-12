@@ -48,6 +48,19 @@ const (
 	MaintenanceStarted  EventType = "maintenance_started"
 	MaintenanceComplete EventType = "maintenance_complete"
 	AutoFix             EventType = "auto_fix"
+	SnapraidAgentOffline EventType = "snapraid_agent_offline"
+	SnapraidAgentOnline  EventType = "snapraid_agent_online"
+
+	// ZFS Manager add-on events (emitted by the zfs-manager add-on, not the
+	// agent-report ZFS monitoring above)
+	ZMSnapshotTaskSucceeded   EventType = "snapshot_task_succeeded"
+	ZMScrubTaskStarted        EventType = "scrub_task_started"
+	ZMReplicationSucceeded    EventType = "replication_succeeded"
+	ZMRetentionCleanupDone    EventType = "retention_cleanup_completed"
+	ZMScrubCompleted          EventType = "scrub_completed"
+	ZMResilverCompleted       EventType = "resilver_completed"
+	ZMPoolExpansionCompleted  EventType = "pool_expansion_completed"
+	ZMDriveReplacementStarted EventType = "drive_replacement_started"
 
 	// System events
 	AddonDegraded EventType = "addon_degraded"
@@ -61,6 +74,7 @@ const (
 	CategoryMonitoring Category = "Monitoring"
 	CategoryAddonJob   Category = "Add-on / Job"
 	CategorySnapRAID   Category = "SnapRAID"
+	CategoryZFSManager Category = "ZFS Manager"
 	CategorySystem     Category = "System"
 )
 
@@ -90,6 +104,10 @@ var AllEventTypes = []EventType{
 	ManualJobStarted, ManualJobComplete, ScheduledJobStarted, ScheduledJobComplete,
 	// SnapRAID
 	GateFailed, MaintenanceStarted, MaintenanceComplete, AutoFix,
+	SnapraidAgentOffline, SnapraidAgentOnline,
+	// ZFS Manager
+	ZMSnapshotTaskSucceeded, ZMScrubTaskStarted, ZMReplicationSucceeded, ZMRetentionCleanupDone,
+	ZMScrubCompleted, ZMResilverCompleted, ZMPoolExpansionCompleted, ZMDriveReplacementStarted,
 	// System
 	AddonDegraded, AddonOnline,
 }
@@ -134,6 +152,17 @@ var AllEventTypeMeta = []EventTypeMeta{
 	{MaintenanceStarted, CategorySnapRAID, "Maintenance Started", SeverityInfo, 0, true},
 	{MaintenanceComplete, CategorySnapRAID, "Maintenance Complete", SeverityInfo, 0, true},
 	{AutoFix, CategorySnapRAID, "Auto Fix", SeverityWarning, 0, true},
+	{SnapraidAgentOffline, CategorySnapRAID, "SnapRAID Agent Offline", SeverityWarning, 3600, true},
+	{SnapraidAgentOnline, CategorySnapRAID, "SnapRAID Agent Online", SeverityInfo, 0, true},
+	// ZFS Manager
+	{ZMSnapshotTaskSucceeded, CategoryZFSManager, "Snapshot Task Succeeded", SeverityInfo, 0, false},
+	{ZMScrubTaskStarted, CategoryZFSManager, "Scrub Task Started", SeverityInfo, 0, true},
+	{ZMScrubCompleted, CategoryZFSManager, "Scrub Completed", SeverityInfo, 0, true},
+	{ZMResilverCompleted, CategoryZFSManager, "Resilver Completed", SeverityInfo, 0, true},
+	{ZMReplicationSucceeded, CategoryZFSManager, "Replication Succeeded", SeverityInfo, 0, true},
+	{ZMRetentionCleanupDone, CategoryZFSManager, "Snapshot Retention Cleanup", SeverityInfo, 0, false},
+	{ZMPoolExpansionCompleted, CategoryZFSManager, "Pool Expansion Completed", SeverityInfo, 0, true},
+	{ZMDriveReplacementStarted, CategoryZFSManager, "Drive Replacement Started", SeverityWarning, 0, true},
 	// System
 	{AddonDegraded, CategorySystem, "Add-on Degraded", SeverityWarning, 300, true},
 	{AddonOnline, CategorySystem, "Add-on Online", SeverityInfo, 0, true},
