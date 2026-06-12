@@ -142,7 +142,10 @@ func main() {
 	}
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
-	runRetentionSweep()
+	// Run the startup retention sweep in the background. On a large/overdue DB
+	// the cleanup DELETEs (and the VACUUM) can take minutes; doing it inline
+	// would block ListenAndServe and leave the server stuck "starting".
+	go runRetentionSweep()
 
 	// Periodic cleanup (sessions, data retention, backups)
 	go func() {
@@ -239,6 +242,15 @@ func main() {
 	log.Println("👋 Server stopped")
 }
 
+// lastVacuum tracks when the DB was last VACUUMed. Retention DELETEs free
+// pages inside the SQLite file but do not shrink it on disk; without a periodic
+// VACUUM the file grows unbounded (observed: vigil.db at ~5.8 GB while retention
+// was working). VACUUM is heavy and briefly locks the DB, so it runs at most
+// once per vacuumInterval, not every hourly sweep.
+var lastVacuum time.Time
+
+const vacuumInterval = 24 * time.Hour
+
 // runRetentionSweep applies all configured data-retention policies once.
 // Each *_days setting of 0 means "keep forever" and is skipped by the
 // underlying cleanup functions. Called on startup and hourly thereafter.
@@ -247,7 +259,11 @@ func runRetentionSweep() {
 		log.Printf("⚠️  Notification history purge: %v", err)
 	}
 
-	if deleted, err := smart.CleanupOldSmartData(db.DB, settings.GetInt(db.DB, "retention", "smart_data_days", 90)); err != nil {
+	// Default 15d: smart_attributes is by far the heaviest table (one row per
+	// attribute per disk per poll). On a multi-host install 90d reached ~20M
+	// rows / multi-GB; SMART history older than ~2 weeks has little diagnostic
+	// value (recent trend + the drive's own cumulative counters suffice).
+	if deleted, err := smart.CleanupOldSmartData(db.DB, settings.GetInt(db.DB, "retention", "smart_data_days", 15)); err != nil {
 		log.Printf("⚠️  SMART/temperature data cleanup: %v", err)
 	} else if deleted > 0 {
 		log.Printf("🧹 SMART/temperature data cleanup: removed %d old records", deleted)
@@ -278,6 +294,21 @@ func runRetentionSweep() {
 			log.Printf("⚠️  Report count cleanup: %v", err)
 		} else if deleted > 0 {
 			log.Printf("🧹 Report count cleanup: removed %d old records", deleted)
+		}
+	}
+
+	// Reclaim disk space from the pages freed by the deletes above. SQLite keeps
+	// freed pages inside the file unless VACUUMed (auto_vacuum is off here), so the
+	// file only ever grows. Throttled to once/day — VACUUM rewrites the whole file
+	// and takes a brief exclusive lock. Set retention.vacuum_enabled=0 to disable.
+	if settings.GetInt(db.DB, "retention", "vacuum_enabled", 1) > 0 &&
+		time.Since(lastVacuum) >= vacuumInterval {
+		start := time.Now()
+		if _, err := db.DB.Exec("VACUUM"); err != nil {
+			log.Printf("⚠️  DB VACUUM: %v", err)
+		} else {
+			lastVacuum = time.Now()
+			log.Printf("🧹 DB VACUUM completed in %s", time.Since(start).Round(time.Millisecond))
 		}
 	}
 }
