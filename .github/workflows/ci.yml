@@ -11,7 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GO_VERSION: '1.26.3'
+  GO_VERSION: '1.26.4'
   # Opt every JavaScript action in this workflow (including transitive ones
   # like actions/cache pulled in by setup-go and docker/build-push-action)
   # into Node.js 24. Node 20 is deprecated on GitHub Actions runners — forced
