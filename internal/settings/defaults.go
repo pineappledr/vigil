@@ -34,6 +34,9 @@ var DefaultSettings = []Setting{
 	{Category: "retention", Key: "host_history_limit", Value: "50", ValueType: "int", Description: "Maximum report history entries per host"},
 	{Category: "retention", Key: "notification_display_limit", Value: "50", ValueType: "int", Description: "Default number of notification history entries to display"},
 
+	// Agent settings
+	{Category: "agents", Key: "report_interval_seconds", Value: "3600", ValueType: "int", Description: "How often agents send reports (seconds). Presets: 60 / 900 / 1800 / 3600 / 43200 / 86400. The online/offline threshold is derived from this."},
+
 	// ZFS settings
 	{Category: "zfs", Key: "capacity_warning_pct", Value: "80", ValueType: "int", Description: "ZFS pool capacity warning threshold (%)"},
 	{Category: "zfs", Key: "capacity_critical_pct", Value: "90", ValueType: "int", Description: "ZFS pool capacity critical threshold (%)"},

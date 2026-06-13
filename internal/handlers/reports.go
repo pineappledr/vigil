@@ -122,14 +122,18 @@ func reportWorker() {
 // Report handles incoming agent reports.
 // Requires a valid agent session token: Authorization: Bearer <token>
 // allowedAgentIntervals are the report-interval presets (seconds) agents may
-// be told to use: 1m, 15m, 30m, 1h (default), 12h, 24h.
+// be told to use: 1m (default), 15m, 30m, 1h, 12h, 24h.
 var allowedAgentIntervals = map[int]bool{60: true, 900: true, 1800: true, 3600: true, 43200: true, 86400: true}
 
+// defaultAgentInterval is 1h. Larger intervals keep the DB small; the
+// online/offline threshold is derived from this interval (see the frontend's
+// State.offlineThresholdMinutes), so a long interval no longer makes healthy
+// agents look offline. Operators can change it from Settings.
 const defaultAgentInterval = 3600
 
 // agentReportInterval returns the centrally-configured agent report interval in
 // seconds, clamped to an allowed preset. Configurable via the "agents" /
-// "report_interval_seconds" setting (UI); anything off-preset falls back to 1h.
+// "report_interval_seconds" setting (UI); anything off-preset falls back to 60s.
 func agentReportInterval() int {
 	v := settings.GetInt(db.DB, "agents", "report_interval_seconds", defaultAgentInterval)
 	if !allowedAgentIntervals[v] {

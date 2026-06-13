@@ -24,6 +24,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isAuth = await Auth.checkStatus();
     if (!isAuth) return;
 
+    // Load the configured agent report interval so the offline threshold can be
+    // derived from it (a long interval shouldn't make healthy agents look down).
+    try {
+        const resp = await API.get('/api/settings/agents');
+        if (resp.ok) {
+            const items = await resp.json();
+            const row = (items || []).find(s => s.key === 'report_interval_seconds');
+            if (row) State.agentReportIntervalSeconds = parseInt(row.value, 10) || State.agentReportIntervalSeconds;
+        }
+    } catch { /* keep the default threshold */ }
+
     // Initialize version checking and add notification icon
     if (typeof Version !== 'undefined') {
         // Add notification icon to header

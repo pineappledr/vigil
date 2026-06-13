@@ -25,7 +25,19 @@ const State = {
 
     API_URL: '/api/history',
     REFRESH_INTERVAL: 30000,
+    // Fallback only. The real threshold is derived from the configured agent
+    // report interval (see offlineThresholdMinutes / agentReportIntervalSeconds)
+    // so a long interval doesn't make healthy agents look offline.
     OFFLINE_THRESHOLD_MINUTES: 10,
+    // Configured agent report interval (seconds); loaded from /api/settings/agents.
+    agentReportIntervalSeconds: 3600,
+
+    // Offline threshold = report interval × 3 (tolerate ~2 missed reports), but
+    // never less than 10 minutes (so short intervals still allow a brief gap).
+    offlineThresholdMinutes() {
+        const intervalMin = (this.agentReportIntervalSeconds || 3600) / 60;
+        return Math.max(this.OFFLINE_THRESHOLD_MINUTES, intervalMin * 3);
+    },
 
     init() {
         const savedSort = localStorage.getItem('vigil_server_sort');
@@ -101,7 +113,7 @@ const State = {
         if (!ts) return false;
         const date = Utils.parseUTC(ts);
         if (!date || isNaN(date)) return false;
-        return (Date.now() - date) / 60000 > this.OFFLINE_THRESHOLD_MINUTES;
+        return (Date.now() - date) / 60000 > this.offlineThresholdMinutes();
     },
 
     getTimeSinceUpdate(server) {
