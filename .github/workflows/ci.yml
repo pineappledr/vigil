@@ -19,6 +19,12 @@ env:
   # Ref: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Minimum-privilege default: the workflow token is read-only unless a job opts up.
+# Each job below already declares the exact scopes it needs (packages: write,
+# contents: write, etc.), so this only removes the implicit broad default.
+permissions:
+  contents: read
+
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # TEST JOB - Runs on every push/PR
