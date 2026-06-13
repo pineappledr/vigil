@@ -757,6 +757,7 @@ Vigil v3.0 introduces a multi-channel notification system powered by [Shoutrrr](
 | **Email (SMTP)** | Host, Port, Security (None / STARTTLS / SSL), Username, Password, From, To, Subject |
 | **Pushover** | User Key, App Token, Device, Title, Priority, Sound |
 | **Gotify** | Server URL, App Token, Priority |
+| **Signal** | Signal CLI REST API Host, Sender Number, Recipients |
 | **Generic Webhook** | Webhook URL |
 
 ### Features
@@ -768,6 +769,59 @@ Vigil v3.0 introduces a multi-channel notification system powered by [Shoutrrr](
 - **Quiet Hours** — Suppress non-critical alerts during configurable time windows.
 - **Digest Batching** — Aggregate frequent events into periodic summaries instead of individual messages.
 - **Secret Masking** — Password and token fields are masked in API responses. Editing a service preserves secrets unless you explicitly change them.
+
+### Setup Guide
+
+The fastest, least error-prone path is the UI wizard — it builds and validates the Shoutrrr URL for
+you, so you never hand-craft a raw URL.
+
+1. Go to **Settings → Notifications → Add Service**.
+2. Pick a provider from the dropdown and fill in the fields (see per-provider notes below).
+3. Click **Test** to send a test message and confirm it arrives **before** saving.
+4. **Save.** Then open **Event Rules** and tick which events this service should receive.
+
+> **Editing later:** secret fields (tokens, passwords) show as `••••••` and are preserved unless you
+> type a new value. You don't need to re-enter them just to change another field.
+
+#### Telegram
+
+1. Message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the **Bot Token**.
+2. Get your **Chat ID**: message your new bot, then open
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and read `chat.id`.
+3. In the wizard: paste **Bot Token** and **Chat ID**, click **Test**, then **Save**.
+
+#### Signal
+
+Signal sends through a self-hosted [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api)
+container — Vigil talks to it over HTTP. Two things trip people up; both are handled for you if you
+follow these steps:
+
+1. **Run signal-cli-rest-api** (e.g. alongside Vigil in the same Docker network) and **link your phone
+   first** — this is the step that's easy to miss. Generate a device-link QR:
+   ```bash
+   curl "http://<signal-host>:8080/v1/qrcodelink?device_name=vigil"
+   ```
+   Open it, then on your phone: **Signal → Settings → Linked Devices → Link New Device → scan**.
+   Confirm a number is linked: `curl http://<signal-host>:8080/v1/accounts` should return your number,
+   **not** `[]`. If it returns `[]`, sends will fail with *"User … is not registered."*
+2. In the Vigil wizard, fill in:
+   - **Host** — `host:port` of the REST API. If it's another container on the same network, use the
+     **service name** (e.g. `signal-api:8080`), not `localhost` (which resolves inside Vigil's own
+     container). Plain HTTP is assumed automatically; only prefix `https://` if you actually front it
+     with TLS.
+   - **Sender Number** — the linked number, with `+` (e.g. `+12015550123`).
+   - **Recipients** — comma-separated numbers (can be the same as the sender to message yourself).
+3. Click **Test**. A `400 / "User … is not registered"` means step 1 (linking) didn't complete; a
+   `connection refused` means the **Host** is wrong (check the container name / network).
+
+> **Why `localhost` fails:** Vigil runs in its own container, so `localhost:8080` points at Vigil, not
+> at signal-cli-rest-api. Use the REST API's Docker service name or its LAN IP.
+
+#### Advanced: raw Shoutrrr URL
+
+`POST /api/notifications/test-url` accepts a raw [Shoutrrr](https://shoutrrr.nickfedor.com/) URL if you
+prefer to bring your own. The wizard is recommended — it sets provider-specific quirks (like Signal's
+`?disabletls=yes` for plain-HTTP hosts) automatically.
 
 ---
 
