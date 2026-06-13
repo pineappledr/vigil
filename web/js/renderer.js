@@ -672,6 +672,7 @@ const Renderer = {
                             </div>
                             <select class="settings-input" id="retention-smart-days"
                                 onchange="Settings.saveRetention('smart_data_days', this.value)">
+                                <option value="15">15 days</option>
                                 <option value="30">30 days</option>
                                 <option value="60">60 days</option>
                                 <option value="90">90 days</option>
@@ -724,6 +725,21 @@ const Renderer = {
                             </div>
                             <input type="number" class="settings-input" id="retention-host-limit" min="10" max="1000" value="50"
                                 onchange="Settings.saveRetention('host_history_limit', this.value)">
+                        </div>
+                        <div class="settings-item">
+                            <div class="settings-item-info">
+                                <div class="settings-item-title">Agent Report Interval</div>
+                                <div class="settings-item-desc">How often agents send SMART/ZFS reports. Lower = fresher data but more rows; higher = smaller DB. Agents adopt the change on their next report.</div>
+                            </div>
+                            <select class="settings-input" id="agents-report-interval"
+                                onchange="Settings.saveAgentSetting('report_interval_seconds', this.value)">
+                                <option value="60">1 minute</option>
+                                <option value="900">15 minutes</option>
+                                <option value="1800">30 minutes</option>
+                                <option value="3600">1 hour</option>
+                                <option value="43200">12 hours</option>
+                                <option value="86400">24 hours</option>
+                            </select>
                         </div>
                         <div class="settings-item">
                             <div class="settings-item-info">

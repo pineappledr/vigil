@@ -121,6 +121,23 @@ func reportWorker() {
 
 // Report handles incoming agent reports.
 // Requires a valid agent session token: Authorization: Bearer <token>
+// allowedAgentIntervals are the report-interval presets (seconds) agents may
+// be told to use: 1m, 15m, 30m, 1h (default), 12h, 24h.
+var allowedAgentIntervals = map[int]bool{60: true, 900: true, 1800: true, 3600: true, 43200: true, 86400: true}
+
+const defaultAgentInterval = 3600
+
+// agentReportInterval returns the centrally-configured agent report interval in
+// seconds, clamped to an allowed preset. Configurable via the "agents" /
+// "report_interval_seconds" setting (UI); anything off-preset falls back to 1h.
+func agentReportInterval() int {
+	v := settings.GetInt(db.DB, "agents", "report_interval_seconds", defaultAgentInterval)
+	if !allowedAgentIntervals[v] {
+		return defaultAgentInterval
+	}
+	return v
+}
+
 func Report(w http.ResponseWriter, r *http.Request) {
 	session := GetAgentSessionFromRequest(r)
 	if session == nil {
@@ -182,7 +199,14 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	// Respond immediately — heavy processing is serialised through a single
 	// background worker so it never holds the SQLite write lock while the
 	// dashboard is trying to read /api/history.
-	JSONResponse(w, map[string]string{"status": "ok"})
+	//
+	// Echo back the centrally-configured report interval so agents can adopt it
+	// without per-host reconfiguration. Allowed presets (seconds): 60, 900, 1800,
+	// 3600 (default), 43200, 86400. Agents clamp to these and ignore anything else.
+	JSONResponse(w, map[string]interface{}{
+		"status":                 "ok",
+		"report_interval_seconds": agentReportInterval(),
+	})
 
 	// Enqueue background work (non-blocking; drops if queue is full).
 	select {

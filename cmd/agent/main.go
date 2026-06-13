@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -23,6 +24,10 @@ import (
 )
 
 var version = "dev"
+
+// desiredInterval is the report interval (seconds) the hub last advertised.
+// runInterval re-arms its ticker when this changes; sendReport updates it.
+var desiredInterval atomic.Int64
 
 // DriveReport contains SMART data for drives
 type DriveReport struct {
@@ -250,7 +255,9 @@ func runInterval(
 	dataDir string,
 ) {
 	log.Printf("📊 Reporting every %d seconds", interval)
-	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	current := interval
+	desiredInterval.Store(int64(interval))
+	ticker := time.NewTicker(time.Duration(current) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -260,6 +267,12 @@ func runInterval(
 			return
 		case <-ticker.C:
 			state = sendReport(ctx, serverURL, hostname, zfsAvailable, caps, fingerprint, keys, state, dataDir)
+			// Re-arm the ticker if the hub changed the interval (via sendReport).
+			if want := int(desiredInterval.Load()); want > 0 && want != current {
+				log.Printf("🔧 Report interval changed by hub: %ds → %ds", current, want)
+				current = want
+				ticker.Reset(time.Duration(current) * time.Second)
+			}
 		}
 	}
 }
@@ -299,7 +312,7 @@ func sendReport(
 		}
 	}
 
-	err := postReport(ctx, serverURL, report, state.SessionToken)
+	wantInterval, err := postReport(ctx, serverURL, report, state.SessionToken)
 	if err == errUnauthorized {
 		log.Println("🔄 Session expired, re-authenticating...")
 		newState, authErr := authenticate(state, fingerprint, keys, dataDir)
@@ -308,13 +321,19 @@ func sendReport(
 			return state
 		}
 		state = newState
-		if err = postReport(ctx, serverURL, report, state.SessionToken); err != nil {
+		if wantInterval, err = postReport(ctx, serverURL, report, state.SessionToken); err != nil {
 			log.Printf("❌ Report failed after re-auth: %v", err)
 			return state
 		}
 	} else if err != nil {
 		log.Printf("❌ %v", err)
 		return state
+	}
+
+	// Adopt the server-advertised report interval (0 = no change). runInterval
+	// reads this and re-arms its ticker when it differs from the current one.
+	if wantInterval > 0 {
+		desiredInterval.Store(int64(wantInterval))
 	}
 
 	logMsg := fmt.Sprintf("✅ Report sent (%d drives", len(report.Drives))
@@ -352,16 +371,18 @@ func collectZFSData(hostname string) (*zfs.ZFSReport, error) {
 	return zfs.CollectZFSData(hostname)
 }
 
-func postReport(ctx context.Context, serverURL string, report DriveReport, sessionToken string) error {
+// postReport POSTs a report and returns the server-advertised report interval
+// in seconds (0 if none/unchanged) along with any error.
+func postReport(ctx context.Context, serverURL string, report DriveReport, sessionToken string) (int, error) {
 	payload, err := json.Marshal(report)
 	if err != nil {
-		return fmt.Errorf("failed to marshal report: %v", err)
+		return 0, fmt.Errorf("failed to marshal report: %v", err)
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "POST", serverURL+"/api/report", bytes.NewBuffer(payload))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
+		return 0, fmt.Errorf("failed to create request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -370,15 +391,25 @@ func postReport(ctx context.Context, serverURL string, report DriveReport, sessi
 
 	resp, err := client.Do(req) // #nosec G107 G704 -- URL is the configured server endpoint
 	if err != nil {
-		return fmt.Errorf("connection failed: %v", err)
+		return 0, fmt.Errorf("connection failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return errUnauthorized
+		return 0, errUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned %d", resp.StatusCode)
+		return 0, fmt.Errorf("server returned %d", resp.StatusCode)
 	}
-	return nil
+
+	// The server echoes the centrally-configured report interval; adopt it so
+	// the cadence can be changed from the hub without touching each host. 0 (or
+	// a missing field) means "no change — keep the current interval".
+	var rr struct {
+		ReportIntervalSeconds int `json:"report_interval_seconds"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rr); err != nil {
+		return 0, nil // response body optional; not an error
+	}
+	return rr.ReportIntervalSeconds, nil
 }

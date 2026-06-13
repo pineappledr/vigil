@@ -1,5 +1,5 @@
 # Build Stage - Alpine with CGO support for SQLite
-FROM golang:1.26.3-alpine AS builder
+FROM golang:1.26.4-alpine AS builder
 WORKDIR /app
 
 # Version build arg (set by CI or defaults to dev)
@@ -25,8 +25,11 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
 FROM alpine:3.23.4
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates wget tzdata
+# Install runtime dependencies. `apk upgrade` first so base-image packages
+# (e.g. libcrypto3/OpenSSL) pick up security fixes published after the alpine
+# tag was built — matches Dockerfile.agent and keeps the Trivy scan clean.
+RUN apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates wget tzdata
 
 # Create non-root user and data directory
 RUN adduser -D -u 1000 vigil && \

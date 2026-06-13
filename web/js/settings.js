@@ -313,9 +313,47 @@ const Settings = {
         return `${m}m`;
     },
 
+    // Agent report interval — how often agents send SMART/ZFS reports. Set
+    // centrally here; agents pick it up on their next report (no per-host change).
+    async loadAgents() {
+        try {
+            const resp = await API.get('/api/settings/agents');
+            if (!resp.ok) return;
+            const items = await resp.json();
+            const map = {};
+            for (const s of items) map[s.key] = s.value;
+            const el = document.getElementById('agents-report-interval');
+            if (el && map.report_interval_seconds) {
+                const val = String(map.report_interval_seconds);
+                if (!Array.from(el.options).some(o => o.value === val)) {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = `${val}s`;
+                    el.appendChild(opt);
+                }
+                el.value = val;
+            }
+        } catch { /* settings page may not be visible */ }
+    },
+
+    async saveAgentSetting(key, value) {
+        try {
+            const resp = await API.put(`/api/settings/agents/${key}`, { value: String(value) });
+            if (resp.ok) {
+                Utils.toast('Setting saved — agents adopt it on their next report', 'success');
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                Utils.toast(data.error || 'Failed to save', 'error');
+            }
+        } catch {
+            Utils.toast('Failed to save setting', 'error');
+        }
+    },
+
     async loadAll() {
         await Promise.all([
             this.loadRetention(),
+            this.loadAgents(),
             this.loadBackup(),
             this.loadBackupList(),
             this.loadStats(),
