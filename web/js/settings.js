@@ -340,6 +340,11 @@ const Settings = {
         try {
             const resp = await API.put(`/api/settings/agents/${key}`, { value: String(value) });
             if (resp.ok) {
+                // Keep the offline threshold in sync with the new interval so the
+                // dashboard doesn't wrongly flag agents while they're still healthy.
+                if (key === 'report_interval_seconds' && typeof State !== 'undefined') {
+                    State.agentReportIntervalSeconds = parseInt(value, 10) || State.agentReportIntervalSeconds;
+                }
                 Utils.toast('Setting saved — agents adopt it on their next report', 'success');
             } else {
                 const data = await resp.json().catch(() => ({}));
