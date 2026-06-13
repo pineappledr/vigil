@@ -251,14 +251,14 @@ func GetRegistrationToken(db *sql.DB, token string) (*RegistrationToken, error) 
 		return nil, err
 	}
 
-	t.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+	t.CreatedAt = parseDBTime(createdAt)
 	if expiresAt.Valid {
-		ts, _ := time.Parse(timeFormat, expiresAt.String)
+		ts := parseDBTime(expiresAt.String)
 		t.ExpiresAt = &ts
 	}
 
 	if usedAt.Valid {
-		ts, _ := time.Parse(timeFormat, usedAt.String)
+		ts := parseDBTime(usedAt.String)
 		t.UsedAt = &ts
 	}
 	if usedByAgentID.Valid {
@@ -314,14 +314,14 @@ func ListRegistrationTokens(db *sql.DB) ([]RegistrationToken, error) {
 			return nil, err
 		}
 
-		t.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+		t.CreatedAt = parseDBTime(createdAt)
 		if expiresAt.Valid {
-			ts, _ := time.Parse(timeFormat, expiresAt.String)
+			ts := parseDBTime(expiresAt.String)
 			t.ExpiresAt = &ts
 		}
 
 		if usedAt.Valid {
-			ts, _ := time.Parse(timeFormat, usedAt.String)
+			ts := parseDBTime(usedAt.String)
 			t.UsedAt = &ts
 		}
 		if usedByAgentID.Valid {
@@ -389,8 +389,8 @@ func GetAgentSession(db *sql.DB, token string) (*AgentSession, error) {
 		return nil, err
 	}
 
-	s.ExpiresAt, _ = time.Parse(timeFormat, expiresAt)
-	s.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+	s.ExpiresAt = parseDBTime(expiresAt)
+	s.CreatedAt = parseDBTime(createdAt)
 	return &s, nil
 }
 
@@ -445,14 +445,14 @@ func applyAgentFields(a *Agent, name sql.NullString, registeredAt, lastAuthAt, l
 	}
 	a.Enabled = enabled == 1
 	if registeredAt.Valid {
-		a.RegisteredAt, _ = time.Parse(timeFormat, registeredAt.String)
+		a.RegisteredAt = parseDBTime(registeredAt.String)
 	}
 	if lastAuthAt.Valid {
-		t, _ := time.Parse(timeFormat, lastAuthAt.String)
+		t := parseDBTime(lastAuthAt.String)
 		a.LastAuthAt = &t
 	}
 	if lastSeenAt.Valid {
-		t, _ := time.Parse(timeFormat, lastSeenAt.String)
+		t := parseDBTime(lastSeenAt.String)
 		a.LastSeenAt = &t
 	}
 }
