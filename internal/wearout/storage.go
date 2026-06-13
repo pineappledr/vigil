@@ -58,7 +58,7 @@ func GetAllLatestSnapshots(db *sql.DB) ([]WearoutSnapshot, error) {
 		if err := rows.Scan(&s.ID, &s.Hostname, &s.SerialNumber, &s.DriveType, &s.Percentage, &factorsJSON, &ts); err != nil {
 			continue
 		}
-		s.Timestamp, _ = time.Parse(timeFormat, ts)
+		s.Timestamp = parseDBTime(ts)
 		if factorsJSON.Valid {
 			s.FactorsJSON = factorsJSON.String
 		}
@@ -90,7 +90,7 @@ func GetSnapshotHistory(db *sql.DB, hostname, serialNumber string, days int) ([]
 		if err := rows.Scan(&s.ID, &s.Hostname, &s.SerialNumber, &s.DriveType, &s.Percentage, &factorsJSON, &ts); err != nil {
 			continue
 		}
-		s.Timestamp, _ = time.Parse(timeFormat, ts)
+		s.Timestamp = parseDBTime(ts)
 		if factorsJSON.Valid {
 			s.FactorsJSON = factorsJSON.String
 		}
@@ -214,7 +214,7 @@ func scanSnapshot(row *sql.Row) (*WearoutSnapshot, error) {
 		return nil, err
 	}
 
-	s.Timestamp, _ = time.Parse(timeFormat, ts)
+	s.Timestamp = parseDBTime(ts)
 	if factorsJSON.Valid {
 		s.FactorsJSON = factorsJSON.String
 	}

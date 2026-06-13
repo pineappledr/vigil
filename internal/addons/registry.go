@@ -234,9 +234,21 @@ func scanRow(s scannable) (Addon, error) {
 	return a, nil
 }
 
+// parseTime parses a timestamp read from SQLite, tolerating both the bare
+// `2006-01-02 15:04:05` layout and RFC3339 (`2006-01-02T15:04:05Z`). Parsing with
+// only the bare layout silently failed on RFC3339 values and left the zero value,
+// surfacing as `0001-01-01T00:00:00Z` in /api/addons (created_at, updated_at) —
+// the same class of bug fixed for agents in #36.
 func parseTime(s string) time.Time {
-	t, _ := time.Parse(timeFormat, s)
-	return t
+	if s == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{time.RFC3339, timeFormat, "2006-01-02 15:04:05.999999999-07:00"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
 }
 
 func expectOneRow(res sql.Result, op string) error {
