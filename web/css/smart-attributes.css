@@ -377,10 +377,6 @@
 
 .smart-table {
     width: 100%;
-    /* Don't shrink below the natural width of the columns + row actions; when
-       there isn't room (many columns like the ZFS Datasets table, or mobile),
-       the wrapper scrolls horizontally instead of squashing/clipping cells. */
-    min-width: max-content;
     border-collapse: collapse;
 }
 
