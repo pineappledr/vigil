@@ -166,7 +166,11 @@ func (h *WebSocketHub) readLoop(wc *wsConn) {
 	defer wc.conn.Close()
 
 	// Configure connection limits
-	wc.conn.SetReadLimit(64 * 1024) // 64KB max message
+	// 512KB max message. Addon notifications normally carry a short summary,
+	// but a few (e.g. a SnapRAID gate failure with a big status dump) can run
+	// large; 64KB silently dropped them with a 1009 close. The addon side
+	// should still keep payloads small (it truncates), this is the safety net.
+	wc.conn.SetReadLimit(512 * 1024)
 	wc.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	wc.conn.SetPongHandler(func(string) error {
 		wc.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
