@@ -1,5 +1,5 @@
 # Build Stage - Alpine with CGO support for SQLite
-FROM golang:1.26.4-alpine AS builder
+FROM golang:1.26.5-alpine AS builder
 WORKDIR /app
 
 # Version build arg (set by CI or defaults to dev)
