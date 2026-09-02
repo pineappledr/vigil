@@ -327,6 +327,10 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	// Public endpoints
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("GET /api/version", handlers.GetVersion)
+	// Resumen agregado SIN auth, para el widget customapi de Homepage (que no
+	// sabe hacer el login por cookie de Vigil). Sólo cuenta: ni hostnames, ni
+	// seriales, ni modelos. Ver internal/handlers/summary.go.
+	mux.HandleFunc("GET /api/summary", handlers.GetSummary)
 	mux.HandleFunc("GET /api/version/check", handlers.VersionChecker.CheckVersion)
 	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
 
