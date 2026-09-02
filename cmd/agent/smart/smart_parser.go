@@ -773,6 +773,66 @@ func extractAdditionalMetrics(data map[string]interface{}, result *DriveSmartDat
 	}
 }
 
+// sanearRaw devuelve el valor real de un contador SMART, desempaquetándolo si
+// el firmware metió varios campos en los 48 bits del raw.
+//
+// El 194 (temperatura) no era un caso aislado. El SanDisk SD9SB8W de la flota
+// reporta Program_Fail_Cnt_Total = 204475917: eso sería un fallo de escritura
+// por cada ~5 bytes en un disco que responde y pasa el self-test. Desempaquetado
+// son 13. Marcaba el disco CRITICAL por un dato que nadie miró de cerca.
+//
+// La validación es POR ATRIBUTO, no una heurística ciega. `techoPlausible` dice
+// a partir de qué valor un contador deja de ser creíble para ESE atributo; por
+// debajo de su techo el raw se respeta tal cual, porque un disco con 770
+// sectores reasignados de verdad tiene que seguir contando 770.
+//
+// Cuando el valor supera el techo se prueban los 16 bits bajos y luego los 8:
+// es donde los firmwares dejan el contador real. Si ni así resulta creíble se
+// devuelve -1 = "dato ilegible", que el llamador trata como "sin señal", NO
+// como cero: un contador que no se puede leer no es un contador en cero.
+func sanearRaw(id int, raw int64) int64 {
+	techo, tiene := techoPlausible[id]
+	if !tiene || raw < 0 {
+		return raw // sin regla para este atributo: no se inventa una
+	}
+	if raw <= techo {
+		return raw
+	}
+	if v := raw & 0xFFFF; v <= techo {
+		return v
+	}
+	if v := raw & 0xFF; v <= techo {
+		return v
+	}
+	return -1
+}
+
+// Techo de credibilidad por atributo. No es "el máximo posible" sino "a partir
+// de aquí el dato es sospechoso": un disco con más de 100.000 sectores
+// reasignados hace tiempo que no arranca, y un contador de fallos de escritura
+// en las decenas de millones describe un disco que no podría responder.
+//
+// Los techos son deliberadamente BAJOS. Un techo alto no filtra nada: con
+// 1.000.000 el raw 204475917 del SanDisk se "saneaba" a sus 16 bits bajos
+// (3597) y pasaba, porque 3597 < 1.000.000 — seguía siendo basura, sólo que
+// más pequeña. El desempaquetado tiene que bajar hasta un valor que un disco
+// vivo pueda haber alcanzado de verdad; por eso el techo es del orden de lo que
+// se ve en discos que aún funcionan, no del máximo teórico del contador.
+var techoPlausible = map[int]int64{
+	5:   65535,   // Reallocated_Sector_Ct
+	10:  1000,    // Spin_Retry_Count
+	181: 1000,    // Program_Fail_Cnt_Total
+	182: 1000,    // Erase_Fail_Count
+	183: 65535,   // Runtime_Bad_Block -- el Samsung de la flota tiene 770
+	184: 1000,    // End-to-End_Error
+	187: 65535,   // Reported_Uncorrect
+	188: 65535,   // Command_Timeout
+	196: 65535,   // Reallocated_Event_Count
+	197: 65535,   // Current_Pending_Sector
+	198: 65535,   // Offline_Uncorrectable
+	199: 1000000, // CRC_Error_Count -- sube rápido con un cable malo (2335 reales)
+}
+
 // IsCriticalAttribute checks if an attribute ID is critical
 func IsCriticalAttribute(id int) bool {
 	def, exists := CriticalAttributeDefinitions[id]
@@ -810,12 +870,37 @@ func GetAttributeSeverity(id int, rawValue int64, value int, threshold int) stri
 		return SeverityHealthy
 	}
 
+	// A partir de aquí se trabaja con el valor SANEADO: algunos firmwares
+	// empaquetan varios campos en el raw (ver sanearRaw).
+	rawValue = sanearRaw(id, rawValue)
+	if rawValue < 0 {
+		// Dato ilegible. No es un cero — es que no se pudo leer. Inventar una
+		// alarma sobre eso es exactamente lo que llenó el panel de falsos
+		// críticos; inventar un "sano" también mentiría, pero al menos no
+		// entierra las alarmas reales bajo ruido.
+		return SeverityHealthy
+	}
+
 	// Check attribute-specific conditions
 	switch id {
-	// Critical sector/error counts - any value > 0 is bad
-	case 5, 10, 196, 197, 198, 187, 188, 181, 182, 183, 184:
+	// Daño del plato: un solo sector reasignado o pendiente YA es crítico.
+	// Estos no admiten gradación — no existe "un poco de sector ilegible".
+	case 5, 196, 197, 198:
 		if rawValue > 0 {
 			return SeverityCritical
+		}
+
+	// Errores de firmware/enlace: graduados. Uno aislado es ruido esperable
+	// (un timeout tras un reset, un fallo de escritura que el disco reintentó);
+	// lo que importa es la TENDENCIA. Marcar crítico al primero convierte la
+	// alarma en paisaje: el SanDisk de la flota llevaba 1 command timeout y
+	// salía en rojo junto a un disco con 770 sectores muertos.
+	case 187, 188, 181, 182, 183, 184, 10:
+		if rawValue > 100 {
+			return SeverityCritical
+		}
+		if rawValue > 0 {
+			return SeverityWarning
 		}
 
 	// Temperature monitoring

@@ -43,6 +43,20 @@ const Utils = {
     },
 
     getHealthStatus(drive) {
+        // El backend ya calculó esto y lo manda en `_health`. Se usa tal cual:
+        // tener DOS definiciones de "crítico" en el mismo producto hacía que el
+        // panel dijera "1 crítico" y la API "3", ambas con razón según su propia
+        // regla y sin nada que explicara la diferencia.
+        //
+        // El bloque de abajo sobrevive SÓLO como respaldo para reportes viejos
+        // que aún no traen el campo (una caché del navegador, un agente sin
+        // actualizar). No es la fuente de verdad y no debe evolucionar: si hace
+        // falta cambiar cuándo un disco es crítico, se cambia en el backend.
+        if (drive._health) {
+            const h = String(drive._health).toLowerCase();
+            if (h === 'critical' || h === 'warning' || h === 'healthy') return h;
+        }
+
         // SMART self-test failed → critical
         if (!drive.smart_status?.passed) return 'critical';
 
