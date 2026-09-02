@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
+	agentsmart "vigil/cmd/agent/smart"
 
 	"vigil/internal/agents"
 	"vigil/internal/audit"
@@ -208,7 +208,7 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	// without per-host reconfiguration. Allowed presets (seconds): 60, 900, 1800,
 	// 3600 (default), 43200, 86400. Agents clamp to these and ignore anything else.
 	JSONResponse(w, map[string]interface{}{
-		"status":                 "ok",
+		"status":                  "ok",
 		"report_interval_seconds": agentReportInterval(),
 	})
 
@@ -265,6 +265,7 @@ func History(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		enrichDrivesWithAliases(dataMap, host, aliases)
+		enrichDrivesWithHealth(dataMap, host)
 
 		history = append(history, map[string]interface{}{
 			"hostname":  host,
@@ -400,6 +401,47 @@ func loadAliases() map[string]string {
 		}
 	}
 	return aliases
+}
+
+// enrichDrivesWithHealth añade a cada disco el veredicto de salud que calcula
+// el backend, para que la UI no tenga que deducirlo por su cuenta.
+//
+// Hasta ahora web/js/utils.js implementaba su PROPIO criterio: miraba cuatro
+// atributos (5, 197, 198, 187) con umbrales distintos e ignoraba CRC,
+// temperatura, timeouts y espacio reservado. Resultado: el panel decía "1
+// crítico" y la API "3", ambos con razón según su propia regla, y nada en el
+// producto documentaba que discrepaban. Quien mirase una pantalla u otra sacaba
+// conclusiones distintas sobre los mismos discos.
+//
+// Con `_health` en el payload hay una sola definición de "crítico", la del
+// backend, y la UI la muestra en vez de recalcularla.
+func enrichDrivesWithHealth(data map[string]interface{}, hostname string) {
+	drives, ok := data["drives"].([]interface{})
+	if !ok {
+		return
+	}
+
+	for i, d := range drives {
+		drive, ok := d.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		raw, err := json.Marshal(drive)
+		if err != nil {
+			continue
+		}
+		var sd agentsmart.DriveSmartData
+		if err := json.Unmarshal(raw, &sd); err != nil {
+			continue
+		}
+		sd.Hostname = hostname
+		if a := agentsmart.AnalyzeDriveHealth(&sd); a != nil {
+			drive["_health"] = a.OverallHealth
+			drive["_health_issues"] = len(a.Issues)
+			drives[i] = drive
+		}
+	}
+	data["drives"] = drives
 }
 
 func enrichDrivesWithAliases(data map[string]interface{}, hostname string, aliases map[string]string) {
