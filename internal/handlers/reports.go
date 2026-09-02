@@ -426,15 +426,53 @@ func enrichDrivesWithHealth(data map[string]interface{}, hostname string) {
 		if !ok {
 			continue
 		}
-		raw, err := json.Marshal(drive)
-		if err != nil {
-			continue
+		// El JSON del agente es la salida cruda de smartctl: los atributos
+		// viven en ata_smart_attributes.table y el veredicto en
+		// smart_status.passed. DriveSmartData espera `attributes` y
+		// `smart_passed`, así que deserializarlo directo compila y no falla,
+		// pero deja la lista de atributos VACÍA y todos los discos salen sanos.
+		// Pasó: el campo llegaba, siempre con el mismo valor.
+		sd := agentsmart.DriveSmartData{Hostname: hostname, SmartPassed: true}
+		if v, ok := drive["serial_number"].(string); ok {
+			sd.SerialNumber = v
 		}
-		var sd agentsmart.DriveSmartData
-		if err := json.Unmarshal(raw, &sd); err != nil {
-			continue
+		if v, ok := drive["model_name"].(string); ok {
+			sd.ModelName = v
 		}
-		sd.Hostname = hostname
+		if st, ok := drive["smart_status"].(map[string]interface{}); ok {
+			if p, ok := st["passed"].(bool); ok {
+				sd.SmartPassed = p
+			}
+		}
+		if asa, ok := drive["ata_smart_attributes"].(map[string]interface{}); ok {
+			if table, ok := asa["table"].([]interface{}); ok {
+				for _, e := range table {
+					at, ok := e.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					var a agentsmart.SmartAttribute
+					if id, ok := at["id"].(float64); ok {
+						a.ID = int(id)
+					}
+					if n, ok := at["name"].(string); ok {
+						a.Name = n
+					}
+					if rv, ok := at["raw"].(map[string]interface{}); ok {
+						if v, ok := rv["value"].(float64); ok {
+							a.RawValue = int64(v)
+						}
+					}
+					if v, ok := at["value"].(float64); ok {
+						a.Value = int(v)
+					}
+					if v, ok := at["thresh"].(float64); ok {
+						a.Threshold = int(v)
+					}
+					sd.Attributes = append(sd.Attributes, a)
+				}
+			}
+		}
 		if a := agentsmart.AnalyzeDriveHealth(&sd); a != nil {
 			drive["_health"] = a.OverallHealth
 			drive["_health_issues"] = len(a.Issues)
