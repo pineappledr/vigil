@@ -11,6 +11,10 @@ import (
 	"vigil/internal/zfs"
 )
 
+// Ningún disco funciona por encima de esto; un valor mayor es corrupción del
+// dato, no un disco ardiendo. Los HDD se apagan solos mucho antes de 100 °C.
+const maxPlausibleTempC = 120
+
 // Summary is the compact, read-only view a dashboard needs: how many drives
 // are fine, how many are not, how hot the hottest one runs, whether every
 // agent is still reporting, and whether any ZFS pool is degraded.
@@ -76,8 +80,17 @@ func GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	// La temperatura máxima ya la agrega el módulo de temperature; no hace
 	// falta recorrer los discos otra vez.
+	//
+	// Se acota a un rango físicamente posible antes de publicarla. La tabla
+	// temperature_history tiene al menos una fila con un valor absurdo
+	// (27058405379 el 2026-09-02, cuando ningún disco pasaba de 46 °C), y un
+	// dashboard que pinta ese número miente con aplomo. No se arregla el dato
+	// aquí — eso es harina de otro costal — pero tampoco se propaga: fuera de
+	// rango se reporta 0, que el widget muestra como "sin dato".
 	if td, err := temperature.GetDashboardTemperatureData(db.DB, false); err == nil && td != nil {
-		s.MaxTempC = td.MaxTemperature
+		if t := td.MaxTemperature; t > 0 && t <= maxPlausibleTempC {
+			s.MaxTempC = t
+		}
 	}
 
 	if list, err := agents.ListAgents(db.DB); err == nil {
