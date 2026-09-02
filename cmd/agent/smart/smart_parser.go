@@ -697,12 +697,46 @@ func parseNVMeAttributes(data map[string]interface{}, result *DriveSmartData) {
 	}
 }
 
+// tempFromRaw extrae los grados del RAW del atributo 194/190.
+//
+// El raw de temperatura NO es un entero simple: muchos firmwares empaquetan
+// varios campos de 16 bits en los 48 bits del raw — típicamente
+// actual | mínima<<16 | máxima<<32. Leerlo entero da cifras como
+// 236224315425 "°C", que además cruzan cualquier umbral y marcan el disco
+// como CRITICAL.
+//
+// Pasó en producción (2026-09-02): 13 de 17 discos aparecían críticos, todos
+// por este atributo, con smart_passed=true y sin un solo sector reasignado.
+// El único fallo real era otro (2335 errores CRC en un disco).
+//
+// Los grados viven en los 16 bits bajos, y en la práctica en el byte bajo:
+// un disco a 34 °C da 0x22. Se toma esa parte y se valida contra un rango
+// físicamente posible; fuera de él se devuelve 0 (= sin dato), que es
+// honesto, en vez de un número inventado.
+func tempFromRaw(raw int64) int {
+	if raw >= 0 && raw <= maxPlausibleDriveTempC {
+		return int(raw) // ya viene limpio
+	}
+	t := int(raw & 0xFFFF)
+	if t > maxPlausibleDriveTempC {
+		t = int(raw & 0xFF)
+	}
+	if t <= 0 || t > maxPlausibleDriveTempC {
+		return 0
+	}
+	return t
+}
+
+// Por encima de esto no hay disco funcionando: es corrupción del dato, no un
+// disco ardiendo. Los HDD se apagan solos mucho antes.
+const maxPlausibleDriveTempC = 120
+
 // updateResultFromAttribute updates result fields based on specific attributes
 func updateResultFromAttribute(result *DriveSmartData, attr SmartAttribute) {
 	switch attr.ID {
 	case 194, 190: // Temperature
 		if result.Temperature == 0 {
-			result.Temperature = int(attr.RawValue)
+			result.Temperature = tempFromRaw(attr.RawValue)
 		}
 	case 9: // Power-On Hours
 		result.PowerOnHours = attr.RawValue
@@ -786,10 +820,16 @@ func GetAttributeSeverity(id int, rawValue int64, value int, threshold int) stri
 
 	// Temperature monitoring
 	case 194, 190:
-		if rawValue > 65 {
+		// El raw empaqueta varios campos: sin desempaquetar, un disco a 34 °C
+		// se lee como 236224315425 y cruza todos los umbrales.
+		t := int64(tempFromRaw(rawValue))
+		if t == 0 {
+			return SeverityHealthy // sin dato utilizable: no se inventa una alarma
+		}
+		if t > 65 {
 			return SeverityCritical
 		}
-		if rawValue > 55 {
+		if t > 55 {
 			return SeverityWarning
 		}
 		if rawValue > 45 {
@@ -956,7 +996,7 @@ func generateIssueMessage(attr SmartAttribute, severity string) string {
 		case 188:
 			message = fmt.Sprintf("%d command timeouts occurred", attr.RawValue)
 		case 194, 190:
-			message = fmt.Sprintf("Temperature is %d°C", attr.RawValue)
+			message = fmt.Sprintf("Temperature is %d°C", tempFromRaw(attr.RawValue))
 		case 199:
 			message = fmt.Sprintf("%d CRC errors detected (check cables)", attr.RawValue)
 		case 232:
