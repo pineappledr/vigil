@@ -975,8 +975,32 @@ func GetAttributeSeverity(id int, rawValue int64, value int, threshold int) stri
 	return SeverityHealthy
 }
 
+// Baseline maps an attribute ID to the raw value an operator has
+// acknowledged for one drive. See AnalyzeDriveHealthWithBaseline.
+type Baseline map[int]int64
+
+// IsAcknowledgeable reports whether an attribute is a cumulative error
+// counter, and therefore can be acknowledged.
+//
+// Only counters qualify: they never go down, so a drive that once had a bad
+// cable (UDMA_CRC 2335) stays CRITICAL forever even when the counter has been
+// frozen for weeks. What matters is whether it is still GROWING. Temperature,
+// wear percentage and the SMART verdict are current state, not history:
+// acknowledging them would hide a live problem, so they are excluded.
+func IsAcknowledgeable(id int) bool {
+	_, ok := techoPlausible[id]
+	return ok
+}
+
 // AnalyzeDriveHealth performs comprehensive health analysis on drive data
 func AnalyzeDriveHealth(driveData *DriveSmartData) *DriveHealthAnalysis {
+	return AnalyzeDriveHealthWithBaseline(driveData, nil)
+}
+
+// AnalyzeDriveHealthWithBaseline is AnalyzeDriveHealth, except that an
+// acknowledgeable counter whose raw value has not grown past its baseline is
+// not an issue. The moment it grows by one, it is judged normally again.
+func AnalyzeDriveHealthWithBaseline(driveData *DriveSmartData, baseline Baseline) *DriveHealthAnalysis {
 	analysis := &DriveHealthAnalysis{
 		Hostname:      driveData.Hostname,
 		SerialNumber:  driveData.SerialNumber,
@@ -1003,6 +1027,9 @@ func AnalyzeDriveHealth(driveData *DriveSmartData) *DriveHealthAnalysis {
 
 	// Analyze each attribute
 	for _, attr := range driveData.Attributes {
+		if acked, ok := baseline[attr.ID]; ok && IsAcknowledgeable(attr.ID) && attr.RawValue <= acked {
+			continue
+		}
 		severity := GetAttributeSeverity(attr.ID, attr.RawValue, attr.Value, attr.Threshold)
 
 		switch severity {

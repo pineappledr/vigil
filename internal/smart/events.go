@@ -45,7 +45,7 @@ func ProcessReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, repor
 
 		// Publish health events
 		if bus != nil {
-			publishSmartHealthEvents(bus, driveData)
+			publishSmartHealthEvents(bus, driveData, LoadBaseline(db, hostname, driveData.SerialNumber))
 		}
 	}
 
@@ -54,8 +54,8 @@ func ProcessReportWithEvents(db *sql.DB, bus *events.Bus, hostname string, repor
 
 // publishSmartHealthEvents analyzes a drive's SMART data and publishes events
 // for any warnings or critical issues detected.
-func publishSmartHealthEvents(bus *events.Bus, driveData *agentsmart.DriveSmartData) {
-	analysis := agentsmart.AnalyzeDriveHealth(driveData)
+func publishSmartHealthEvents(bus *events.Bus, driveData *agentsmart.DriveSmartData, baseline agentsmart.Baseline) {
+	analysis := agentsmart.AnalyzeDriveHealthWithBaseline(driveData, baseline)
 	if analysis.OverallHealth == agentsmart.SeverityHealthy {
 		return
 	}

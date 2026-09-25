@@ -1093,3 +1093,49 @@ tr.warning-row .attr-tooltip-trigger::after {
     color: var(--text-secondary);
     font-size: 0.875rem;
 }
+/* ─── Acknowledged error counters (baseline) ─────────────────────────── */
+.smart-baseline {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 16px;
+    border-left: 3px solid var(--border-hover);
+}
+
+.smart-baseline-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.smart-baseline-list {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+}
+
+.smart-baseline-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.smart-baseline-list li strong {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.smart-baseline-hint {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+}
+
+.smart-baseline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}

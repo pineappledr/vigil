@@ -19,6 +19,7 @@ var DefaultSettings = []Setting{
 	{Category: "alerts", Key: "enabled", Value: "true", ValueType: "bool", Description: "Enable temperature alerts"},
 	{Category: "alerts", Key: "cooldown_minutes", Value: "60", ValueType: "int", Description: "Minutes between duplicate alerts for same drive"},
 	{Category: "alerts", Key: "recovery_enabled", Value: "true", ValueType: "bool", Description: "Generate recovery alerts when temperature returns to normal"},
+	{Category: "alerts", Key: "acknowledged_reminder_days", Value: "180", ValueType: "int", Description: "Days between reminders that a drive still has acknowledged SMART error counters (0 = never)"},
 
 	// System settings
 	{Category: "system", Key: "data_retention_days", Value: "365", ValueType: "int", Description: "Days to keep historical data"},

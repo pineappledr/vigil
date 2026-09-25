@@ -203,6 +203,18 @@ func main() {
 	hbm.Start()
 	defer hbm.Stop()
 
+	// Reminders for drives with acknowledged SMART error counters: known
+	// problems are silent, but not forgotten.
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		for range ticker.C {
+			days := settings.GetInt(db.DB, "alerts", "acknowledged_reminder_days", 180)
+			if n := smart.RunBaselineReminders(db.DB, eventBus, time.Now(), days); n > 0 {
+				log.Printf("🔔 Sent %d acknowledged-drive reminder(s)", n)
+			}
+		}
+	}()
+
 	// Initialize metrics collector
 	m := metrics.New()
 	handlers.Metrics = m
@@ -364,6 +376,9 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	mux.HandleFunc("GET /api/aliases", protect(handlers.GetAliases))
 	mux.HandleFunc("POST /api/aliases", protect(handlers.SetAlias))
 	mux.HandleFunc("DELETE /api/aliases/{id}", protect(handlers.DeleteAlias))
+	mux.HandleFunc("GET /api/baselines", protect(handlers.GetBaselines))
+	mux.HandleFunc("POST /api/baselines", protect(handlers.AcknowledgeBaseline))
+	mux.HandleFunc("DELETE /api/baselines", protect(handlers.ClearBaseline))
 
 	// User endpoints
 	mux.HandleFunc("GET /api/users/me", protect(auth.GetCurrentUser))

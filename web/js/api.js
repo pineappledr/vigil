@@ -50,6 +50,22 @@ const API = {
         });
     },
 
+    async getBaselines(hostname) {
+        return this.get('/api/baselines?hostname=' + encodeURIComponent(hostname));
+    },
+
+    async acknowledgeBaseline(hostname, serialNumber) {
+        return this.post('/api/baselines', { hostname, serial_number: serialNumber });
+    },
+
+    async clearBaseline(hostname, serialNumber) {
+        return fetch('/api/baselines', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ hostname, serial_number: serialNumber })
+        });
+    },
+
     async setAlias(hostname, serialNumber, alias) {
         return this.post('/api/aliases', {
             hostname,

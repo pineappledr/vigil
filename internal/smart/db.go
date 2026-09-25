@@ -217,7 +217,7 @@ func GetDriveHealthSummary(db *sql.DB, hostname, serialNumber string) (*agentsma
 	}
 
 	// Perform health analysis
-	return agentsmart.AnalyzeDriveHealth(driveData), nil
+	return agentsmart.AnalyzeDriveHealthWithBaseline(driveData, LoadBaseline(db, hostname, serialNumber)), nil
 }
 
 // GetAllDrivesHealthSummary returns health summaries for all monitored drives.
@@ -347,7 +347,7 @@ func GetAllDrivesHealthSummary(db *sql.DB) ([]*agentsmart.DriveHealthAnalysis, e
 			driveData.DriveType = info.DriveType
 			driveData.SmartPassed = info.SmartPassed
 		}
-		summaries = append(summaries, agentsmart.AnalyzeDriveHealth(driveData))
+		summaries = append(summaries, agentsmart.AnalyzeDriveHealthWithBaseline(driveData, LoadBaseline(db, key.host, key.serial)))
 	}
 
 	return summaries, nil
