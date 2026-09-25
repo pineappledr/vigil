@@ -364,6 +364,9 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	mux.HandleFunc("GET /api/aliases", protect(handlers.GetAliases))
 	mux.HandleFunc("POST /api/aliases", protect(handlers.SetAlias))
 	mux.HandleFunc("DELETE /api/aliases/{id}", protect(handlers.DeleteAlias))
+	mux.HandleFunc("GET /api/baselines", protect(handlers.GetBaselines))
+	mux.HandleFunc("POST /api/baselines", protect(handlers.AcknowledgeBaseline))
+	mux.HandleFunc("DELETE /api/baselines", protect(handlers.ClearBaseline))
 
 	// User endpoints
 	mux.HandleFunc("GET /api/users/me", protect(auth.GetCurrentUser))

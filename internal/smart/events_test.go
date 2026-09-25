@@ -20,7 +20,7 @@ func TestPublishSmartHealthEvents_Healthy(t *testing.T) {
 		Attributes:   []agentsmart.SmartAttribute{},
 	}
 
-	publishSmartHealthEvents(bus, driveData)
+	publishSmartHealthEvents(bus, driveData, nil)
 
 	if len(received) != 0 {
 		t.Errorf("expected 0 events for healthy drive, got %d", len(received))
@@ -40,7 +40,7 @@ func TestPublishSmartHealthEvents_Critical(t *testing.T) {
 		Attributes:   []agentsmart.SmartAttribute{},
 	}
 
-	publishSmartHealthEvents(bus, driveData)
+	publishSmartHealthEvents(bus, driveData, nil)
 
 	if len(received) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(received))
@@ -78,7 +78,7 @@ func TestPublishSmartHealthEvents_ReallocatedSectors(t *testing.T) {
 		},
 	}
 
-	publishSmartHealthEvents(bus, driveData)
+	publishSmartHealthEvents(bus, driveData, nil)
 
 	// Should get both a ReallocatedSectors event and a SmartWarning/Critical event
 	hasRealloc := false

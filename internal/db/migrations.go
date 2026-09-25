@@ -221,6 +221,21 @@ func MigrateSchemaExtensions(db *sql.DB) error {
 			CREATE INDEX IF NOT EXISTS idx_notif_hist_setting ON notification_history(setting_id);
 			CREATE INDEX IF NOT EXISTS idx_notif_hist_status  ON notification_history(status);
 			CREATE INDEX IF NOT EXISTS idx_notif_hist_created ON notification_history(created_at);`},
+
+		// ─── drive_health_baselines ──────────────────────────────────────
+		// Acknowledged values of cumulative SMART counters, per drive. A
+		// counter at or below its baseline is not an issue; see
+		// agentsmart.AnalyzeDriveHealthWithBaseline.
+		{"drive_health_baselines", `
+			CREATE TABLE IF NOT EXISTS drive_health_baselines (
+				hostname        TEXT    NOT NULL,
+				serial_number   TEXT    NOT NULL,
+				attribute_id    INTEGER NOT NULL,
+				raw_value       INTEGER NOT NULL,
+				acknowledged_by TEXT,
+				acknowledged_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY (hostname, serial_number, attribute_id)
+			);`},
 	}
 
 	for _, s := range statements {

@@ -473,7 +473,7 @@ func enrichDrivesWithHealth(data map[string]interface{}, hostname string) {
 				}
 			}
 		}
-		if a := agentsmart.AnalyzeDriveHealth(&sd); a != nil {
+		if a := agentsmart.AnalyzeDriveHealthWithBaseline(&sd, smart.LoadBaseline(db.DB, hostname, sd.SerialNumber)); a != nil {
 			drive["_health"] = a.OverallHealth
 			drive["_health_issues"] = len(a.Issues)
 			drives[i] = drive

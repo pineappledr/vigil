@@ -115,8 +115,110 @@ const SmartAttributes = {
         this.currentDrive = driveData;
         this.currentSerial = serialNumber;
         this.attributeFilter = 'all';
+        await this.loadBaseline(hostname, serialNumber);
         const isNvme = this.isNvmeDrive(driveData);
         await this.render(hostname, serialNumber, isNvme);
+    },
+
+    // Cumulative error counters: they never go down, so they are the only
+    // attributes that can be acknowledged. Same list as the server
+    // (IsAcknowledgeable in cmd/agent/smart).
+    ACKNOWLEDGEABLE_IDS: [5, 10, 181, 182, 183, 184, 187, 188, 196, 197, 198, 199],
+
+    async loadBaseline(hostname, serialNumber) {
+        this.baseline = {};
+        this.baselineRows = [];
+        try {
+            const resp = await API.getBaselines(hostname);
+            if (!resp.ok) return;
+            const rows = await resp.json();
+            this.baselineRows = (rows || []).filter(r => r.serial_number === serialNumber);
+            this.baselineRows.forEach(r => { this.baseline[r.attribute_id] = r.raw_value; });
+        } catch (e) {
+            // Fail open: without a baseline the drive is judged on its totals.
+            console.error('Failed to load baseline:', e);
+        }
+    },
+
+    // Same as tempFromRaw in cmd/agent/smart: 0 means "no usable reading".
+    tempFromRaw(raw) {
+        const MAX = 120;
+        if (raw >= 0 && raw <= MAX) return raw;
+        // Bitwise ops in JS are 32-bit: take the low bits with modulo instead.
+        let t = raw % 65536;
+        if (t > MAX) t = raw % 256;
+        return (t <= 0 || t > MAX) ? 0 : t;
+    },
+
+    // A counter at or below its acknowledged value is not an issue.
+    isAcknowledged(attrId, rawValue) {
+        const acked = this.baseline?.[attrId];
+        return acked != null && this.ACKNOWLEDGEABLE_IDS.includes(attrId) && rawValue <= acked;
+    },
+
+    // Counters above zero that are not yet covered by the baseline.
+    unacknowledgedCounters(drive) {
+        return (drive?.ata_smart_attributes?.table || []).filter(a =>
+            this.ACKNOWLEDGEABLE_IDS.includes(a.id) && (a.raw?.value || 0) > 0 &&
+            !this.isAcknowledged(a.id, a.raw?.value || 0));
+    },
+
+    renderBaseline(drive) {
+        const pending = this.unacknowledgedCounters(drive);
+        if (!this.baselineRows.length && !pending.length) return '';
+        const names = {};
+        (drive?.ata_smart_attributes?.table || []).forEach(a => { names[a.id] = a.name; });
+        const h = Utils.escapeJSString(this.currentHostname);
+        const sn = Utils.escapeJSString(this.currentSerial);
+
+        let html = '<div class="smart-baseline">';
+        if (this.baselineRows.length) {
+            const by = this.baselineRows[0].acknowledged_by;
+            const at = this.baselineRows[0].acknowledged_at;
+            html += `<div class="smart-baseline-title">Acknowledged error counters</div>
+                <ul class="smart-baseline-list">
+                ${this.baselineRows.map(r => `<li><span>${Utils.escapeHtml(names[r.attribute_id] || 'Attribute ' + r.attribute_id)}</span><strong>${r.raw_value}</strong></li>`).join('')}
+                </ul>
+                <p class="smart-baseline-hint">Only an increase above these values is reported.${
+                    at && !at.startsWith('0001') ? ` Acknowledged${by ? ` by ${Utils.escapeHtml(by)}` : ''} on ${Utils.escapeHtml(new Date(at).toLocaleDateString())}.` : ''}</p>`;
+        }
+        html += '<div class="smart-baseline-actions">';
+        if (pending.length) {
+            html += `<button class="btn btn-secondary" onclick="SmartAttributes.acknowledgeBaseline('${Utils.escapeHtml(h)}', '${Utils.escapeHtml(sn)}')"
+                title="Stop reporting these counters until they grow again">Acknowledge current counters</button>`;
+        }
+        if (this.baselineRows.length) {
+            html += `<button class="btn btn-secondary" onclick="SmartAttributes.clearBaseline('${Utils.escapeHtml(h)}', '${Utils.escapeHtml(sn)}')">Clear</button>`;
+        }
+        html += '</div></div>';
+        return html;
+    },
+
+    async acknowledgeBaseline(hostname, serialNumber) {
+        const pending = this.unacknowledgedCounters(this.currentDrive)
+            .map(a => `${a.name}: ${a.raw?.value}`).join('\n');
+        if (!confirm(`Acknowledge these counters on ${serialNumber}?\n\n${pending}\n\nThe drive will only be reported again if one of them grows.`)) return;
+        await this._baselineChange(API.acknowledgeBaseline(hostname, serialNumber), hostname, serialNumber);
+    },
+
+    async clearBaseline(hostname, serialNumber) {
+        if (!confirm(`Clear the acknowledged counters on ${serialNumber}? It will be judged on its totals again.`)) return;
+        await this._baselineChange(API.clearBaseline(hostname, serialNumber), hostname, serialNumber);
+    },
+
+    async _baselineChange(request, hostname, serialNumber) {
+        try {
+            const resp = await request;
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                alert(data.error || 'Request failed');
+                return;
+            }
+            Data.fetch();
+            await this.init(hostname, serialNumber, this.currentDrive);
+        } catch (e) {
+            alert('Connection error');
+        }
     },
 
     isNvmeDrive(drive) {
@@ -145,6 +247,7 @@ const SmartAttributes = {
             if (localHealth?.issues?.length > 0) {
                 html += this.renderIssuesList(localHealth.issues);
             }
+            html += this.renderBaseline(this.currentDrive);
             html += `</div>`;
 
             if (isNvme) {
@@ -254,6 +357,7 @@ const SmartAttributes = {
             const rawValue = attr.raw?.value || 0;
             const value = attr.value || 0;
             const thresh = attr.thresh || 0;
+            if (this.isAcknowledged(attr.id, rawValue)) return;
             
             // Check if normalized value hit threshold (SMART failure imminent)
             if (thresh > 0 && value > 0 && value <= thresh) {
@@ -288,21 +392,24 @@ const SmartAttributes = {
                 return;
             }
             
-            // Check temperature (ID 194, 190)
-            if ((attr.id === 194 || attr.id === 190) && rawValue > 0) {
-                if (rawValue > 65) {
+            // Check temperature (ID 194, 190). The raw value packs several
+            // fields (a drive at 31 °C reads 236224380959): unpack it the way
+            // the server does (tempFromRaw), or every such drive is CRITICAL here.
+            const temp = this.tempFromRaw(rawValue);
+            if ((attr.id === 194 || attr.id === 190) && temp > 0) {
+                if (temp > 65) {
                     issues.push({
                         attribute_id: attr.id,
                         attribute_name: attr.name,
                         severity: 'CRITICAL',
-                        message: `Temperature critical: ${rawValue}°C`
+                        message: `Temperature critical: ${temp}°C`
                     });
-                } else if (rawValue > 55) {
+                } else if (temp > 55) {
                     issues.push({
                         attribute_id: attr.id,
                         attribute_name: attr.name,
                         severity: 'WARNING',
-                        message: `Temperature warning: ${rawValue}°C`
+                        message: `Temperature warning: ${temp}°C`
                     });
                 }
             }
