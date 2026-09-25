@@ -283,6 +283,33 @@ func DeleteStaleZFSDevices(db *sql.DB, poolID int64, cutoff time.Time) (int64, e
 	return result.RowsAffected()
 }
 
+// DeleteZFSDevicesNotIn removes the pool's devices whose name is not in keep.
+func DeleteZFSDevicesNotIn(db *sql.DB, poolID int64, keep map[string]bool) (int64, error) {
+	rows, err := db.Query("SELECT id, device_name FROM zfs_pool_devices WHERE pool_id = ?", poolID)
+	if err != nil {
+		return 0, err
+	}
+	var stale []int64
+	for rows.Next() {
+		var id int64
+		var name string
+		if rows.Scan(&id, &name) == nil && !keep[name] {
+			stale = append(stale, id)
+		}
+	}
+	rows.Close()
+	var n int64
+	for _, id := range stale {
+		res, err := db.Exec("DELETE FROM zfs_pool_devices WHERE id = ?", id)
+		if err != nil {
+			return n, err
+		}
+		k, _ := res.RowsAffected()
+		n += k
+	}
+	return n, nil
+}
+
 // DeleteZFSPoolDevices removes all devices for a pool
 func DeleteZFSPoolDevices(db *sql.DB, poolID int64) error {
 	_, err := db.Exec("DELETE FROM zfs_pool_devices WHERE pool_id = ?", poolID)
