@@ -126,3 +126,47 @@ func TestPublishSmartHealthEvents_AcknowledgedDrivePublishesNothing(t *testing.T
 		t.Fatalf("counter grew: got %+v, want one smart_critical", received)
 	}
 }
+
+// "I know that drive has problems; remind me in six months" (the owner,
+// 2026-09-25). A known problem is silent, but not forgotten.
+func TestBaselineReminders_SixMonthsLater(t *testing.T) {
+	d := baselineTestDB(t)
+	storeCRC(t, d, 1633, time.Now().UTC())
+	if _, err := AcknowledgeCurrent(d, "brain", "4190A050FBEG", "Horus"); err != nil {
+		t.Fatal(err)
+	}
+	bus := events.NewBus()
+	var got []events.Event
+	bus.Subscribe(func(e events.Event) { got = append(got, e) })
+
+	now := time.Now()
+	if n := RunBaselineReminders(d, bus, now.Add(179*24*time.Hour), 180); n != 0 || len(got) != 0 {
+		t.Fatalf("day 179: %d reminders, want 0", n)
+	}
+	if n := RunBaselineReminders(d, bus, now.Add(181*24*time.Hour), 180); n != 1 {
+		t.Fatalf("day 181: %d reminders, want 1", n)
+	}
+	if got[0].Type != events.SmartAcknowledgedReminder || got[0].SerialNumber != "4190A050FBEG" {
+		t.Fatalf("unexpected event %+v", got[0])
+	}
+	// The reminder is recorded in the DB: the next hourly run (or a restart)
+	// does not send it again...
+	if n := RunBaselineReminders(d, bus, now.Add(181*24*time.Hour+time.Hour), 180); n != 0 {
+		t.Fatalf("an hour later: %d reminders, want 0", n)
+	}
+	// ...until another interval has passed.
+	if n := RunBaselineReminders(d, bus, now.Add(362*24*time.Hour), 180); n != 1 {
+		t.Fatalf("second interval: %d reminders, want 1", n)
+	}
+}
+
+func TestBaselineReminders_ZeroDisables(t *testing.T) {
+	d := baselineTestDB(t)
+	storeCRC(t, d, 1633, time.Now().UTC())
+	if _, err := AcknowledgeCurrent(d, "brain", "4190A050FBEG", "Horus"); err != nil {
+		t.Fatal(err)
+	}
+	if n := RunBaselineReminders(d, events.NewBus(), time.Now().Add(10*365*24*time.Hour), 0); n != 0 {
+		t.Fatalf("disabled: %d reminders, want 0", n)
+	}
+}

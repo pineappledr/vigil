@@ -179,7 +179,7 @@ const SmartAttributes = {
                 <ul class="smart-baseline-list">
                 ${this.baselineRows.map(r => `<li><span>${Utils.escapeHtml(names[r.attribute_id] || 'Attribute ' + r.attribute_id)}</span><strong>${r.raw_value}</strong></li>`).join('')}
                 </ul>
-                <p class="smart-baseline-hint">Only an increase above these values is reported.${
+                <p class="smart-baseline-hint">Only an increase above these values is reported; a reminder is sent every few months (Settings → alerts → acknowledged_reminder_days).${
                     at && !at.startsWith('0001') ? ` Acknowledged${by ? ` by ${Utils.escapeHtml(by)}` : ''} on ${Utils.escapeHtml(new Date(at).toLocaleDateString())}.` : ''}</p>`;
         }
         html += '<div class="smart-baseline-actions">';

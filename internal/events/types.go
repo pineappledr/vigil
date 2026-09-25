@@ -26,6 +26,9 @@ const (
 	DriveAppeared      EventType = "drive_appeared"
 	DriveDisappeared   EventType = "drive_disappeared"
 	ReallocatedSectors EventType = "reallocated_sectors"
+	// SmartAcknowledgedReminder periodically reminds that a drive still has
+	// acknowledged (known) error counters. See smart.RunBaselineReminders.
+	SmartAcknowledgedReminder EventType = "smart_acknowledged_reminder"
 	WearoutWarning     EventType = "wearout_warning"
 	WearoutCritical    EventType = "wearout_critical"
 	WearoutPredicted   EventType = "wearout_predicted"
@@ -97,7 +100,7 @@ var AllEventTypes = []EventType{
 	ZFSCapacityWarning, ZFSCapacityCritical, ZFSFragmentationWarning,
 	ZFSVdevErrors, ZFSScrubOverdue,
 	ZFSResilverStarted, ZFSScrubCompleted, ZFSResilverCompleted, ZFSDatasetQuotaWarning,
-	DriveAppeared, DriveDisappeared, ReallocatedSectors,
+	DriveAppeared, DriveDisappeared, ReallocatedSectors, SmartAcknowledgedReminder,
 	WearoutWarning, WearoutCritical, WearoutPredicted,
 	// Add-on / job
 	JobStarted, PhaseComplete, BurninPassed, JobComplete, JobFailed,
@@ -117,6 +120,9 @@ var AllEventTypeMeta = []EventTypeMeta{
 	// Monitoring
 	{SmartWarning, CategoryMonitoring, "SMART Warning", SeverityWarning, 300, true},
 	{SmartCritical, CategoryMonitoring, "SMART Critical", SeverityCritical, 86400, true},
+	// No cooldown: the reminder interval itself (alerts/acknowledged_reminder_days)
+	// is the rate limit, and it is persisted, so a restart doesn't re-send it.
+	{SmartAcknowledgedReminder, CategoryMonitoring, "SMART Acknowledged Reminder", SeverityWarning, 0, true},
 	{TempAlert, CategoryMonitoring, "Temperature Alert", SeverityWarning, 600, true},
 	{TempCritical, CategoryMonitoring, "Temperature Critical", SeverityCritical, 3600, true},
 	{ZFSPoolDegraded, CategoryMonitoring, "ZFS Pool Degraded", SeverityWarning, 300, true},

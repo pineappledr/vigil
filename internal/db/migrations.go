@@ -234,6 +234,7 @@ func MigrateSchemaExtensions(db *sql.DB) error {
 				raw_value       INTEGER NOT NULL,
 				acknowledged_by TEXT,
 				acknowledged_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				last_reminded_at DATETIME,
 				PRIMARY KEY (hostname, serial_number, attribute_id)
 			);`},
 	}
