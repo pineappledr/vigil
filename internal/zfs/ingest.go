@@ -169,8 +169,23 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) (int64, error) 
 
 	// Process devices - including children (disks inside mirrors/raidz)
 	vdevIndex := 0
+	seen := map[string]bool{}
 	for _, dev := range pool.Devices {
-		processDeviceRecursive(db, poolID, hostname, pool.Name, dev, "", &vdevIndex)
+		processDeviceRecursive(db, poolID, hostname, pool.Name, dev, "", &vdevIndex, seen)
+	}
+
+	// Devices are keyed by name (sda2), and Linux names are not stable: when
+	// a USB drive took `sda` on Brain, the pool's `sda2` became `sdc2` and the
+	// old row stayed forever, so the pool showed three disks in a 2-way
+	// mirror. The report is the full device list of the pool, so anything
+	// not in it is gone. An empty report deletes nothing: that is a failed
+	// read, not a pool without disks.
+	if len(seen) > 0 {
+		if n, err := DeleteZFSDevicesNotIn(db, poolID, seen); err != nil {
+			log.Printf("⚠️  Failed to remove stale devices from pool %s: %v", pool.Name, err)
+		} else if n > 0 {
+			log.Printf("🧹 Removed %d stale device(s) from pool %s", n, pool.Name)
+		}
 	}
 
 	// Record scrub history if applicable
@@ -183,7 +198,7 @@ func processPool(db *sql.DB, hostname string, pool ZFSAgentPool) (int64, error) 
 
 // processDeviceRecursive processes a device and all its children
 // This flattens the hierarchy while maintaining parent-child relationships via VdevParent
-func processDeviceRecursive(db *sql.DB, poolID int64, hostname, poolName string, dev ZFSAgentDevice, parentName string, index *int) {
+func processDeviceRecursive(db *sql.DB, poolID int64, hostname, poolName string, dev ZFSAgentDevice, parentName string, index *int, seen map[string]bool) {
 	// Determine parent
 	vdevParent := dev.VdevParent
 	if vdevParent == "" && parentName != "" {
@@ -214,6 +229,9 @@ func processDeviceRecursive(db *sql.DB, poolID int64, hostname, poolName string,
 		IsReplacing:    dev.IsReplacing,
 	}
 
+	// Marked before the upsert: a device that is in the report stays, even
+	// if writing it failed this time.
+	seen[dev.Name] = true
 	if err := UpsertZFSPoolDevice(db, poolID, dbDevice); err != nil {
 		log.Printf("⚠️  Failed to upsert ZFS device %s: %v", dev.Name, err)
 	} else {
@@ -228,7 +246,7 @@ func processDeviceRecursive(db *sql.DB, poolID int64, hostname, poolName string,
 		// Child's parent is this device
 		child.VdevParent = dev.Name
 		child.VdevIndex = childIdx
-		processDeviceRecursive(db, poolID, hostname, poolName, child, dev.Name, index)
+		processDeviceRecursive(db, poolID, hostname, poolName, child, dev.Name, index, seen)
 	}
 }
 
