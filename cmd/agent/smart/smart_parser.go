@@ -133,6 +133,24 @@ var CriticalAttributeDefinitions = map[int]CriticalAttribute{
 	},
 
 	// ─── SSD-Specific Critical Attributes ────────────────────────────
+	171: {
+		ID:               171,
+		Name:             "Program Fail Count (real)",
+		Description:      "Real flash program failures on SanDisk/Marvell SSDs (they report a packed per-chip total in 181).",
+		DriveType:        DriveTypeSSD,
+		Severity:         SeverityCritical,
+		FailureThreshold: intPtr(0),
+		HigherIsBetter:   false,
+	},
+	172: {
+		ID:               172,
+		Name:             "Erase Fail Count (real)",
+		Description:      "Real flash erase failures on SanDisk/Marvell SSDs (they report a packed per-chip total in 182).",
+		DriveType:        DriveTypeSSD,
+		Severity:         SeverityCritical,
+		FailureThreshold: intPtr(0),
+		HigherIsBetter:   false,
+	},
 	181: {
 		ID:               181,
 		Name:             "Program Fail Count",
@@ -821,6 +839,8 @@ func sanearRaw(id int, raw int64) int64 {
 var techoPlausible = map[int]int64{
 	5:   65535,   // Reallocated_Sector_Ct
 	10:  1000,    // Spin_Retry_Count
+	171: 1000,    // Program_Fail_Count (SanDisk/Marvell: the real one)
+	172: 1000,    // Erase_Fail_Count (SanDisk/Marvell: the real one)
 	181: 1000,    // Program_Fail_Cnt_Total
 	182: 1000,    // Erase_Fail_Count
 	183: 65535,   // Runtime_Bad_Block -- el Samsung de la flota tiene 770
@@ -895,7 +915,7 @@ func GetAttributeSeverity(id int, rawValue int64, value int, threshold int) stri
 	// lo que importa es la TENDENCIA. Marcar crítico al primero convierte la
 	// alarma en paisaje: el SanDisk de la flota llevaba 1 command timeout y
 	// salía en rojo junto a un disco con 770 sectores muertos.
-	case 187, 188, 181, 182, 183, 184, 10:
+	case 187, 188, 181, 182, 183, 184, 10, 171, 172:
 		if rawValue > 100 {
 			return SeverityCritical
 		}
@@ -917,7 +937,7 @@ func GetAttributeSeverity(id int, rawValue int64, value int, threshold int) stri
 		if t > 55 {
 			return SeverityWarning
 		}
-		if rawValue > 45 {
+		if t > 45 {
 			return SeverityInfo
 		}
 
@@ -1025,8 +1045,22 @@ func AnalyzeDriveHealthWithBaseline(driveData *DriveSmartData, baseline Baseline
 		})
 	}
 
+	// SanDisk/Marvell SSDs report the real program/erase failure counters in
+	// 171/172 and a vendor-packed per-chip total in 181/182 whose raw value
+	// grows with normal use (e.g. 204581822 on a healthy SD9SB8W with
+	// 171 = 172 = 0). No unpacking recovers a real count from it, so when the
+	// drive reports the real counter, judge that one and skip the packed total.
+	present := make(map[int]bool, len(driveData.Attributes))
+	for _, attr := range driveData.Attributes {
+		present[attr.ID] = true
+	}
+	supersededBy := map[int]int{181: 171, 182: 172}
+
 	// Analyze each attribute
 	for _, attr := range driveData.Attributes {
+		if real, ok := supersededBy[attr.ID]; ok && present[real] {
+			continue
+		}
 		if acked, ok := baseline[attr.ID]; ok && IsAcknowledgeable(attr.ID) && attr.RawValue <= acked {
 			continue
 		}
