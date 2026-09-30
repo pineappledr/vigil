@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 
 	"vigil/internal/models"
 )
@@ -14,6 +15,8 @@ func Load() models.Config {
 		AdminUser:   getEnv("ADMIN_USER", "admin"),
 		AdminPass:   getEnv("ADMIN_PASS", ""),
 		AuthEnabled: getEnv("AUTH_ENABLED", "true") == "true",
+		// Trimmed: a token pasted into an env file often carries a newline.
+		MetricsToken: strings.TrimSpace(getEnv("VIGIL_METRICS_TOKEN", "")),
 	}
 }
 

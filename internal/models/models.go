@@ -46,4 +46,7 @@ type Config struct {
 	AdminUser   string
 	AdminPass   string
 	AuthEnabled bool
+	// MetricsToken enables GET /metrics (Prometheus) when set; scrapers must
+	// send it as a bearer token. Empty = endpoint disabled.
+	MetricsToken string
 }

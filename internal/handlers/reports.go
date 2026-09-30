@@ -223,11 +223,11 @@ func Report(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// History returns latest reports for all hosts with aliases
-func History(w http.ResponseWriter, r *http.Request) {
-	aliases := loadAliases()
-
-	query := `
+// latestReportsSQL selects the newest stored report of every host, with the
+// agent registry's last_seen when there is one. Columns: hostname, timestamp,
+// data, last_seen. Shared by /api/history and /metrics so both describe the
+// same data.
+const latestReportsSQL = `
 	SELECT r.hostname, r.timestamp, r.data,
 	       COALESCE(ag.last_seen, r.timestamp) AS last_seen
 	FROM reports r
@@ -244,7 +244,11 @@ func History(w http.ResponseWriter, r *http.Request) {
 	) ag ON LOWER(ag.hostname) = LOWER(r.hostname)
 	ORDER BY r.timestamp DESC`
 
-	rows, err := db.DB.Query(query)
+// History returns latest reports for all hosts with aliases
+func History(w http.ResponseWriter, r *http.Request) {
+	aliases := loadAliases()
+
+	rows, err := db.DB.Query(latestReportsSQL)
 	if err != nil {
 		JSONError(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -44,6 +44,7 @@ Works on **any Linux system** (Ubuntu, Debian, Proxmox, TrueNAS, Unraid, Fedora,
 - **📈 Health Scoring:** Composite 0–100 health score combining SMART, wearout, and ZFS metrics. Grades from Excellent to Critical. Exportable HTML health reports.
 - **🔮 Wearout Prediction:** SSD/NVMe wear leveling tracking with end-of-life prediction and threshold alerts (warning at 60%, critical at 80%).
 - **📊 Built-in Metrics:** System stats endpoint (`GET /api/stats`) with uptime, report queue depth, processing latency, notification counts, and database size — no Prometheus needed.
+- **📡 Prometheus Endpoint (optional):** Token-protected, read-only `GET /metrics` with per-drive health, temperature, key SMART counters, wear-out and ZFS pool state for an existing Prometheus/Grafana stack.
 - **💾 Database Backups:** Scheduled and manual SQLite backups via `VACUUM INTO`. Download, restore, and manage backups from the settings page. Upload a backup file to restore, with automatic safety backup before overwrite.
 - **🔍 Request Tracing:** `X-Request-ID` header on every request for log correlation across the agent → server → notification chain.
 - **⚙️ Configurable Retention:** Notification history, SMART data, and host history limits adjustable from the settings page.
@@ -471,6 +472,7 @@ sudo systemctl start vigil-agent
 | `ADMIN_USER` | `admin` | Default admin username |
 | `ADMIN_PASS` | (generated) | Admin password (random if not set) |
 | `TZ` | `UTC` | Timezone for timestamps (e.g., `America/New_York`) |
+| `VIGIL_METRICS_TOKEN` | (unset) | Enables the Prometheus endpoint `GET /metrics`; scrapers must send it as a bearer token (min. 16 chars). See [Prometheus Metrics](#-prometheus-metrics) |
 
 ### Agent Flags
 
@@ -487,6 +489,92 @@ sudo systemctl start vigil-agent
 | - | `TZ` | `UTC` | Timezone (should match server for consistent timestamps) |
 
 > Environment variables override flags. When `TOKEN` is set, the agent auto-registers on first boot and skips registration on subsequent starts — ideal for Docker deployments.
+
+---
+
+## 📈 Prometheus Metrics
+
+The server can expose disk and ZFS health in the Prometheus text format at `GET /metrics`, so an existing Prometheus/Grafana stack can graph and alert on it.
+
+**Disabled by default.** Set `VIGIL_METRICS_TOKEN` on the server to enable it; until then `/metrics` answers `404`. Once enabled, every request must carry `Authorization: Bearer <token>` (wrong or missing token → `401`). The token is independent of the dashboard login (`AUTH_ENABLED`): Prometheus does not need a user account, and the endpoint is read-only — it only reads the latest data Vigil already stored and never triggers an agent, a scan or any write.
+
+```bash
+# Generate a token (tokens shorter than 16 characters leave the endpoint disabled)
+openssl rand -hex 32
+```
+
+```yaml
+# docker-compose.yml (server)
+    environment:
+      - VIGIL_METRICS_TOKEN=${VIGIL_METRICS_TOKEN}
+```
+
+Prometheus scrape job (token read from a file, so it stays out of `prometheus.yml`):
+
+```yaml
+scrape_configs:
+  - job_name: vigil
+    scrape_interval: 60s          # Vigil data only changes when an agent reports
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/vigil_metrics_token
+    static_configs:
+      - targets: ["vigil.example.lan:9080"]
+```
+
+### Exposed metrics
+
+Drive series are labelled `host` + `serial` (stable across reboots, unlike `/dev/sdX`). Model, alias, device and type live only on `vigil_drive_info`, so renaming a drive does not break its history — join them in when needed:
+`vigil_drive_temperature_celsius * on(host, serial) group_left(alias, model) vigil_drive_info`.
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `vigil_build_info` | `version` | Always 1 |
+| `vigil_agent_last_seen_timestamp_seconds` | `host` | Last time an agent of this host reported (agent registry) |
+| `vigil_agent_enabled` | `host` | 1 if an agent of this host is enabled |
+| `vigil_host_last_report_timestamp_seconds` | `host` | Time of the newest stored report |
+| `vigil_host_drives` | `host` | Drives in the newest report |
+| `vigil_drive_info` | `host`, `serial`, `model`, `alias`, `device`, `type` | Always 1 |
+| `vigil_drive_health` | `host`, `serial` | Vigil's verdict, same as the UI: 0 healthy, 1 warning, 2 critical |
+| `vigil_drive_health_issues` | `host`, `serial` | Number of issues found (acknowledged counters excluded) |
+| `vigil_drive_smart_passed` | `host`, `serial` | 1 if the drive's SMART self-assessment passed |
+| `vigil_drive_temperature_celsius` | `host`, `serial` | Current temperature |
+| `vigil_drive_power_on_seconds` | `host`, `serial` | Power-on time (SMART hours × 3600; Prometheus base unit) |
+| `vigil_drive_smart_attribute_raw` | `host`, `serial`, `id`, `name` | Raw value of ATA attributes 5, 9, 10, 187, 188, 197, 198, 199 only |
+| `vigil_drive_nvme_media_errors` | `host`, `serial` | NVMe media/data integrity errors |
+| `vigil_drive_nvme_percentage_used` | `host`, `serial` | NVMe endurance used (can exceed 100) |
+| `vigil_drive_nvme_unsafe_shutdowns` | `host`, `serial` | NVMe unsafe shutdowns |
+| `vigil_drive_nvme_critical_warning` | `host`, `serial` | NVMe critical warning bitfield (0 = none) |
+| `vigil_drive_nvme_available_spare_percent` | `host`, `serial` | NVMe available spare |
+| `vigil_drive_wearout_percent` | `host`, `serial` | Vigil's wear-out estimate (0 = new, 100 = worn out) |
+| `vigil_drive_baseline_acknowledged` | `host`, `serial` | 1 if the drive's error counters were acknowledged |
+| `vigil_drive_baseline_acknowledged_counters` | `host`, `serial` | How many counters are acknowledged |
+| `vigil_zfs_pool_health` | `host`, `pool`, `state` | Always 1; the state (`ONLINE`, `DEGRADED`, …) is the label |
+| `vigil_zfs_pool_online` | `host`, `pool` | 1 if the pool is `ONLINE` |
+| `vigil_zfs_pool_size_bytes` / `_allocated_bytes` / `_free_bytes` | `host`, `pool` | Pool capacity |
+| `vigil_zfs_pool_fragmentation_percent` | `host`, `pool` | Pool fragmentation |
+| `vigil_zfs_pool_errors` | `host`, `pool`, `type` | read / write / checksum errors since the last `zpool clear` |
+| `vigil_zfs_pool_last_scan_timestamp_seconds` | `host`, `pool`, `function` | Start of the latest scrub/resilver |
+| `vigil_zfs_pool_scan_running` | `host`, `pool` | 1 while a scrub/resilver runs |
+| `vigil_zfs_pool_scan_errors` | `host`, `pool` | Errors found by the latest scrub/resilver |
+| `vigil_zfs_device_errors` | `host`, `pool`, `device`, `vdev_type`, `serial`, `type` | Per-vdev read / write / checksum errors |
+| `vigil_reports_processed_total`, `vigil_reports_dropped_total` | — | Agent reports processed / dropped since start |
+| `vigil_notifications_sent_total`, `vigil_notifications_failed_total` | — | Notifications since start |
+| `vigil_report_queue_depth` | — | Reports waiting for background processing |
+
+Example alerts:
+
+```yaml
+- alert: VigilDriveCritical
+  expr: vigil_drive_health == 2
+- alert: VigilAgentSilent
+  expr: time() - vigil_agent_last_seen_timestamp_seconds > 3 * 3600   # adjust to your report interval
+- alert: VigilCRCErrorsGrowing
+  expr: increase(vigil_drive_smart_attribute_raw{id="199"}[1d]) > 0
+- alert: VigilZFSPoolNotOnline
+  expr: vigil_zfs_pool_online == 0
+```
 
 ---
 
