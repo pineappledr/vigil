@@ -140,6 +140,14 @@ func main() {
 	} else {
 		log.Printf("⚠️  Authentication: disabled (set AUTH_ENABLED=true to enable)")
 	}
+	switch n := len(cfg.MetricsToken); {
+	case n == 0:
+		log.Printf("✓ Prometheus metrics: disabled (set VIGIL_METRICS_TOKEN to enable /metrics)")
+	case n < handlers.MinMetricsTokenLength:
+		log.Printf("⚠️  Prometheus metrics: disabled, VIGIL_METRICS_TOKEN is shorter than %d characters", handlers.MinMetricsTokenLength)
+	default:
+		log.Printf("✓ Prometheus metrics: enabled at /metrics (bearer token)")
+	}
 	auth.CleanupExpiredSessions()
 	agents.CleanupExpiredAgentSessions(db.DB)
 	// Run the startup retention sweep in the background. On a large/overdue DB
@@ -345,6 +353,11 @@ func setupRoutes(cfg models.Config) *http.ServeMux {
 	mux.HandleFunc("GET /api/summary", handlers.GetSummary)
 	mux.HandleFunc("GET /api/version/check", handlers.VersionChecker.CheckVersion)
 	mux.HandleFunc("GET /api/auth/status", auth.Status(cfg))
+
+	// Prometheus scrape endpoint. Not behind protect(): it has its own static
+	// bearer token (VIGIL_METRICS_TOKEN) and answers 404 while that is unset.
+	// A specific pattern, so it wins over the "/" SPA catch-all below.
+	mux.HandleFunc("GET /metrics", handlers.PrometheusMetrics(cfg.MetricsToken))
 
 	// Auth endpoints (rate limited)
 	mux.HandleFunc("POST /api/auth/login", loginLimiter.Limit(auth.Login(cfg)))
