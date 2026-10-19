@@ -29,6 +29,8 @@ var DefaultSettings = []Setting{
 	// For *_days keys: 0 means "keep forever" (no time-based pruning).
 	{Category: "retention", Key: "notification_history_days", Value: "90", ValueType: "int", Description: "Days to keep notification history (0 = forever)"},
 	{Category: "retention", Key: "smart_data_days", Value: "90", ValueType: "int", Description: "Days to keep SMART attribute and temperature history (0 = forever)"},
+	{Category: "retention", Key: "wearout_history_days", Value: "365", ValueType: "int", Description: "Days to keep drive wearout snapshots (0 = forever). The trend prediction uses the last 365 days"},
+	{Category: "retention", Key: "wearout_full_resolution_hours", Value: "24", ValueType: "int", Description: "Keep every wearout snapshot this many hours; older ones are downsampled to one per drive per hour (0 = no downsampling)"},
 	{Category: "retention", Key: "report_history_days", Value: "90", ValueType: "int", Description: "Days to keep agent report history (0 = forever)"},
 	{Category: "retention", Key: "audit_log_days", Value: "90", ValueType: "int", Description: "Days to keep audit / activity log entries (0 = forever)"},
 	{Category: "retention", Key: "addon_data_days", Value: "0", ValueType: "int", Description: "Auto-remove add-ons that have been offline this many days, and their notification history (0 = forever)"},
