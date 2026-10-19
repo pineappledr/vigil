@@ -290,6 +290,17 @@ func runRetentionSweep() {
 		log.Printf("🧹 SMART/temperature data cleanup: removed %d old records", deleted)
 	}
 
+	// wearout_history gets one row per drive per report and the trend regression
+	// reads 365 days of it on every report; keep it bounded (downsample to one
+	// row per drive per hour after a day, drop rows past the trend window).
+	wearoutDays := settings.GetInt(db.DB, "retention", "wearout_history_days", 365)
+	wearoutFullHours := settings.GetInt(db.DB, "retention", "wearout_full_resolution_hours", 24)
+	if deleted, err := wearout.PruneHistory(db.DB, wearoutDays, time.Duration(wearoutFullHours)*time.Hour); err != nil {
+		log.Printf("⚠️  Wearout history cleanup: %v", err)
+	} else if deleted > 0 {
+		log.Printf("🧹 Wearout history cleanup: removed %d old records", deleted)
+	}
+
 	if deleted, err := handlers.CleanupOldReportsByAge(settings.GetInt(db.DB, "retention", "report_history_days", 90)); err != nil {
 		log.Printf("⚠️  Report age cleanup: %v", err)
 	} else if deleted > 0 {
