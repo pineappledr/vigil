@@ -16,7 +16,7 @@ func TestTempFromRaw(t *testing.T) {
 		{"limpio 46C", 46, 46},
 
 		// Los de producción: el raw empaqueta actual|min<<16|max<<32.
-		// 236224315425 = 0x37_00230021 -> byte bajo 0x21 = 33 °C, que es
+		// 236224315425 = 0x37_0011_0021 -> byte bajo 0x21 = 33 °C, que es
 		// exactamente lo que la UI mostraba para ese disco.
 		{"Brain HDWG180 (UI decía 33C)", 236224315425, 33},
 		{"Brain HDWG180 (UI decía 34C)", 236224380962, 34},
