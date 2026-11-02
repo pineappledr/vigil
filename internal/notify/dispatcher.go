@@ -3,6 +3,7 @@ package notify
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -25,8 +26,18 @@ type Sender interface {
 // ShoutrrrSender dispatches via the Shoutrrr library.
 type ShoutrrrSender struct{}
 
+// shoutrrrSend is replaced in tests so nothing reaches a real service.
+var shoutrrrSend = shoutrrr.Send
+
+// Send fits the message to the service's limit and redacts the service URL
+// from errors. Every send path (dispatcher and the UI test buttons) goes
+// through here.
 func (ShoutrrrSender) Send(url, message string) error {
-	return shoutrrr.Send(url, message)
+	if err := shoutrrrSend(url, truncateForService(url, message)); err != nil {
+		// Shoutrrr errors embed the full service URL, credentials included.
+		return errors.New(redactURLs(err.Error()))
+	}
+	return nil
 }
 
 // serviceConfig is the Shoutrrr URL extracted from a service's config_json.
@@ -290,11 +301,7 @@ func (d *Dispatcher) dispatch(svc NotificationService, e events.Event) {
 	}
 
 	msg := formatMessage(e)
-	err := d.sender.Send(cfg.ShoutrrrURL, truncateForService(cfg.ShoutrrrURL, msg))
-	if err != nil {
-		// Shoutrrr errors embed the full service URL, credentials included.
-		err = fmt.Errorf("%s", redactURLs(err.Error()))
-	}
+	err := d.sender.Send(cfg.ShoutrrrURL, msg)
 
 	rec := &NotificationRecord{
 		SettingID:    svc.ID,
@@ -334,9 +341,10 @@ func formatMessage(e events.Event) string {
 	return msg
 }
 
-// maxMessageChars is the longest message each service accepts, keyed by
-// Shoutrrr URL scheme. Services not listed are sent untouched.
-var maxMessageChars = map[string]int{
+// maxMessageBytes is the longest message each service accepts, keyed by
+// Shoutrrr URL scheme. Shoutrrr checks len(message), i.e. BYTES, not
+// characters. Services not listed are sent untouched.
+var maxMessageBytes = map[string]int{
 	"telegram": 4096,
 }
 
@@ -344,18 +352,24 @@ var maxMessageChars = map[string]int{
 // stays in the notification history.
 const truncatedSuffix = "\n… (truncated, full message in Vigil)"
 
-// truncateForService cuts msg to the service's limit (in characters).
+// truncateForService cuts msg to the service's byte limit without splitting
+// a UTF-8 character.
 func truncateForService(shoutrrrURL, msg string) string {
 	scheme, _, _ := strings.Cut(shoutrrrURL, "://")
-	limit, ok := maxMessageChars[scheme]
-	if !ok || utf8.RuneCountInString(msg) <= limit {
+	limit, ok := maxMessageBytes[strings.ToLower(scheme)]
+	if !ok || len(msg) <= limit {
 		return msg
 	}
-	keep := limit - utf8.RuneCountInString(truncatedSuffix)
-	return string([]rune(msg)[:keep]) + truncatedSuffix
+	keep := limit - len(truncatedSuffix)
+	for keep > 0 && !utf8.RuneStart(msg[keep]) {
+		keep--
+	}
+	return msg[:keep] + truncatedSuffix
 }
 
-var serviceURL = regexp.MustCompile(`\b([a-z][a-z0-9+.-]*)://[^\s"']+`)
+// serviceURL matches any scheme://… in any case, even glued to a preceding
+// character (Shoutrrr accepts and echoes TELEGRAM://… too).
+var serviceURL = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*)://[^\s"']+`)
 
 // redactURLs replaces every URL in s with its scheme only.
 func redactURLs(s string) string {

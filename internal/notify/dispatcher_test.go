@@ -527,41 +527,39 @@ func TestDispatcherStopDrains(t *testing.T) {
 	}
 }
 
-func TestDispatcherTruncatesTelegramMessage(t *testing.T) {
-	db, bus, sender, d := setupDispatcherTest(t)
+// stubShoutrrr replaces the real Shoutrrr call for the duration of a test.
+func stubShoutrrr(t *testing.T, fn func(url, msg string) error) {
+	t.Helper()
+	orig := shoutrrrSend
+	shoutrrrSend = fn
+	t.Cleanup(func() { shoutrrrSend = orig })
+}
 
-	CreateService(db, &NotificationService{
-		Name:             "tg",
-		ServiceType:      "telegram",
-		ConfigJSON:       `{"shoutrrr_url":"telegram://123:abc@telegram?chats=-1"}`,
-		Enabled:          true,
-		NotifyOnCritical: true,
-	})
+func TestShoutrrrSenderFitsTelegramByteLimit(t *testing.T) {
+	var got string
+	stubShoutrrr(t, func(_, msg string) error { got = msg; return nil })
 
-	d.Start()
-	defer d.Stop()
-
-	long := strings.Repeat("ñ", 10000) // multi-byte: the limit is in characters, not bytes
-	bus.Publish(events.Event{Type: events.SmartCritical, Severity: events.SeverityCritical, Message: long})
-	time.Sleep(100 * time.Millisecond)
-
-	if sender.callCount() != 1 {
-		t.Fatalf("expected 1 send, got %d", sender.callCount())
-	}
-	sent := sender.calls[0]
-	if n := utf8.RuneCountInString(sent); n > 4096 {
-		t.Errorf("sent %d characters, Telegram allows 4096", n)
-	}
-	if !strings.HasSuffix(sent, truncatedSuffix) {
-		t.Errorf("truncated message should end with %q", truncatedSuffix)
-	}
-	history, _ := RecentHistory(db, 10)
-	if len(history) != 1 || !strings.Contains(history[0].Message, long) {
-		t.Error("history should keep the full, untruncated message")
+	for name, msg := range map[string]string{
+		"ascii":      strings.Repeat("x", 10000),
+		"multi-byte": strings.Repeat("ñ°", 5000), // 2 bytes per character
+	} {
+		if err := (ShoutrrrSender{}).Send("telegram://123:abc@telegram?chats=-1", msg); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		// Shoutrrr rejects len(message) > 4096: BYTES, not characters.
+		if len(got) > 4096 {
+			t.Errorf("%s: sent %d bytes, Telegram allows 4096", name, len(got))
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("%s: truncation split a UTF-8 character", name)
+		}
+		if !strings.HasSuffix(got, truncatedSuffix) {
+			t.Errorf("%s: truncated message should end with %q", name, truncatedSuffix)
+		}
 	}
 }
 
-func TestDispatcherDoesNotTruncateShortOrUnlimited(t *testing.T) {
+func TestShoutrrrSenderLeavesShortOrUnlimitedAlone(t *testing.T) {
 	cases := map[string]string{
 		"telegram://123:abc@telegram?chats=-1": "short message",
 		"generic://example.com":                strings.Repeat("x", 10000),
@@ -571,36 +569,29 @@ func TestDispatcherDoesNotTruncateShortOrUnlimited(t *testing.T) {
 			t.Errorf("%s: message changed (len %d -> %d)", url, len(msg), len(got))
 		}
 	}
+	if got := truncateForService("TELEGRAM://123:abc@telegram", strings.Repeat("x", 5000)); len(got) > 4096 {
+		t.Errorf("uppercase scheme not truncated: %d bytes", len(got))
+	}
 }
 
-func TestDispatcherRedactsURLInError(t *testing.T) {
-	db, bus, sender, d := setupDispatcherTest(t)
-
-	url := "telegram://123456:SECRET-TOKEN@telegram?chats=-1"
-	CreateService(db, &NotificationService{
-		Name:             "tg",
-		ServiceType:      "telegram",
-		ConfigJSON:       `{"shoutrrr_url":"` + url + `"}`,
-		Enabled:          true,
-		NotifyOnCritical: true,
-	})
-	sender.failNext = true
-	sender.failErr = fmt.Errorf(`sending message via service at %q: boom`, url)
-
-	d.Start()
-	defer d.Stop()
-
-	bus.Publish(events.Event{Type: events.SmartCritical, Severity: events.SeverityCritical, Message: "x"})
-	time.Sleep(100 * time.Millisecond)
-
-	history, _ := RecentHistory(db, 10)
-	if len(history) != 1 {
-		t.Fatalf("expected 1 record, got %d", len(history))
-	}
-	if strings.Contains(history[0].ErrorMessage, "SECRET-TOKEN") {
-		t.Errorf("error message leaks the service URL: %q", history[0].ErrorMessage)
-	}
-	if !strings.Contains(history[0].ErrorMessage, "telegram://") {
-		t.Errorf("error message should still name the service scheme: %q", history[0].ErrorMessage)
+func TestShoutrrrSenderRedactsURLInError(t *testing.T) {
+	for _, url := range []string{
+		"telegram://123456:SECRET-TOKEN@telegram?chats=-1",
+		"TELEGRAM://123456:SECRET-TOKEN@telegram?chats=-1",
+	} {
+		u := url
+		stubShoutrrr(t, func(_, _ string) error {
+			return fmt.Errorf(`sending message via service at %q: boom`, u)
+		})
+		err := (ShoutrrrSender{}).Send(u, "x")
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if strings.Contains(err.Error(), "SECRET-TOKEN") {
+			t.Errorf("error leaks the service URL: %q", err)
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "telegram://") {
+			t.Errorf("error should still name the scheme: %q", err)
+		}
 	}
 }
