@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nicholas-fedor/shoutrrr"
 	"vigil/internal/drivegroups"
@@ -287,7 +290,11 @@ func (d *Dispatcher) dispatch(svc NotificationService, e events.Event) {
 	}
 
 	msg := formatMessage(e)
-	err := d.sender.Send(cfg.ShoutrrrURL, msg)
+	err := d.sender.Send(cfg.ShoutrrrURL, truncateForService(cfg.ShoutrrrURL, msg))
+	if err != nil {
+		// Shoutrrr errors embed the full service URL, credentials included.
+		err = fmt.Errorf("%s", redactURLs(err.Error()))
+	}
 
 	rec := &NotificationRecord{
 		SettingID:    svc.ID,
@@ -325,6 +332,34 @@ func formatMessage(e events.Event) string {
 		msg = fmt.Sprintf("[%s] [%s] %s", severity, e.Hostname, e.Message)
 	}
 	return msg
+}
+
+// maxMessageChars is the longest message each service accepts, keyed by
+// Shoutrrr URL scheme. Services not listed are sent untouched.
+var maxMessageChars = map[string]int{
+	"telegram": 4096,
+}
+
+// truncatedSuffix marks a message cut to fit its service; the full text
+// stays in the notification history.
+const truncatedSuffix = "\n… (truncated, full message in Vigil)"
+
+// truncateForService cuts msg to the service's limit (in characters).
+func truncateForService(shoutrrrURL, msg string) string {
+	scheme, _, _ := strings.Cut(shoutrrrURL, "://")
+	limit, ok := maxMessageChars[scheme]
+	if !ok || utf8.RuneCountInString(msg) <= limit {
+		return msg
+	}
+	keep := limit - utf8.RuneCountInString(truncatedSuffix)
+	return string([]rune(msg)[:keep]) + truncatedSuffix
+}
+
+var serviceURL = regexp.MustCompile(`\b([a-z][a-z0-9+.-]*)://[^\s"']+`)
+
+// redactURLs replaces every URL in s with its scheme only.
+func redactURLs(s string) string {
+	return serviceURL.ReplaceAllString(s, "$1://<redacted>")
 }
 
 // parseHHMM converts "HH:MM" to minutes since midnight.

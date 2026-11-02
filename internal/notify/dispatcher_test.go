@@ -3,10 +3,12 @@ package notify
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"vigil/internal/drivegroups"
 	"vigil/internal/events"
@@ -19,6 +21,7 @@ type mockSender struct {
 	mu       sync.Mutex
 	calls    []string
 	failNext bool
+	failErr  error // returned instead of the generic error when failNext is set
 }
 
 func (m *mockSender) Send(url, message string) error {
@@ -27,6 +30,9 @@ func (m *mockSender) Send(url, message string) error {
 	m.calls = append(m.calls, message)
 	if m.failNext {
 		m.failNext = false
+		if m.failErr != nil {
+			return m.failErr
+		}
 		return fmt.Errorf("mock send error")
 	}
 	return nil
@@ -494,11 +500,11 @@ func TestDispatcherStopDrains(t *testing.T) {
 	db, bus, sender, d := setupDispatcherTest(t)
 
 	CreateService(db, &NotificationService{
-		Name:             "drain-test",
-		ServiceType:      "generic",
-		ConfigJSON:       `{"shoutrrr_url":"generic://example.com"}`,
-		Enabled:          true,
-		NotifyOnWarning:  true,
+		Name:            "drain-test",
+		ServiceType:     "generic",
+		ConfigJSON:      `{"shoutrrr_url":"generic://example.com"}`,
+		Enabled:         true,
+		NotifyOnWarning: true,
 	})
 
 	d.Start()
@@ -518,5 +524,83 @@ func TestDispatcherStopDrains(t *testing.T) {
 	// All published events should have been processed
 	if sender.callCount() < 1 {
 		t.Error("expected at least 1 dispatch after stop/drain")
+	}
+}
+
+func TestDispatcherTruncatesTelegramMessage(t *testing.T) {
+	db, bus, sender, d := setupDispatcherTest(t)
+
+	CreateService(db, &NotificationService{
+		Name:             "tg",
+		ServiceType:      "telegram",
+		ConfigJSON:       `{"shoutrrr_url":"telegram://123:abc@telegram?chats=-1"}`,
+		Enabled:          true,
+		NotifyOnCritical: true,
+	})
+
+	d.Start()
+	defer d.Stop()
+
+	long := strings.Repeat("ñ", 10000) // multi-byte: the limit is in characters, not bytes
+	bus.Publish(events.Event{Type: events.SmartCritical, Severity: events.SeverityCritical, Message: long})
+	time.Sleep(100 * time.Millisecond)
+
+	if sender.callCount() != 1 {
+		t.Fatalf("expected 1 send, got %d", sender.callCount())
+	}
+	sent := sender.calls[0]
+	if n := utf8.RuneCountInString(sent); n > 4096 {
+		t.Errorf("sent %d characters, Telegram allows 4096", n)
+	}
+	if !strings.HasSuffix(sent, truncatedSuffix) {
+		t.Errorf("truncated message should end with %q", truncatedSuffix)
+	}
+	history, _ := RecentHistory(db, 10)
+	if len(history) != 1 || !strings.Contains(history[0].Message, long) {
+		t.Error("history should keep the full, untruncated message")
+	}
+}
+
+func TestDispatcherDoesNotTruncateShortOrUnlimited(t *testing.T) {
+	cases := map[string]string{
+		"telegram://123:abc@telegram?chats=-1": "short message",
+		"generic://example.com":                strings.Repeat("x", 10000),
+	}
+	for url, msg := range cases {
+		if got := truncateForService(url, msg); got != msg {
+			t.Errorf("%s: message changed (len %d -> %d)", url, len(msg), len(got))
+		}
+	}
+}
+
+func TestDispatcherRedactsURLInError(t *testing.T) {
+	db, bus, sender, d := setupDispatcherTest(t)
+
+	url := "telegram://123456:SECRET-TOKEN@telegram?chats=-1"
+	CreateService(db, &NotificationService{
+		Name:             "tg",
+		ServiceType:      "telegram",
+		ConfigJSON:       `{"shoutrrr_url":"` + url + `"}`,
+		Enabled:          true,
+		NotifyOnCritical: true,
+	})
+	sender.failNext = true
+	sender.failErr = fmt.Errorf(`sending message via service at %q: boom`, url)
+
+	d.Start()
+	defer d.Stop()
+
+	bus.Publish(events.Event{Type: events.SmartCritical, Severity: events.SeverityCritical, Message: "x"})
+	time.Sleep(100 * time.Millisecond)
+
+	history, _ := RecentHistory(db, 10)
+	if len(history) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(history))
+	}
+	if strings.Contains(history[0].ErrorMessage, "SECRET-TOKEN") {
+		t.Errorf("error message leaks the service URL: %q", history[0].ErrorMessage)
+	}
+	if !strings.Contains(history[0].ErrorMessage, "telegram://") {
+		t.Errorf("error message should still name the service scheme: %q", history[0].ErrorMessage)
 	}
 }
